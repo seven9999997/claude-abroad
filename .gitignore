@@ -40,3 +40,9 @@ node_modules/
 # 本机私人信息（会话日志、需要用户处理的事、隐私检查的本地模式）
 /docs/LOCAL.md
 /docs/LOCAL.patterns
+
+# cc-connect 收到的附件（本机的，不入库）
+.cc-connect/
+
+# 本机工具的附件目录
+/.cc-connect/

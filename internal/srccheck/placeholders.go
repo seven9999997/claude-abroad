@@ -21,7 +21,8 @@ import (
 //     return，也不能 return true；
 //   - 否则只能是纯计算：没有 error 结果，不 return true，不调用 syscall、unix、windows、os、exec、net 包里的函数。
 //
-// allow 按“相对路径:函数名”列例外（值是理由）。返回发现的违规数（同时经 t.Errorf 报告）。
+// allow 按“相对路径:函数名”列例外（值是理由）；“相对路径:*”表示整个文件是真正的实现而不是占位（理由里写清楚
+// 它由什么测试守着）。返回发现的违规数（同时经 t.Errorf 报告）。
 func PlaceholdersFail(t testing.TB, root string, allow map[string]string) int {
 	t.Helper()
 	bad := 0
@@ -32,6 +33,9 @@ func PlaceholdersFail(t testing.TB, root string, allow map[string]string) int {
 	}
 	files := WindowsOnlyFiles(t, root)
 	for _, rel := range files {
+		if _, ok := allow[rel+":*"]; ok {
+			continue
+		}
 		af := Parse(t, filepath.Join(root, rel))
 		inPlatform := af.Name.Name == "platform"
 		for _, d := range af.Decls {

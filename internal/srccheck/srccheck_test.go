@@ -157,11 +157,22 @@ func TestRepoWindowsPlaceholdersFail(t *testing.T) {
 		"internal/procinfo/sys_other.go:List":            shared,
 		"internal/procinfo/sys_other.go:Env":             shared,
 		"internal/usernet/dialer_other.go:bindControl":   shared,
+		// W-2a：Windows 断网保护的系统层，是真正的实现不是占位。参数全部来自 spec.go 的纯函数（Mac 上有单测），
+		// 结构体大小和冒烟测试在 wfp_windows_test.go（Windows 上、需要管理员权限）。
+		"internal/wfp/wfp_windows.go:*": "W-2a 的 WFP 系统层（真正的实现）",
+		// W-2a：第一级探查的 Windows 实现（真正的探查，不是占位）。步骤表、预测、判定、脱敏在 steps.go（Mac 上有单测）。
+		"cmd/abroad-wfp-probe/probe_windows.go:*": "W-2a 的第一级探查（真正的实现）",
 	}
 	PlaceholdersFail(t, root, allow)
 	// 例外也不能假装成功：不返回 nil 错误、不 return true。
 	for key := range allow {
 		rel, fn, _ := strings.Cut(key, ":")
+		if fn == "*" {
+			if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
+				t.Errorf("例外 %s 指向的文件不存在", key)
+			}
+			continue
+		}
 		af := Parse(t, filepath.Join(root, rel))
 		found := false
 		for _, d := range af.Decls {
