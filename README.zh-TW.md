@@ -4,7 +4,7 @@
 
 **不換電腦、不開虛擬桌面、不裝指紋瀏覽器 —— 讓整台 Mac 一起出國。**
 
-[![CI](https://github.com/seven9999997/claude-abroad/actions/workflows/ci.yml/badge.svg)](https://github.com/seven9999997/claude-abroad/actions/workflows/ci.yml) [![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20Apple%20Silicon-black) ![Windows](https://img.shields.io/badge/Windows-開發中-lightgrey)
+[![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20Apple%20Silicon-black) ![Windows](https://img.shields.io/badge/Windows-開發中-lightgrey)
 
 [简体中文](README.md) | [English](README.en.md) | 繁體中文 | [日本語](README.ja.md)
 
@@ -118,6 +118,16 @@ GOOS=windows GOARCH=amd64 go build ./...  # Windows
 | QQ：731032177 | QQ 群：801350116 |
 | :---: | :---: |
 | <a href="assets/contact-qq.jpg"><img src="assets/contact-qq.jpg" alt="QQ 二維碼（731032177）" width="220" /></a> | <a href="assets/contact-qq-group.jpg"><img src="assets/contact-qq-group.jpg" alt="QQ 群二維碼（群號：801350116）" width="220" /></a> |
+
+## 贊助
+
+Claude 出國完全免費、開源，由個人利用業餘時間開發維護。如果它幫你省下了折騰環境的時間，或讓你少擔一次封號的心，歡迎請作者喝杯咖啡 ☕ 你的支持會用在實機測試設備和後續開發上。
+
+贊助完全自願，不附帶任何功能或服務承諾。
+
+<p align="center">
+  <a href="assets/sponsor-wechat-reward.jpg"><img src="assets/sponsor-wechat-reward.jpg" alt="微信讚賞碼" width="220" /></a>
+</p>
 
 ## 使用前請了解
 

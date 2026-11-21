@@ -4,7 +4,7 @@
 
 **No second computer, no VM desktop, no fingerprint browser — send your whole Mac abroad.**
 
-[![CI](https://github.com/seven9999997/claude-abroad/actions/workflows/ci.yml/badge.svg)](https://github.com/seven9999997/claude-abroad/actions/workflows/ci.yml) [![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20Apple%20Silicon-black) ![Windows](https://img.shields.io/badge/Windows-in%20development-lightgrey)
+[![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20Apple%20Silicon-black) ![Windows](https://img.shields.io/badge/Windows-in%20development-lightgrey)
 
 [简体中文](README.md) | English | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
@@ -118,6 +118,16 @@ The project is moving fast. [Issues](https://github.com/seven9999997/claude-abro
 | QQ: 731032177 | QQ group: 801350116 |
 | :---: | :---: |
 | <a href="assets/contact-qq.jpg"><img src="assets/contact-qq.jpg" alt="QQ QR code (731032177)" width="220" /></a> | <a href="assets/contact-qq-group.jpg"><img src="assets/contact-qq-group.jpg" alt="QQ group QR code (801350116)" width="220" /></a> |
+
+## Sponsor
+
+Claude Abroad is free and open source, built and maintained by one person in their spare time. If it saved you hours of fiddling with your setup, or one sleepless night worrying about a ban, consider buying the author a coffee ☕ Your support goes toward real-device test hardware and further development.
+
+Sponsorship is entirely voluntary and comes with no promise of features or support.
+
+<p align="center">
+  <a href="assets/sponsor-wechat-reward.jpg"><img src="assets/sponsor-wechat-reward.jpg" alt="WeChat appreciation code" width="220" /></a>
+</p>
 
 ## Before you use it
 

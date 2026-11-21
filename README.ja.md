@@ -4,7 +4,7 @@
 
 **パソコンを替えず、仮想デスクトップも指紋ブラウザもいらない —— Mac をまるごと海外へ。**
 
-[![CI](https://github.com/seven9999997/claude-abroad/actions/workflows/ci.yml/badge.svg)](https://github.com/seven9999997/claude-abroad/actions/workflows/ci.yml) [![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20Apple%20Silicon-black) ![Windows](https://img.shields.io/badge/Windows-開発中-lightgrey)
+[![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20Apple%20Silicon-black) ![Windows](https://img.shields.io/badge/Windows-開発中-lightgrey)
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | 日本語
 
@@ -111,7 +111,23 @@ root が必要なテスト、実ネットワークに触れるテスト、シス
 | Windows での実現方法 | [Windows 設計](docs/design-windows.md) |
 | 進み具合 | [進捗表](docs/PROGRESS.md) |
 
-[Issue](https://github.com/seven9999997/claude-abroad/issues) や PR を歓迎します。一緒に良いものにしていきましょう。
+## コミュニティとフィードバック
+
+プロジェクトは急ピッチで進んでいます。[Issue](https://github.com/seven9999997/claude-abroad/issues) や PR はもちろん、QQ の友だち追加やグループ参加も歓迎です。要望や不具合を気軽に話しましょう。一緒に良いものにしていきましょう。
+
+| QQ：731032177 | QQ グループ：801350116 |
+| :---: | :---: |
+| <a href="assets/contact-qq.jpg"><img src="assets/contact-qq.jpg" alt="QQ の QR コード（731032177）" width="220" /></a> | <a href="assets/contact-qq-group.jpg"><img src="assets/contact-qq-group.jpg" alt="QQ グループの QR コード（801350116）" width="220" /></a> |
+
+## スポンサー
+
+Claude Abroad は完全無料のオープンソースで、個人が空き時間に開発・保守しています。環境づくりに費やす時間が減った、アカウント停止の心配が一つ減った —— そう感じたら、作者にコーヒーを一杯おごってもらえるとうれしいです ☕ いただいた支援は実機テスト用の機材と今後の開発に使います。
+
+スポンサーは完全に任意で、機能やサポートを約束するものではありません。
+
+<p align="center">
+  <a href="assets/sponsor-wechat-reward.jpg"><img src="assets/sponsor-wechat-reward.jpg" alt="WeChat の投げ銭コード" width="220" /></a>
+</p>
 
 ## 使う前に知っておいてほしいこと
 

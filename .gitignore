@@ -41,8 +41,5 @@ node_modules/
 /docs/LOCAL.md
 /docs/LOCAL.patterns
 
-# cc-connect 收到的附件（本机的，不入库）
-.cc-connect/
-
 # 本机工具的附件目录
 /.cc-connect/
