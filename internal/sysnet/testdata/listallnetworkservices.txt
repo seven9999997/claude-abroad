@@ -1,0 +1,8 @@
+An asterisk (*) denotes that a network service is disabled.
+AX88179A
+USB 10/100/1000 LAN
+DL-Dock
+Wi-Fi
+iPhone USB
+203.0.113.10:443
+AnyLink

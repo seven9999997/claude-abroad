@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>应用分流</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#FBF7F2}
+a{color:#2F6170}a:hover{color:#1F4F5B}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: #FBF7F2; font-family: Inter, 'Noto Sans SC', sans-serif; color: #2B2B2B">
+<div style="flex: 1 1 232px; max-width: 100%; display: flex">
+<dc-import name="Sidebar" active="apps" hint-size="100%,1000px"></dc-import>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 800">应用分流</h1>
+<p style="margin: 0; font-size: 14px; color: #4A4239">没有单独设置的应用走主代理。也可以给应用指定一个分流出口、让它回本机网络，或者禁止联网。修改立即生效，已建立的连接不会被打断。</p>
+</header>
+
+<section aria-label="默认规则" style="display: flex; flex-wrap: wrap; gap: 16px; padding: 18px 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; align-items: center">
+<div style="flex: 2 1 280px; display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 15px; font-weight: 700">没有单独设置的应用</span>
+<span style="font-size: 13px; color: #4A4239">识别不出所属应用的连接也按这条处理。</span>
+</div>
+<label style="flex: 1 1 220px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600">默认去向
+<select style="min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid #CFC3B4; background: #FBF7F2; font: inherit; font-size: 14px">
+<option>走主代理（美国 洛杉矶）</option>
+<option>本机网络</option>
+<option>禁止联网</option>
+</select>
+</label>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between">
+<div role="tablist" aria-label="筛选" style="display: flex; flex-wrap: wrap; gap: 8px">
+<sc-for list="{{filters}}" as="f" hint-placeholder-count="3">
+<button type="button" role="tab" aria-selected="{{f.on}}" onClick="{{f.pick}}" style="{{f.style}}">{{f.label}}</button>
+</sc-for>
+</div>
+<label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #4A4239">
+<span>搜索</span>
+<input type="search" placeholder="应用名或路径" style="min-height: 40px; width: 220px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; border: 1px solid #CFC3B4; background: #FFFFFF; font: inherit; font-size: 14px">
+</label>
+</div>
+
+<section aria-label="应用列表" style="border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; overflow-x: auto">
+<table style="width: 100%; min-width: 760px; border-collapse: collapse; font-size: 14px">
+<thead>
+<tr style="text-align: left; color: #5F564C; font-size: 12px; background: #F8F3EC">
+<th style="padding: 12px 20px; font-weight: 500">应用</th>
+<th style="padding: 12px 8px; font-weight: 500">当前连接</th>
+<th style="padding: 12px 8px; font-weight: 500">去向</th>
+<th style="padding: 12px 20px 12px 8px; font-weight: 500">断网时仍允许</th>
+</tr>
+</thead>
+<tbody>
+<sc-for list="{{rows}}" as="a" hint-placeholder-count="8">
+<tr style="border-top: 1px solid #F0E8DD; vertical-align: top">
+<td style="padding: 14px 20px">
+<div style="display: flex; gap: 12px; align-items: flex-start">
+<span style="flex: 0 0 auto; width: 34px; height: 34px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #FFFFFF; background: {{a.color}}">{{a.initial}}</span>
+<div style="display: flex; flex-direction: column; gap: 3px; min-width: 0">
+<span style="font-weight: 600">{{a.name}}</span>
+<span style="font-size: 12px; color: #5F564C; font-family: Inter, monospace">{{a.id}}</span>
+<sc-if value="{{a.note}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: #6B4F0D; background: #F6EBD0; padding: 4px 8px; border-radius: 6px; max-width: 420px">{{a.note}}</span></sc-if>
+</div>
+</div>
+</td>
+<td style="padding: 14px 8px; color: #4A4239">{{a.conns}}</td>
+<td style="padding: 14px 8px">
+<label style="display: flex; flex-direction: column; gap: 6px">
+<span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">{{a.name}} 的去向</span>
+<select value="{{a.route}}" onChange="{{a.change}}" style="min-height: 40px; min-width: 200px; padding: 0 10px; border-radius: 10px; border: 1.5px solid {{a.selBorder}}; background: {{a.selBg}}; color: {{a.selFg}}; font: inherit; font-size: 14px; font-weight: 600">
+<option value="default">主代理（美国 洛杉矶）</option>
+<optgroup label="分流出口">
+<option value="wg-us">wg-us · 美国</option>
+<option value="clash-jp">clash-jp · 日本</option>
+<option value="ovpn-sg">ovpn-sg · 新加坡</option>
+<option value="ss-hk">ss-hk · 中国香港</option>
+<option value="vless-de">vless-de · 未通过检查</option>
+</optgroup>
+<option value="direct">本机网络</option>
+<option value="block">禁止联网</option>
+</select>
+</label>
+</td>
+<td style="padding: 14px 20px 14px 8px">
+<label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #4A4239; min-height: 40px"><input type="checkbox" checked="{{a.offline}}" disabled="{{a.offlineDisabled}}" onChange="{{a.toggle}}" style="width: 18px; height: 18px">{{a.offlineText}}</label>
+</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</section>
+
+<p style="margin: 0; font-size: 13px; color: #4A4239">「断网时仍允许」只对走本机网络的应用有效：停用后，这些应用仍可以直接联网，其他全部断开。默认一个都不勾。</p>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      filter: 'all',
+      routes: { chrome: 'wg-us', claude: 'default', term: 'clash-jp', wechat: 'direct', corp: 'direct', webkit: 'default', docker: 'vless-de', sys: 'direct', tele: 'block' },
+      offline: { wechat: true }
+    };
+  }
+  renderVals() {
+    const apps = [
+      { key: 'chrome', name: 'Google Chrome', id: 'com.google.Chrome', initial: 'C', color: '#3E7C8C', conns: 64 },
+      { key: 'claude', name: 'Claude', id: 'com.anthropic.claudefordesktop', initial: 'C', color: '#A94E2E', conns: 12 },
+      { key: 'term', name: '终端里的程序', id: 'com.apple.Terminal（含子进程）', initial: 'T', color: '#2B2B2B', conns: 9, note: '按"继承父进程"归类：git、curl、npm 等从终端启动的程序都算在这里。' },
+      { key: 'wechat', name: '微信', id: 'com.tencent.xinWeChat', initial: '微', color: '#2F7D5B', conns: 18 },
+      { key: 'corp', name: '公司内网工具', id: 'com.example.corp-vpn', initial: '公', color: '#5B4B8A', conns: 3 },
+      { key: 'webkit', name: 'Safari 与其他 WebKit 应用', id: 'com.apple.WebKit.Networking', initial: 'S', color: '#2F6170', conns: 7, note: '共享进程：Safari、邮件、App 内网页共用这个进程，只能一起设置。' },
+      { key: 'docker', name: 'Docker', id: 'com.docker.docker', initial: 'D', color: '#1D63B8', conns: 0 },
+      { key: 'sys', name: '系统服务', id: 'nsurlsessiond · App Store · iCloud', initial: '系', color: '#7A7067', conns: 5, note: '系统后台下载和更新，不属于任何一个应用。' },
+      { key: 'tele', name: 'Telemetry Helper', id: '/Library/…/TelemetryHelper', initial: 'H', color: '#7A7067', conns: 0 }
+    ];
+    const look = {
+      direct: { selBorder: '#D97757', selBg: '#FBE6DD', selFg: '#8F3E22' },
+      block: { selBorder: '#2B2B2B', selBg: '#2B2B2B', selFg: '#FFFFFF' },
+      exit: { selBorder: '#3E7C8C', selBg: '#EEF5F6', selFg: '#1F4F5B' },
+      main: { selBorder: '#CFC3B4', selBg: '#FFFFFF', selFg: '#2B2B2B' },
+      broken: { selBorder: '#B42318', selBg: '#FDF1EF', selFg: '#8F1C13' }
+    };
+    const routes = this.state.routes;
+    let rows = apps.map((a) => {
+      const route = routes[a.key];
+      const kind = route === 'direct' ? 'direct' : route === 'block' ? 'block' : route === 'default' ? 'main' : route === 'vless-de' ? 'broken' : 'exit';
+      const isDirect = kind === 'direct';
+      const note = kind === 'broken' ? '指定的分流出口 vless-de 检查未通过，这个应用的连接已被拦截，不会改走主代理。' : (a.note || '');
+      return {
+        ...a, ...look[kind], route, note,
+        offline: isDirect && !!this.state.offline[a.key],
+        offlineDisabled: !isDirect,
+        offlineText: isDirect ? '允许' : '仅本机网络可用',
+        change: (e) => this.setState({ routes: { ...this.state.routes, [a.key]: e.target.value } }),
+        toggle: (e) => this.setState({ offline: { ...this.state.offline, [a.key]: e.target.checked } })
+      };
+    });
+    if (this.state.filter === 'live') rows = rows.filter((r) => r.conns > 0);
+    if (this.state.filter === 'ruled') rows = rows.filter((r) => r.route !== 'default');
+    const fs = [['all', '全部 · 9'], ['live', '正在联网'], ['ruled', '已单独设置']];
+    const base = 'min-height: 40px; padding: 0 14px; border-radius: 10px; font: inherit; font-size: 14px; cursor: pointer; ';
+    const filters = fs.map(([id, label]) => ({
+      label, on: this.state.filter === id,
+      pick: () => this.setState({ filter: id }),
+      style: base + (this.state.filter === id ? 'border: 1.5px solid #2B2B2B; background: #2B2B2B; color: #FFFFFF; font-weight: 700;' : 'border: 1px solid #CFC3B4; background: #FFFFFF; color: #3D362F;')
+    }));
+    return { rows, filters };
+  }
+}
+</script>
+</body>
+</html>

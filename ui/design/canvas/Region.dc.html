@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>地区</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#FBF7F2}
+a{color:#2F6170}a:hover{color:#1F4F5B}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: #FBF7F2; font-family: Inter, 'Noto Sans SC', sans-serif; color: #2B2B2B">
+<div style="flex: 1 1 232px; max-width: 100%; display: flex">
+<dc-import name="Sidebar" active="region" hint-size="100%,920px"></dc-import>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 800">地区</h1>
+<p style="margin: 0; font-size: 14px; color: #4A4239">时区和语言同时修改 Mac 和虚拟机。第一次启用前的设置会被记下，「一键回国」时原样恢复。</p>
+</header>
+
+<section aria-labelledby="src" style="padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; display: flex; flex-direction: column; gap: 16px">
+<h2 id="src" style="margin: 0; font-size: 16px; font-weight: 700">地区来源</h2>
+<div role="radiogroup" aria-label="地区来源" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px">
+<button type="button" role="radio" aria-checked="{{follow}}" onClick="{{pickFollow}}" style="{{followStyle}}">
+<span style="font-size: 16px; font-weight: 800">跟随主代理</span>
+<span style="font-size: 13px; color: #4A4239">主代理出口检查测得：美国 · 洛杉矶 · America/Los_Angeles。更换主代理时自动跟着换；分流出口不影响地区。</span>
+</button>
+<button type="button" role="radio" aria-checked="{{manual}}" onClick="{{pickManual}}" style="{{manualStyle}}">
+<span style="font-size: 16px; font-weight: 800">手动指定</span>
+<span style="font-size: 13px; color: #4A4239">固定使用下面选的时区和语言，不随出口变化。</span>
+</button>
+</div>
+<sc-if value="{{manual}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end">
+<label style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600">时区
+<select style="min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid #CFC3B4; background: #FBF7F2; font: inherit; font-size: 14px">
+<option>America/Los_Angeles（UTC−8）</option>
+<option>America/New_York（UTC−5）</option>
+<option>Asia/Tokyo（UTC+9）</option>
+<option>Europe/London（UTC+0）</option>
+<option>Europe/London（UTC+0）</option>
+</select>
+</label>
+<label style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600">语言
+<select style="min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid #CFC3B4; background: #FBF7F2; font: inherit; font-size: 14px">
+<option>English (US) · en-US</option>
+<option>English (UK) · en-GB</option>
+<option>日本語 · ja-JP</option>
+<option>简体中文 · zh-CN</option>
+</select>
+</label>
+<button type="button" style="min-height: 44px; padding: 0 20px; border-radius: 10px; border: none; background: #A94E2E; color: #FFFFFF; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer">应用</button>
+</div>
+</sc-if>
+</section>
+
+<section aria-labelledby="cmp" style="border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; overflow-x: auto">
+<h2 id="cmp" style="margin: 0; padding: 18px 20px 6px; font-size: 16px; font-weight: 700">修改内容</h2>
+<table style="width: 100%; min-width: 720px; border-collapse: collapse; font-size: 14px">
+<thead>
+<tr style="text-align: left; color: #5F564C; font-size: 12px">
+<th style="padding: 10px 20px; font-weight: 500">项目</th>
+<th style="padding: 10px 8px; font-weight: 500">现在</th>
+<th style="padding: 10px 8px; font-weight: 500">回国后恢复为</th>
+<th style="padding: 10px 20px 10px 8px; font-weight: 500">生效</th>
+</tr>
+</thead>
+<tbody>
+<sc-for list="{{items}}" as="r" hint-placeholder-count="6">
+<tr style="border-top: 1px solid #F0E8DD">
+<td style="padding: 12px 20px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">{{r.name}}</span><span style="font-size: 12px; color: #5F564C">{{r.where}}</span></span></td>
+<td style="padding: 12px 8px; font-weight: 600">{{r.now}}</td>
+<td style="padding: 12px 8px; color: #4A4239">{{r.orig}}</td>
+<td style="padding: 12px 20px 12px 8px"><span style="padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: {{r.bg}}; color: {{r.fg}}">{{r.when}}</span></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</section>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px">
+<section aria-labelledby="rs" style="padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; display: flex; flex-direction: column; gap: 12px">
+<h2 id="rs" style="margin: 0; font-size: 16px; font-weight: 700">需要重启才能换语言的应用</h2>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 14px">
+<li style="display: flex; justify-content: space-between"><span>Google Chrome</span><span style="color: #5F564C">仍是简体中文</span></li>
+<li style="display: flex; justify-content: space-between"><span>Claude</span><span style="color: #5F564C">仍是简体中文</span></li>
+<li style="display: flex; justify-content: space-between"><span>访达与系统界面</span><span style="color: #5F564C">需重新登录</span></li>
+</ul>
+<button type="button" style="align-self: flex-start; min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1.5px solid #2B2B2B; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">重启这两个应用</button>
+</section>
+<section aria-labelledby="tip" style="padding: 20px; border-radius: 16px; background: #FBF4E4; border: 1px solid #EBDDB8; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.6">
+<h2 id="tip" style="margin: 0; font-size: 16px; font-weight: 700">这里改不到的</h2>
+<p style="margin: 0">浏览器发送的语言（Accept-Language）由浏览器自己的设置决定，需要在浏览器里改。</p>
+<p style="margin: 0">定位服务可以通过附近的 Wi-Fi 推算真实位置。建议关闭浏览器的定位权限；本工具不修改定位服务。</p>
+</section>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":920}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { mode: 'follow' };
+  }
+  renderVals() {
+    const card = 'min-height: 96px; padding: 16px; border-radius: 14px; font: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 6px; ';
+    const on = card + 'border: 2px solid #2B2B2B; background: #FBF7F2; color: #2B2B2B;';
+    const off = card + 'border: 1px solid #CFC3B4; background: #FFFFFF; color: #2B2B2B;';
+    const now = { bg: '#DCEFE5', fg: '#1E6B48' };
+    const later = { bg: '#F6EBD0', fg: '#6B4F0D' };
+    const items = [
+      { name: 'Mac 时区', where: 'systemsetup -settimezone', now: '洛杉矶（UTC−8）', orig: '上海（UTC+8）', when: '立即', ...now },
+      { name: 'Mac 自动设置时区', where: 'com.apple.timezone.auto', now: '已关闭', orig: '开启', when: '立即', ...now },
+      { name: 'Mac 语言', where: 'AppleLanguages', now: 'English (US)', orig: '简体中文', when: '应用重启后', ...later },
+      { name: 'Mac 地区格式', where: 'AppleLocale', now: 'en_US', orig: 'zh_CN', when: '应用重启后', ...later },
+      { name: '虚拟机时区', where: '/etc/localtime', now: 'America/Los_Angeles', orig: 'UTC', when: '立即', ...now },
+      { name: '虚拟机语言', where: 'LANG / LC_ALL', now: 'en_US.UTF-8', orig: 'C.UTF-8', when: '引擎重启后', ...later }
+    ];
+    const follow = this.state.mode === 'follow';
+    return {
+      items, follow, manual: !follow,
+      followStyle: follow ? on : off,
+      manualStyle: follow ? off : on,
+      pickFollow: () => this.setState({ mode: 'follow' }),
+      pickManual: () => this.setState({ mode: 'manual' })
+    };
+  }
+}
+</script>
+</body>
+</html>

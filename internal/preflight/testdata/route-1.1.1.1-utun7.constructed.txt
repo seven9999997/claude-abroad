@@ -1,0 +1,8 @@
+   route to: 1.1.1.1
+destination: 192.0.2.10
+       mask: 192.0.2.11
+    gateway: 192.0.2.12
+  interface: utun7
+      flags: <UP,GATEWAY,DONE,STATIC,PRCLONING>
+ recvpipe  sendpipe  ssthresh  rtt,msec    rttvar  hopcount      mtu     expire
+       0         0         0         0         0         0      1500         0 

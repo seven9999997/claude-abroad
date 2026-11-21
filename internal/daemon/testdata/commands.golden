@@ -1,0 +1,47 @@
+/bin/launchctl asuser <uid> /usr/bin/sudo -u <用户> /usr/bin/defaults read -g AppleLanguages
+/bin/launchctl asuser <uid> /usr/bin/sudo -u <用户> /usr/bin/defaults read -g AppleLocale
+/bin/launchctl asuser <uid> /usr/bin/sudo -u <用户> /usr/bin/defaults write -g AppleLanguages -array <语言…>
+/bin/launchctl asuser <uid> /usr/bin/sudo -u <用户> /usr/bin/defaults write -g AppleLocale -string <地区格式>
+/bin/ps -axo comm
+/sbin/ifconfig utun<N> inet 198.18.0.1 198.18.0.1 mtu <MTU> up
+/sbin/pfctl -E
+/sbin/pfctl -F states
+/sbin/pfctl -X <数字>
+/sbin/pfctl -a com.apple/250.abroad -F all
+/sbin/pfctl -a com.apple/250.abroad -s rules
+/sbin/pfctl -a com.apple/250.abroad -t abroad_lan -T show
+/sbin/pfctl -o none -a com.apple/250.abroad -f -
+/sbin/pfctl -s info
+/sbin/pfctl -s rules
+/sbin/route -n add -net 0.0.0.0/1 -interface utun<N>
+/sbin/route -n add -net 128.0.0.0/1 -interface utun<N>
+/sbin/route -n change -net 0.0.0.0/1 -interface utun<N>
+/sbin/route -n delete -net 0.0.0.0/1
+/sbin/route -n delete -net 128.0.0.0/1
+/sbin/route -n get 0.0.0.1
+/sbin/route -n get 1.1.1.1
+/sbin/route -n get 128.0.0.1
+/sbin/route -n get 129.0.0.1
+/sbin/route -n get 198.18.0.2
+/sbin/route -n get default
+/usr/bin/defaults delete /Library/Preferences/.GlobalPreferences AppleLanguages
+/usr/bin/defaults read /Library/Preferences/.GlobalPreferences AppleLanguages
+/usr/bin/defaults read /Library/Preferences/com.apple.timezone.auto Active
+/usr/bin/defaults write /Library/Preferences/.GlobalPreferences AppleLanguages -array <语言…>
+/usr/bin/defaults write /Library/Preferences/com.apple.timezone.auto Active -bool false
+/usr/bin/defaults write /Library/Preferences/com.apple.timezone.auto Active -bool true
+/usr/sbin/netstat -rn -f inet
+/usr/sbin/networksetup -getinfo <服务>
+/usr/sbin/networksetup -listallnetworkservices
+/usr/sbin/networksetup -setv6LinkLocal <服务>
+/usr/sbin/networksetup -setv6automatic <服务>
+/usr/sbin/networksetup -setv6manual <服务> <地址> <前缀> <路由器>
+/usr/sbin/networksetup -setv6off <服务>
+/usr/sbin/scutil --dns
+/usr/sbin/scutil --nwi
+/usr/sbin/scutil --proxy
+/usr/sbin/scutil <<d.init; d.add ServerAddresses * 198.18.0.2; d.add SupplementalMatchDomains * ""; set State:/Network/Service/claude-abroad/DNS; quit
+/usr/sbin/scutil <<remove State:/Network/Service/claude-abroad/DNS; quit
+/usr/sbin/scutil <<show State:/Network/Service/claude-abroad/DNS; quit
+/usr/sbin/systemsetup -gettimezone
+/usr/sbin/systemsetup -settimezone <时区>

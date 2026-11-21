@@ -1,0 +1,1062 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude 出国 桌面端原型</title>
+<!--
+  Claude 出国 macOS 桌面应用（SwiftUI）的交互原型。静态页面，无后端，直接用浏览器打开。
+  画面模拟 macOS 桌面：顶部菜单栏（含本应用的菜单栏图标）、主窗口、设置窗口、安装引导窗口、
+  表单、警告框和系统通知。底部深色条是原型自带的跳转与模拟开关，不属于产品界面。
+  所有数据都是示例：IP 使用文档保留地址段，引擎版本为占位。
+-->
+<style>
+:root{
+  color-scheme: light;
+  --wall: radial-gradient(1200px 700px at 15% 10%, #F2D6B8 0%, transparent 60%), radial-gradient(900px 700px at 90% 90%, #7FA3AC 0%, transparent 60%), linear-gradient(135deg,#E8C2A0,#B9806A 50%,#5F8792);
+  --menubar: rgba(248,242,236,.62); --menubar-ink:#1D1D1F;
+  --win:#F6F5F3; --win-edge: rgba(0,0,0,.22);
+  --side: rgba(236,231,226,.86);
+  --box:#FFFFFF; --box-line: rgba(0,0,0,.07);
+  --ink:#1D1D1F; --ink2: rgba(0,0,0,.58); --ink3: rgba(0,0,0,.34);
+  --sep: rgba(0,0,0,.085);
+  --ctl:#FFFFFF; --ctl-line: rgba(0,0,0,.13); --ctl-shadow: 0 .5px 1.5px rgba(0,0,0,.14);
+  --hover: rgba(0,0,0,.045); --sel: rgba(0,0,0,.085);
+  --accent:#A94E2E; --accent-ink:#fff; --accent-soft: rgba(169,78,46,.11);
+  --teal:#2F7486; --teal-soft: rgba(47,116,134,.11);
+  --ok:#2E8456; --ok-soft: rgba(46,132,86,.12);
+  --warn:#A87708; --warn-soft: rgba(201,154,34,.15);
+  --bad:#C4321F; --bad-soft: rgba(196,50,31,.10);
+  --gray:#857E77; --gray-soft: rgba(0,0,0,.06);
+  --menu: rgba(244,241,238,.88); --menu-line: rgba(0,0,0,.12);
+  --sheet:#FBFAF9;
+  --win-shadow: 0 0 0 .5px rgba(0,0,0,.28), 0 24px 70px rgba(0,0,0,.32), 0 6px 18px rgba(0,0,0,.12);
+  --proto:#141414;
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --wall: radial-gradient(1200px 700px at 15% 10%, #5A3A2A 0%, transparent 60%), radial-gradient(900px 700px at 90% 90%, #20414A 0%, transparent 60%), linear-gradient(135deg,#2B211C,#3A2620 50%,#15262B);
+  --menubar: rgba(30,28,27,.55); --menubar-ink:#F2F1F0;
+  --win:#1F1E1D; --win-edge: rgba(255,255,255,.14);
+  --side: rgba(42,40,38,.86);
+  --box:#2A2928; --box-line: rgba(255,255,255,.06);
+  --ink:#F3F2F1; --ink2: rgba(255,255,255,.6); --ink3: rgba(255,255,255,.32);
+  --sep: rgba(255,255,255,.08);
+  --ctl:#3B3a38; --ctl-line: rgba(255,255,255,.09); --ctl-shadow: 0 .5px 1px rgba(0,0,0,.4);
+  --hover: rgba(255,255,255,.06); --sel: rgba(255,255,255,.1);
+  --accent:#D57954; --accent-ink:#1B1110; --accent-soft: rgba(213,121,84,.18);
+  --teal:#74B9C9; --teal-soft: rgba(116,185,201,.15);
+  --ok:#62C38F; --ok-soft: rgba(98,195,143,.15);
+  --warn:#E4B94F; --warn-soft: rgba(228,185,79,.16);
+  --bad:#F27563; --bad-soft: rgba(242,117,99,.15);
+  --gray:#A39C95; --gray-soft: rgba(255,255,255,.07);
+  --menu: rgba(44,43,41,.9); --menu-line: rgba(255,255,255,.12);
+  --sheet:#2C2B2A;
+  --win-shadow: 0 0 0 .5px rgba(0,0,0,.6), 0 24px 70px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.06) inset;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--proto);color:var(--ink);font:13px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+button{cursor:default}
+h1,h2,h3,p,ul,ol,dl,dd{margin:0}
+ul,ol{padding:0;list-style:none}
+code,.mono{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:12px}
+svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+
+/* 舞台：固定 1280×820 的 macOS 桌面，按视口等比缩放 */
+#viewport{position:fixed;inset:0 0 44px 0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#stage{position:relative;width:1280px;height:820px;background:var(--wall);overflow:hidden;transform-origin:center center;border-radius:6px}
+
+/* 系统菜单栏 */
+.mbar{position:absolute;inset:0 0 auto 0;height:26px;display:flex;align-items:center;gap:18px;padding:0 14px;background:var(--menubar);backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);color:var(--menubar-ink);font-size:13px;z-index:50}
+.mbar b{font-weight:700}
+.mbar .sp{flex:1}
+.mbar .si{display:flex;align-items:center;height:22px;padding:0 6px;border-radius:5px;gap:4px;position:relative}
+.mbar .si.on{background:rgba(0,0,0,.14)}
+:root[data-theme="dark"] .mbar .si.on{background:rgba(255,255,255,.18)}
+.mbar .si .sdot{position:absolute;right:3px;bottom:3px;width:6px;height:6px;border-radius:3px;box-shadow:0 0 0 1.2px var(--menubar)}
+
+/* 窗口 */
+.win{position:absolute;border-radius:12px;overflow:hidden;background:var(--win);box-shadow:var(--win-shadow);display:flex}
+.traffic{position:absolute;top:18px;left:18px;display:flex;gap:8px;z-index:3}
+.traffic i{width:12px;height:12px;border-radius:6px;display:block;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18)}
+.traffic i:nth-child(1){background:#FF5F57}.traffic i:nth-child(2){background:#FEBC2E}.traffic i:nth-child(3){background:#28C840}
+.win.inactive .traffic i{background:#CFCBC7}
+:root[data-theme="dark"] .win.inactive .traffic i{background:#4A4846}
+.side{width:224px;flex:0 0 224px;background:var(--side);backdrop-filter:blur(30px) saturate(1.5);-webkit-backdrop-filter:blur(30px) saturate(1.5);border-right:1px solid var(--sep);padding:52px 10px 12px;display:flex;flex-direction:column;gap:2px}
+.nav-h{font-size:11px;font-weight:600;color:var(--ink3);padding:10px 8px 3px}
+.nav a{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:6px;color:var(--ink);text-decoration:none}
+.nav a svg{color:var(--accent)}
+.nav a.on{background:var(--sel)}
+.nav a .cnt{margin-left:auto;font-size:11px;color:var(--ink2);font-weight:600}
+.nav a .cnt.bad{color:#fff;background:var(--bad);border-radius:8px;padding:0 6px;line-height:16px}
+.side-status{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding:10px 8px 2px;border-top:1px solid var(--sep);font-size:11px;color:var(--ink2)}
+.side-status div{display:flex;align-items:center;gap:7px}
+.dot{width:7px;height:7px;border-radius:4px;display:inline-block;flex:0 0 auto}
+.mainc{flex:1;min-width:0;display:flex;flex-direction:column}
+.toolbar{height:52px;flex:0 0 52px;display:flex;align-items:center;gap:8px;padding:0 14px 0 20px;border-bottom:1px solid var(--sep)}
+.toolbar h1{font-size:15px;font-weight:700}
+.toolbar .sub{font-size:12px;color:var(--ink2)}
+.toolbar .sp{flex:1}
+.scroll{flex:1;overflow:auto;padding:18px 24px 28px;display:flex;flex-direction:column;gap:18px}
+.scroll::-webkit-scrollbar{width:10px}.scroll::-webkit-scrollbar-thumb{background:var(--sep);border-radius:5px;border:2px solid var(--win)}
+
+/* 控件 */
+.b{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:22px;padding:0 10px;border-radius:5px;border:.5px solid var(--ctl-line);background:var(--ctl);box-shadow:var(--ctl-shadow);font-size:13px;white-space:nowrap}
+.b.lg{height:28px;padding:0 14px;border-radius:7px}
+.b.xl{height:32px;padding:0 18px;border-radius:8px;font-size:14px;font-weight:600}
+.b.pri{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+.b.dest{color:var(--bad)}
+.b.dest-fill{background:var(--bad);color:#fff;border-color:transparent;font-weight:600}
+.b.ghost{background:transparent;border-color:transparent;box-shadow:none;color:var(--ink2)}
+.b.ghost:hover{background:var(--hover)}
+.b.icon{width:28px;padding:0}
+.b:disabled{opacity:.42}
+.link{background:none;border:none;padding:0;color:var(--accent);font-size:13px}
+.pop{position:relative;display:inline-flex;align-items:center}
+.pop select{appearance:none;-webkit-appearance:none;height:22px;padding:0 24px 0 8px;border-radius:5px;border:.5px solid var(--ctl-line);background:var(--ctl);box-shadow:var(--ctl-shadow);font-size:13px;min-width:120px}
+.pop svg{position:absolute;right:5px;width:12px;height:12px;pointer-events:none;color:var(--ink2)}
+.pop.lg select{height:28px;border-radius:7px}
+.tf{height:22px;padding:0 7px;border-radius:5px;border:.5px solid var(--ctl-line);background:var(--ctl);box-shadow:inset 0 .5px 1px rgba(0,0,0,.06);font-size:13px;min-width:0}
+.tf.lg{height:28px;border-radius:7px;padding:0 9px}
+.tf::placeholder{color:var(--ink3)}
+.segc{display:inline-flex;padding:2px;border-radius:7px;background:var(--gray-soft);gap:2px}
+.segc button{height:20px;padding:0 12px;border-radius:5px;border:none;background:transparent;font-size:12px}
+.segc button.on{background:var(--ctl);box-shadow:0 .5px 2px rgba(0,0,0,.18);font-weight:600}
+.segc.lg button{height:24px;font-size:13px}
+.sw{appearance:none;-webkit-appearance:none;width:32px;height:18px;border-radius:9px;background:var(--gray-soft);box-shadow:inset 0 0 0 .5px var(--ctl-line);position:relative;margin:0;flex:0 0 auto;transition:background .15s}
+.sw::after{content:"";position:absolute;top:1.5px;left:1.5px;width:15px;height:15px;border-radius:8px;background:#fff;box-shadow:0 .5px 2px rgba(0,0,0,.3);transition:left .15s}
+.sw:checked{background:var(--accent)}
+.sw:checked::after{left:15.5px}
+.sw:disabled{opacity:.45}
+.cb,.rd{appearance:none;-webkit-appearance:none;width:14px;height:14px;margin:0;border-radius:4px;background:var(--ctl);border:.5px solid var(--ctl-line);box-shadow:var(--ctl-shadow);position:relative;flex:0 0 auto}
+.rd{border-radius:7px}
+.cb:checked,.rd:checked{background:var(--accent);border-color:transparent}
+.cb:checked::after{content:"";position:absolute;left:4.5px;top:1.5px;width:3.5px;height:7px;border:solid #fff;border-width:0 1.8px 1.8px 0;transform:rotate(45deg)}
+.rd:checked::after{content:"";position:absolute;left:4px;top:4px;width:6px;height:6px;border-radius:3px;background:#fff}
+.cb:disabled{opacity:.5}
+label.inl{display:inline-flex;align-items:center;gap:7px}
+
+/* 徽标与标记 */
+.badge{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 7px;border-radius:5px;font-size:11px;font-weight:600;white-space:nowrap}
+.badge.ok{background:var(--ok-soft);color:var(--ok)}
+.badge.warn{background:var(--warn-soft);color:var(--warn)}
+.badge.bad{background:var(--bad-soft);color:var(--bad)}
+.badge.teal{background:var(--teal-soft);color:var(--teal)}
+.badge.gray{background:var(--gray-soft);color:var(--ink2)}
+.badge.acc{background:var(--accent-soft);color:var(--accent)}
+.mk{width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+.mk svg{width:12px;height:12px;stroke-width:2.2}
+.mk.ok{background:var(--ok);color:#fff}.mk.warn{background:var(--warn);color:#fff}.mk.bad{background:var(--bad);color:#fff}.mk.wait{background:var(--gray-soft);color:var(--ink2)}.mk.off{background:var(--gray-soft);color:var(--ink3)}.mk.skip{background:var(--gray-soft);color:var(--ink2)}
+.spin{width:12px;height:12px;border-radius:6px;border:2px solid var(--ink3);border-top-color:transparent;animation:sp .8s linear infinite;display:inline-block}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* 表单分组（SwiftUI Form .grouped） */
+.grp{display:flex;flex-direction:column;gap:6px}
+.grp-h{display:flex;align-items:flex-end;gap:8px;padding:0 4px;font-size:13px;font-weight:600}
+.grp-h .sp{flex:1}
+.grp-h .x{font-weight:400;color:var(--ink2);font-size:12px}
+.box{background:var(--box);border-radius:10px;box-shadow:0 0 0 .5px var(--box-line),0 .5px 1px rgba(0,0,0,.04)}
+.r{position:relative;display:flex;align-items:center;gap:12px;min-height:38px;padding:7px 12px}
+.r+.r::before{content:"";position:absolute;top:0;left:12px;right:0;height:1px;background:var(--sep)}
+.r .l{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.r .l small{font-size:11px;color:var(--ink2);line-height:1.35}
+.r .v{color:var(--ink2);text-align:right}
+.r .acts{display:flex;gap:6px;align-items:center}
+.grp-f{padding:0 4px;font-size:11px;color:var(--ink2);line-height:1.5}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+
+/* 列表表格 */
+.tbl .th{display:grid;padding:6px 12px;font-size:11px;color:var(--ink2);font-weight:600;border-bottom:1px solid var(--sep)}
+.tbl .tr{display:grid;align-items:center;padding:7px 12px;position:relative}
+.tbl .tr+.tr{border-top:1px solid var(--sep)}
+.tbl .tr.sel{background:var(--accent-soft)}
+.appi{width:24px;height:24px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex:0 0 auto;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.12)}
+.nm{display:flex;align-items:center;gap:9px;min-width:0}
+.nm .t{display:flex;flex-direction:column;min-width:0}
+.nm .t small{font-size:11px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inote{font-size:11px;line-height:1.45;padding:3px 7px;border-radius:5px;margin-top:3px;display:inline-block}
+.inote.warn{background:var(--warn-soft);color:var(--warn)}
+.inote.bad{background:var(--bad-soft);color:var(--bad)}
+.inote.teal{background:var(--teal-soft);color:var(--teal)}
+
+/* 首页状态 */
+.hero{display:flex;gap:16px;padding:16px 18px;border-radius:12px;align-items:flex-start}
+.hero .ico{width:44px;height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.hero .ico svg{width:24px;height:24px;stroke-width:1.8}
+.hero .txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.hero h2{font-size:20px;font-weight:700;letter-spacing:.1px}
+.hero p{color:var(--ink2);line-height:1.5;max-width:560px}
+.hero .kv{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:6px}
+.hero .kv div{display:flex;flex-direction:column}
+.hero .kv span{font-size:11px;color:var(--ink2)}
+.hero .kv b{font-weight:600}
+.hero .btns{display:flex;flex-direction:column;gap:8px;flex:0 0 150px}
+.hero .btns .b{width:100%}
+.bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--gray-soft)}
+.pending{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:var(--warn-soft);color:var(--ink)}
+.pending svg{color:var(--warn)}
+
+/* 链路 */
+.hops{display:flex;align-items:stretch;gap:6px;padding:12px;overflow-x:auto}
+.hop{min-width:118px;padding:8px 10px;border-radius:8px;background:var(--gray-soft);display:flex;flex-direction:column;gap:1px}
+.hop small{font-size:10px;color:var(--ink2);font-weight:600}
+.hop b{font-size:12px;font-weight:600}
+.hop span{font-size:11px;color:var(--ink2)}
+.hop.mid{background:var(--teal-soft)}
+.hop.fin{background:var(--teal);color:#fff}.hop.fin small,.hop.fin span{color:rgba(255,255,255,.82)}
+.harr{align-self:center;color:var(--ink3)}
+
+/* 菜单、通知、弹窗 */
+.menu{position:absolute;top:28px;width:290px;padding:5px;border-radius:10px;background:var(--menu);backdrop-filter:blur(30px) saturate(1.6);-webkit-backdrop-filter:blur(30px) saturate(1.6);box-shadow:0 0 0 .5px var(--menu-line),0 12px 36px rgba(0,0,0,.28);z-index:60;font-size:13px}
+.menu .hd{padding:6px 10px 8px;display:flex;flex-direction:column;gap:3px}
+.menu .hd b{font-size:13px}
+.menu .hd .m{font-size:11px;color:var(--ink2);display:flex;justify-content:space-between}
+.menu .mi{display:flex;align-items:center;height:22px;padding:0 10px;border-radius:5px;gap:6px}
+.menu .mi:hover:not(.dis){background:var(--accent);color:var(--accent-ink)}
+.menu .mi .k{margin-left:auto;color:var(--ink3);font-size:12px}
+.menu .mi:hover .k{color:inherit}
+.menu .mi.dis{color:var(--ink3)}
+.menu hr{border:none;height:1px;background:var(--sep);margin:5px 10px}
+.notif{position:absolute;top:34px;right:12px;width:350px;padding:11px 12px;border-radius:16px;background:var(--menu);backdrop-filter:blur(30px) saturate(1.6);-webkit-backdrop-filter:blur(30px) saturate(1.6);box-shadow:0 0 0 .5px var(--menu-line),0 10px 30px rgba(0,0,0,.25);display:flex;gap:10px;z-index:70;animation:nin .25s ease-out}
+@keyframes nin{from{transform:translateX(30px);opacity:0}}
+.notif .t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.notif .t b{font-size:13px}
+.notif .t span{font-size:12px;color:var(--ink2);line-height:1.4}
+.notif .tm{position:absolute;right:12px;top:10px;font-size:11px;color:var(--ink3)}
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.14);display:flex;justify-content:center;align-items:flex-start;padding-top:46px;z-index:20}
+.sheet{width:540px;max-height:calc(100% - 70px);overflow:auto;background:var(--sheet);border-radius:12px;box-shadow:0 0 0 .5px var(--win-edge),0 18px 50px rgba(0,0,0,.35);padding:18px 20px 16px;display:flex;flex-direction:column;gap:12px;animation:sin .22s ease-out}
+@keyframes sin{from{transform:translateY(-14px);opacity:0}}
+.sheet h2{font-size:15px;font-weight:700}
+.sheet .lead{color:var(--ink2);line-height:1.5}
+.sheet .foot{display:flex;justify-content:flex-end;gap:8px;padding-top:4px}
+.sheet .foot .sp{flex:1}
+.alert{width:272px;background:var(--sheet);border-radius:12px;box-shadow:0 0 0 .5px var(--win-edge),0 18px 50px rgba(0,0,0,.4);padding:20px 16px 16px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;animation:sin .22s ease-out;margin-top:70px}
+.alert h2{font-size:13px;font-weight:700}
+.alert p{font-size:11px;color:var(--ink2);line-height:1.5}
+.alert .bs{display:flex;flex-direction:column;gap:8px;width:100%;margin-top:4px}
+.alert .bs .b{width:100%;height:28px;border-radius:7px}
+.aicon{position:relative;width:64px;height:64px}
+.aicon .w{position:absolute;right:-4px;bottom:-2px;width:28px;height:28px;border-radius:7px;background:#F5C33B;color:#4A3500;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.aicon .w svg{width:18px;height:18px;stroke-width:2}
+.steps-run{display:flex;flex-direction:column;gap:8px;padding:12px}
+.steps-run li{display:flex;align-items:center;gap:9px}
+.steps-run li.todo{color:var(--ink3)}
+
+/* 安装引导 */
+.setup{display:flex;width:100%}
+.setup .left{width:230px;flex:0 0 230px;background:var(--side);border-right:1px solid var(--sep);padding:54px 18px 18px;display:flex;flex-direction:column;gap:14px}
+.setup .left h2{font-size:15px;font-weight:700}
+.setup .left p{font-size:12px;color:var(--ink2);line-height:1.5}
+.sstep{display:flex;align-items:center;gap:9px;padding:6px 6px;border-radius:7px;color:var(--ink2)}
+.sstep i{width:20px;height:20px;border-radius:10px;border:1.5px solid var(--ink3);display:flex;align-items:center;justify-content:center;font-style:normal;font-size:11px;font-weight:700}
+.sstep.cur{color:var(--ink);font-weight:600;background:var(--sel)}
+.sstep.cur i{border-color:var(--accent);color:var(--accent)}
+.sstep.done i{background:var(--ok);border-color:var(--ok);color:#fff}
+.setup .right{flex:1;min-width:0;display:flex;flex-direction:column}
+.setup .body{flex:1;overflow:auto;padding:40px 32px 16px;display:flex;flex-direction:column;gap:16px}
+.setup .body h1{font-size:22px;font-weight:700}
+.setup .body .lead{color:var(--ink2);line-height:1.55;max-width:520px}
+.setup .foot{display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid var(--sep)}
+.setup .foot .sp{flex:1}
+
+/* 设置窗口 */
+.prefs-tb{position:absolute;top:0;left:0;right:0;height:78px;display:flex;flex-direction:column;align-items:center;border-bottom:1px solid var(--sep);padding-top:8px;background:var(--win);z-index:2}
+.prefs-tb .ttl{font-size:13px;font-weight:700;margin-bottom:6px}
+.prefs-tabs{display:flex;gap:2px}
+.prefs-tabs button{display:flex;flex-direction:column;align-items:center;gap:2px;width:100px;white-space:nowrap;height:44px;border:none;border-radius:7px;background:transparent;font-size:11px;color:var(--ink2);padding-top:5px}
+.prefs-tabs button svg{width:20px;height:20px;color:var(--ink2)}
+.prefs-tabs button.on{background:var(--sel);color:var(--ink)}
+.prefs-tabs button.on svg{color:var(--accent)}
+
+/* 原型条 */
+#proto{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:4px;padding:0 10px;background:#0E0E0E;color:#DDD;font-size:12px;overflow-x:auto;white-space:nowrap;border-top:1px solid #2A2A2A}
+#proto a,#proto button{color:#CFCFCF;text-decoration:none;padding:5px 9px;border-radius:6px;border:none;background:transparent;font-size:12px;cursor:pointer}
+#proto a.on{background:#F2F2F2;color:#111}
+#proto button:hover,#proto a:hover:not(.on){background:#2A2A2A}
+#proto .sep{width:1px;height:20px;background:#333;margin:0 6px;flex:0 0 auto}
+#proto .lbl{color:#888;padding:0 4px}
+#proto button.on{background:#3A2A22;color:#F2B79E}
+</style>
+</head>
+<body>
+<div id="viewport"><div id="stage"></div></div>
+<nav id="proto" aria-label="原型跳转"></nav>
+
+<script>
+'use strict';
+/* ================= 图标（SF Symbols 风格的线性图标） ================= */
+const ICON = {
+  gauge:'<path d="M3.5 13.5a6.5 6.5 0 1 1 13 0"/><path d="M10 13.5l3.2-4"/><circle cx="10" cy="13.5" r=".9" fill="currentColor"/>',
+  star:'<path d="M10 2.8l2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L2.8 8.1l5-.7z"/>',
+  branch:'<circle cx="5" cy="4.5" r="1.8"/><circle cx="5" cy="15.5" r="1.8"/><circle cx="15" cy="7.5" r="1.8"/><path d="M5 6.3v7.4M15 9.3c0 3.2-10 1.8-10 4.4"/>',
+  apps:'<rect x="3" y="3" width="5.5" height="5.5" rx="1.4"/><rect x="11.5" y="3" width="5.5" height="5.5" rx="1.4"/><rect x="3" y="11.5" width="5.5" height="5.5" rx="1.4"/><rect x="11.5" y="11.5" width="5.5" height="5.5" rx="1.4"/>',
+  globe:'<circle cx="10" cy="10" r="7"/><ellipse cx="10" cy="10" rx="3" ry="7"/><path d="M3 10h14"/>',
+  cpu:'<rect x="5" y="5" width="10" height="10" rx="1.5"/><rect x="8" y="8" width="4" height="4" rx=".5"/><path d="M8 2.5V5M12 2.5V5M8 15v2.5M12 15v2.5M2.5 8H5M2.5 12H5M15 8h2.5M15 12h2.5"/>',
+  gear:'<circle cx="10" cy="10" r="2.6"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4"/>',
+  shield:'<path d="M10 2.8l6 2.4v4.6c0 3.8-2.6 6.4-6 7.4-3.4-1-6-3.6-6-7.4V5.2z"/><path d="M7.3 10l2 2 3.6-4"/>',
+  power:'<path d="M10 3v6.5"/><path d="M6 5.6a6 6 0 1 0 8 0"/>',
+  stop:'<rect x="5" y="5" width="10" height="10" rx="2"/>',
+  home:'<path d="M3.5 9.5L10 4l6.5 5.5"/><path d="M5.5 8.2V16h9V8.2"/>',
+  check:'<path d="M4.5 10.5l3.5 3.5 7.5-8"/>',
+  x:'<path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/>',
+  warn:'<path d="M10 3.2l7.5 13.3h-15z"/><path d="M10 8.3v3.6"/><circle cx="10" cy="14.2" r=".7" fill="currentColor"/>',
+  info:'<circle cx="10" cy="10" r="7"/><path d="M10 9v5"/><circle cx="10" cy="6.4" r=".7" fill="currentColor"/>',
+  plus:'<path d="M10 4.5v11M4.5 10h11"/>',
+  minus:'<path d="M4.5 10h11"/>',
+  refresh:'<path d="M15.5 8A6 6 0 0 0 4.6 6.6M4.5 12a6 6 0 0 0 10.9 1.4"/><path d="M15.8 3.8V8h-4.2M4.2 16.2V12h4.2"/>',
+  search:'<circle cx="8.5" cy="8.5" r="4.8"/><path d="M12 12l4.5 4.5"/>',
+  updown:'<path d="M6.5 8l3.5-3.5L13.5 8M6.5 12l3.5 3.5 3.5-3.5"/>',
+  arrow:'<path d="M4 10h11M11.5 6.5L15 10l-3.5 3.5"/>',
+  lock:'<rect x="4.5" y="9" width="11" height="8" rx="1.8"/><path d="M7 9V6.8a3 3 0 0 1 6 0V9"/>',
+  restart:'<path d="M4.5 10a5.5 5.5 0 1 0 1.8-4.1"/><path d="M4 3.5v3.2h3.2"/>',
+  ban:'<circle cx="10" cy="10" r="7"/><path d="M5 5l10 10"/>',
+  trash:'<path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/>',
+  pulse:'<path d="M2.5 10h3.2l2-5 3.4 10 2-5h4.4"/>',
+  wifi:'<path d="M3 8a10 10 0 0 1 14 0M5.5 10.6a6.4 6.4 0 0 1 9 0M8 13.2a2.8 2.8 0 0 1 4 0"/><circle cx="10" cy="15.6" r=".8" fill="currentColor"/>',
+  hat:'<path d="M4.5 12Q4.8 5 10 5t5.5 7z"/><path d="M2.5 12.5h15"/>',
+  terminal:'<rect x="2.5" y="4" width="15" height="12" rx="2"/><path d="M6 8.5l2.5 2-2.5 2M10.5 13h3.5"/>',
+  doc:'<path d="M5.5 2.8h6l3 3v11.4h-9z"/><path d="M11.5 2.8v3h3"/>',
+  font:'<path d="M4 16l4.5-11h1L14 16M5.6 12h6.8"/><path d="M14.5 9.5h3"/>'
+};
+const ic = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 20 20" aria-hidden="true">${ICON[n]}</svg>`;
+const MASCOT = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 64 64" aria-hidden="true"><ellipse cx="32" cy="40" rx="20" ry="21" fill="#D97757"/><path d="M18 24 Q19 12 32 12 Q45 12 46 24 Z" fill="#F2C14E"/><rect x="18" y="19" width="28" height="4" fill="#3E7C8C"/><ellipse cx="32" cy="24.5" rx="19" ry="3.5" fill="#E8B33E"/><ellipse cx="26" cy="37" rx="2.4" ry="3.2" fill="#2B2B2B"/><ellipse cx="38" cy="37" rx="2.4" ry="3.2" fill="#2B2B2B"/><path d="M28.5 43 Q32 46.5 35.5 43" fill="none" stroke="#2B2B2B" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+const APPICON = (s) => `<div style="width:${s}px;height:${s}px;border-radius:${s * .225}px;background:linear-gradient(160deg,#FFF6EC,#F3DDC6);box-shadow:inset 0 0 0 .5px rgba(0,0,0,.12),0 1px 3px rgba(0,0,0,.18);display:flex;align-items:flex-end;justify-content:center;overflow:hidden;flex:0 0 auto">${MASCOT(s * .92)}</div>`;
+const pop = (opts, sel, attrs = '', lg = false) => `<span class="pop${lg ? ' lg' : ''}"><select ${attrs}>${opts.map(o => Array.isArray(o) ? `<option value="${o[0]}"${o[0] === sel ? ' selected' : ''}>${o[1]}</option>` : `<option${o === sel ? ' selected' : ''}>${o}</option>`).join('')}</select>${ic('updown')}</span>`;
+const mk = (k) => `<span class="mk ${k}">${k === 'ok' ? ic('check') : k === 'bad' ? ic('x') : k === 'warn' ? ic('warn') : k === 'wait' ? '<span class="spin" style="width:10px;height:10px;border-width:1.6px"></span>' : ic('minus')}</span>`;
+
+/* ================= 状态 ================= */
+const S = {
+  page: 'main', theme: '', mode: 'abroad', menu: false, sheet: null, countdown: 0, runStep: 0, stuck: false, killBrowsers: false,
+  notif: null, rebootPending: false, envFail: false, envRunning: false,
+  proxyMode: 'chain', proxyNode: 'la01', addTab: 'sub', appFilter: 'all',
+  routes: { chrome: 'wg-us', claude: 'main', claudecode: 'main', term: 'clash-jp', wechat: 'direct', webkit: 'main', docker: 'vless-de', sys: 'direct', tele: 'block' },
+  offline: { wechat: true }, region: 'follow', prefsTab: 'general',
+  envOff: {}, setup: { step: 0, allowed: false, allowing: false, stage: 'import', tab: 'sub', mode: 'single', node: 'la01', checking: false, done: false },
+  uninstalled: false
+};
+const T = { timers: [] };
+const later = (fn, ms) => { const t = setTimeout(fn, ms); T.timers.push(t); return t; };
+const clearAll = () => { T.timers.forEach(clearTimeout); T.timers = []; };
+
+/* ================= 示例数据 ================= */
+const MODES = {
+  abroad: { c: 'teal', icon: 'check', dot: 'var(--ok)', pill: '已出国', title: '已出国 · 美国 洛杉矶', desc: '主代理检查和环境检测全部通过，网络已放行。Mac 和虚拟机的时区、语言已切换到出口所在地，可以启动 Claude。', ip: '203.0.113.24', gate: '放行中 · 62 秒后续期', claude: '允许启动' },
+  checking: { c: 'warn', icon: 'pulse', dot: 'var(--warn)', pill: '检查中', title: '正在检查…', desc: '已接管全部流量，断网保护已加载。主代理检查和环境检测通过后自动放行，并同步时区和语言。', ip: '—', gate: '只放行检测流量', claude: '检查完成前不允许' },
+  envfail: { c: 'bad', icon: 'warn', dot: 'var(--bad)', pill: '检测未通过', title: '环境检测未通过 · 代理流量已关闭', desc: '第 08 项 WebRTC（STUN）发现国内 STUN 服务器回报了本机的真实 IP。已关闭所有走代理的流量，不允许新启动 Claude；正在运行的 Claude 没有网络，但不会被结束。修好后点「重新检测」。', ip: '203.0.113.24', gate: '关闭', claude: '不允许启动；已运行的无网络' },
+  offline: { c: 'bad', icon: 'stop', dot: 'var(--bad)', pill: '已断网', title: '已断网', desc: '服务已停用，除"断网时允许"的应用外都不能联网。时区和语言保持不变。点「一键回国…」才会恢复本机网络。', ip: '—', gate: '关闭', claude: '可以启动，但没有网络' },
+  home: { c: 'gray', icon: 'home', dot: 'var(--gray)', pill: '已回国', title: '已回国 · 本机网络', desc: '断网保护、虚拟网卡和 DNS 设置都已撤掉，时区和语言已恢复为 上海 · 简体中文。回国状态下不允许启动 Claude。', ip: '本机', gate: '未启用', claude: '连不上，也不允许启动（卸载后解除）' }
+};
+const CLR = { teal: ['var(--teal-soft)', 'var(--teal)'], warn: ['var(--warn-soft)', 'var(--warn)'], bad: ['var(--bad-soft)', 'var(--bad)'], gray: ['var(--gray-soft)', 'var(--gray)'] };
+
+const ENV = [
+  ['01', '接管就绪', 'pf 规则摘要、utun 路由、系统 DNS、后台服务', 'hard', 'pf 一致 · utun6 · DNS 198.18.0.2'],
+  ['02', '出口 IP', '按"出口变化规则"与基准比对', 'hard', '203.0.113.24 · 同一国家'],
+  ['03', '出口地区', '不在大陆地址段，与锁定的地区一致', 'hard', '美国 · 加利福尼亚 · 洛杉矶'],
+  ['04', '时区', 'Mac 时区等于锁定的目标，自动时区已关闭', 'hard', 'America/Los_Angeles'],
+  ['05', '系统语言与地区格式', 'AppleLanguages、AppleLocale', 'hard', 'en-US · en_US'],
+  ['06', 'IPv6', '仅 IPv6 地址不可达，各网络服务 IPv6 已关闭', 'hard', '无 IPv6 出口'],
+  ['07', 'DNS', '解析得到 fake-IP，回显解析器不在大陆', 'hard', '198.18.3.41 · 解析器 美国'],
+  ['08', 'WebRTC（STUN）', '回报地址不能是本机真实 IP、不能在大陆、国家要和出口一致', 'hard', '4/4 回报美国地址'],
+  ['09', 'Claude 去向', 'Claude 走代理；域名置顶规则生效', 'hard', '均走主代理 · 置顶规则有效'],
+  ['10', 'Claude 可达性', 'claude.ai、api.anthropic.com', 'hard', 'claude.ai 200 · api 401'],
+  ['11', '系统代理与其他接管', '系统代理、PAC 未开启，没有其他虚拟网卡抢路由', 'hard', '未开启 · 无冲突'],
+  ['12', 'Claude 进程环境', '没有 HTTPS_PROXY、ALL_PROXY 等代理环境变量', 'hard', '2 个进程 · 无代理变量'],
+  ['13', 'IP 稳定性', '48 小时内出口变化次数', 'soft', '48 小时内 0 次变化'],
+  ['14', '网络类型（ASN）', '住宅宽带还是机房，仅供参考', 'soft', '疑似机房 · AS64500 Example Hosting'],
+  ['15', 'Claude 客户端语言', 'Claude 桌面版的界面语言', 'soft', 'English'],
+  ['16', '浏览器语言', 'Chrome 的首选语言', 'soft', 'zh-CN 排在第一位'],
+  ['17', '终端语言环境', 'Claude Code 进程的 LANG、LC_ALL', 'soft', 'en_US.UTF-8']
+];
+const envState = (id) => {
+  if (S.envOff[id]) return 'skip';
+  if (S.mode === 'checking' || S.envRunning) return 'wait';
+  if (S.mode === 'offline' || S.mode === 'home') return 'off';
+  if (S.mode === 'envfail' && id === '08') return 'bad';
+  if (id === '14' || id === '16') return 'warn';
+  return 'ok';
+};
+
+const NODES = [
+  { id: 'la01', n: '美国 洛杉矶 01', src: '机场 A', p: 'VLESS', udp: true, ms: '182 ms' },
+  { id: 'resi', n: 'US-Residential-LA', src: '住宅 IP', p: 'SOCKS5', udp: true, ms: '211 ms' },
+  { id: 'tyo02', n: '日本 东京 02', src: '机场 A', p: 'Trojan', udp: true, ms: '96 ms' },
+  { id: 'hk03', n: '香港 HK-03', src: '机场 A', p: 'Hysteria2', udp: true, ms: '38 ms' },
+  { id: 'office', n: '公司出口（HTTP）', src: '手动节点', p: 'HTTP', udp: false, ms: '64 ms' },
+  { id: 'sg01', n: '新加坡 01', src: '机场 A', p: 'SS', udp: true, ms: '74 ms' }
+];
+const EXITS = [
+  { id: 'wg-us', e: 'WireGuard', src: 'us-lax.conf · 独立网络命名空间', where: '美国 洛杉矶', ip: '198.51.100.31', ms: '182 ms', udp: '支持', st: 'ok', users: 'Google Chrome' },
+  { id: 'clash-jp', e: 'mihomo', src: 'Clash 订阅「机场 B」· 东京 02', where: '日本 东京', ip: '198.51.100.7', ms: '96 ms', udp: '支持', st: 'ok', users: '终端里的程序' },
+  { id: 'ovpn-sg', e: 'OpenVPN', src: 'sg.ovpn · 独立网络命名空间', where: '新加坡', ip: '198.51.100.66', ms: '74 ms', udp: '支持', st: 'ok', users: '' },
+  { id: 'home-http', e: 'sing-box', src: '手动 HTTP 节点 · 仅 TCP', where: '美国 纽约', ip: '198.51.100.90', ms: '120 ms', udp: '不支持', st: 'tcp', users: '', note: '这个出口不支持 UDP，指定它的应用的 UDP 改走主代理，TCP 仍走它。' },
+  { id: 'vless-de', e: 'sing-box', src: 'vless:// 链接 · Reality', where: '—', ip: '—', ms: '超时', udp: '—', st: 'bad', users: 'Docker', note: '经此出口访问 HTTPS 超时。指定它的应用（Docker）已自动改走主代理，出口恢复后新连接会重新走它。' }
+];
+const APPS = [
+  { k: 'claude', n: 'Claude', id: 'com.anthropic.claudefordesktop', i: 'C', c: '#C46A47', cn: 12, claude: true },
+  { k: 'claudecode', n: 'Claude Code', id: '~/.local/bin/claude（终端、VS Code 插件）', i: '›_', c: '#7A4A35', cn: 5, claude: true },
+  { k: 'chrome', n: 'Google Chrome', id: 'com.google.Chrome', i: 'G', c: '#3E7C8C', cn: 64 },
+  { k: 'term', n: '终端里的程序', id: 'com.apple.Terminal（含子进程）', i: 'T', c: '#2B2B2B', cn: 9, note: ['teal', '按"继承父进程"归类：git、curl、npm 等从终端启动的程序都算在这里。'] },
+  { k: 'wechat', n: '微信', id: 'com.tencent.xinWeChat', i: '微', c: '#2F9E5B', cn: 18 },
+  { k: 'webkit', n: 'Safari 与其他 WebKit 应用', id: 'com.apple.WebKit.Networking', i: 'S', c: '#2F6E9E', cn: 7, note: ['warn', '共享进程：Safari、邮件、App 内网页共用，只能一起设置。'] },
+  { k: 'docker', n: 'Docker', id: 'com.docker.docker', i: 'D', c: '#1D63B8', cn: 2 },
+  { k: 'sys', n: '系统服务', id: 'nsurlsessiond · App Store · iCloud', i: '系', c: '#7A7067', cn: 5 },
+  { k: 'tele', n: 'Telemetry Helper', id: '/Library/…/TelemetryHelper', i: 'H', c: '#8A8079', cn: 0 }
+];
+const ROUTE_OPTS = [['main', '主代理（美国 洛杉矶）'], ['wg-us', '分流 · wg-us 美国'], ['clash-jp', '分流 · clash-jp 日本'], ['ovpn-sg', '分流 · ovpn-sg 新加坡'], ['home-http', '分流 · home-http 纽约（仅 TCP）'], ['vless-de', '分流 · vless-de（未通过）'], ['direct', '本机网络'], ['block', '禁止联网']];
+const PROCS = [
+  ['Claude', 'com.anthropic.claudefordesktop', '6 个进程（含 Helper）', '#C46A47', 'C'],
+  ['Claude Code', '终端 zsh · ~/.local/bin/claude', 'PID 48211 · 3 个子进程（MCP server）', '#7A4A35', '›_'],
+  ['Claude Code', 'VS Code 插件 · anthropic.claude-code', 'PID 50177 · 1 个子进程', '#2F6E9E', '›_']
+];
+
+/* ================= 外壳 ================= */
+const NAV = [
+  ['网络', [['main', '总览', 'gauge'], ['proxy', '主代理', 'star'], ['exits', '分流出口', 'branch'], ['apps', '应用分流', 'apps']]],
+  ['环境', [['env', '环境检测', 'shield'], ['region', '地区', 'globe']]],
+  ['系统', [['engines', '引擎与虚拟机', 'cpu']]]
+];
+const TITLES = { main: '总览', proxy: '主代理', exits: '分流出口', apps: '应用分流', env: '环境检测', region: '地区', engines: '引擎与虚拟机' };
+
+function sidebar(active) {
+  const m = MODES[S.mode];
+  const envBad = S.mode === 'envfail' ? '<span class="cnt bad">1</span>' : '';
+  const nav = NAV.map(([h, items]) => `<div class="nav-h">${h}</div><div class="nav">${items.map(([id, l, i]) => `<a href="#${id}" class="${id === active ? 'on' : ''}">${ic(i)}${l}${id === 'env' ? envBad : ''}${id === 'exits' ? '<span class="cnt">5</span>' : ''}</a>`).join('')}</div>`).join('');
+  const on = S.mode !== 'home';
+  return `<aside class="side"><div class="traffic"><i></i><i></i><i></i></div>${nav}
+<div class="side-status">
+  <div><span class="dot" style="background:${m.dot}"></span>${m.pill}${S.rebootPending ? ' · <span style="color:var(--warn);font-weight:600">待重启</span>' : ''}</div>
+  <div><span class="dot" style="background:${on ? 'var(--ok)' : 'var(--gray)'}"></span>后台服务 ${on ? '运行中' : '待命'}</div>
+  <div><span class="dot" style="background:${S.mode === 'abroad' || S.mode === 'checking' || S.mode === 'envfail' ? 'var(--ok)' : 'var(--gray)'}"></span>虚拟机 ${S.mode === 'abroad' || S.mode === 'checking' || S.mode === 'envfail' ? '214 / 256 MB' : '已关闭'}</div>
+  <div><span class="dot" style="background:${m.c === 'teal' ? 'var(--ok)' : 'var(--bad)'}"></span>Claude ${m.claude}</div>
+</div></aside>`;
+}
+
+function mainWindow(active, body, toolbarExtra = '', opts = {}) {
+  const m = MODES[S.mode];
+  const [bg, fg] = CLR[m.c];
+  return `<div class="win${opts.inactive ? ' inactive' : ''}" id="mainwin" style="left:${opts.x ?? 80}px;top:${opts.y ?? 48}px;width:1120px;height:748px">
+${sidebar(active)}
+<div class="mainc">
+  <div class="toolbar"><h1>${TITLES[active]}</h1><span class="sp"></span>${toolbarExtra}
+    <span class="badge" style="background:${bg};color:${fg};height:22px;font-size:12px"><span class="dot" style="background:${m.dot}"></span>${m.pill}</span>
+  </div>
+  <div class="scroll" id="scroll">${body}</div>
+</div>
+${opts.overlay || ''}
+</div>`;
+}
+
+/* ================= 页面：总览 ================= */
+function pageMain() {
+  const m = MODES[S.mode];
+  const [bg, fg] = CLR[m.c];
+  const canEnable = S.mode === 'offline' || S.mode === 'home';
+  const canStop = S.mode === 'abroad' || S.mode === 'checking' || S.mode === 'envfail';
+  const hardOk = ENV.filter(e => e[3] === 'hard' && envState(e[0]) === 'ok').length;
+  const warnN = ENV.filter(e => envState(e[0]) === 'warn').length;
+  const live = APPS.filter(a => a.cn > 0).slice(0, 6).map(a => {
+    const r = S.routes[a.k];
+    const lbl = r === 'main' ? ['teal', '主代理'] : r === 'direct' ? ['acc', '本机网络'] : r === 'block' ? ['gray', '禁止联网'] : r === 'vless-de' ? ['warn', 'vless-de → 主代理'] : ['teal', '分流 · ' + r];
+    return `<div class="tr" style="grid-template-columns:1fr 70px 170px"><div class="nm"><span class="appi" style="background:${a.c}">${a.i}</span><span>${a.n}</span></div><span style="color:var(--ink2)">${S.mode === 'home' ? '—' : a.cn}</span><span><span class="badge ${lbl[0]}">${lbl[1]}</span></span></div>`;
+  }).join('');
+  const body = `
+${S.rebootPending ? `<div class="pending">${ic('restart')}<div style="flex:1"><b>需要重启 Mac</b><span style="color:var(--ink2)"> · 系统界面语言要重启后才会变成 English。重启是安全的：开机时会先加载断网保护，再恢复接管。</span></div><button class="b" data-act="rebootLater">稍后</button><button class="b pri" data-act="rebootNow">立即重启…</button></div>` : ''}
+<section class="box hero" style="background:linear-gradient(0deg,${bg},${bg}),var(--box)">
+  <div class="ico" style="background:var(--box);color:${fg}">${ic(m.icon)}</div>
+  <div class="txt">
+    <h2>${m.title}</h2>
+    <p>${m.desc}</p>
+    <div class="kv">
+      <div><span>出口 IP</span><b class="mono" style="font-size:13px">${m.ip}</b></div>
+      <div><span>主代理</span><b>香港中转 → 美国住宅</b></div>
+      <div><span>网络闸门</span><b>${m.gate}</b></div>
+      <div><span>UDP</span><b>${S.mode === 'home' ? '—' : '经主代理转发'}</b></div>
+      <div><span>Claude</span><b style="color:${m.c === 'teal' ? 'var(--ok)' : m.c === 'warn' ? 'var(--warn)' : 'var(--bad)'}">${m.claude}</b></div>
+    </div>
+  </div>
+  <div class="btns">
+    <button class="b lg pri" data-act="enable" ${canEnable ? '' : 'disabled'}>${ic('power')}启用</button>
+    <button class="b lg" data-act="disable" ${canStop ? '' : 'disabled'}>${ic('stop')}停用</button>
+    <button class="b lg" data-act="restore" ${S.mode === 'home' ? 'disabled' : ''}>${ic('home')}一键回国…</button>
+    <button class="b lg" data-act="openClaude" ${S.mode === 'abroad' ? '' : 'disabled'} title="${S.mode === 'abroad' ? '' : m.claude}" style="margin-top:6px"><span class="appi" style="width:16px;height:16px;border-radius:4px;font-size:9px;background:#C46A47">C</span>打开 Claude</button>
+  </div>
+</section>
+
+<div class="cols">
+  <section class="grp">
+    <h3 class="grp-h">环境检测<span class="sp"></span><span class="x">${S.mode === 'home' || S.mode === 'offline' ? '未运行' : S.mode === 'checking' ? '进行中' : `硬性 ${hardOk}/12 通过 · ${warnN} 个警告 · 3 分钟前`}</span></h3>
+    <div class="box">
+      ${ENV.filter(e => ['02', '04', '05', '07', '08', '10'].includes(e[0])).map(e => { const st = envState(e[0]); return `<div class="r">${mk(st)}<div class="l">${e[1]}</div><span class="v" style="font-size:12px">${st === 'off' ? '未运行' : st === 'wait' ? '检查中' : st === 'bad' ? '<span style="color:var(--bad)">回报了本机真实 IP</span>' : e[4]}</span></div>`; }).join('')}
+      <div class="r"><span style="flex:1"></span><button class="link" data-go="env">查看全部 17 项</button></div>
+    </div>
+  </section>
+  <section class="grp">
+    <h3 class="grp-h">地区<span class="sp"></span><button class="link" data-go="region">调整</button></h3>
+    <div class="box">
+      <div class="r"><div class="l">Mac</div><span class="v">${S.mode === 'home' ? '上海（UTC+8）· 简体中文' : '洛杉矶（UTC−8）· English (US)'}</span></div>
+      <div class="r"><div class="l">虚拟机</div><span class="v mono">${S.mode === 'home' || S.mode === 'offline' ? '已关闭' : 'America/Los_Angeles · en_US.UTF-8'}</span></div>
+      <div class="r"><div class="l">回国后恢复为</div><span class="v">上海（UTC+8）· 简体中文</span></div>
+    </div>
+    <h3 class="grp-h" style="margin-top:12px">连接去向</h3>
+    <div class="box" style="padding:12px;display:flex;flex-direction:column;gap:10px">
+      <div class="bar"><span style="width:${S.mode === 'abroad' ? 84 : 0}%;background:var(--teal)"></span><span style="width:${S.mode === 'abroad' ? 13 : S.mode === 'home' ? 100 : 0}%;background:var(--accent)"></span><span style="width:${S.mode === 'abroad' ? 3 : S.mode === 'home' ? 0 : 100}%;background:var(--ink3)"></span></div>
+      <div style="display:flex;gap:18px;font-size:12px;color:var(--ink2)"><span><span class="dot" style="background:var(--teal)"></span> 主代理 / 分流 ${S.mode === 'abroad' ? 146 : 0}</span><span><span class="dot" style="background:var(--accent)"></span> 本机网络 ${S.mode === 'abroad' ? 23 : '—'}</span><span><span class="dot" style="background:var(--ink3)"></span> 已拦截 ${S.mode === 'abroad' ? 4 : S.mode === 'home' ? 0 : 38}</span></div>
+    </div>
+  </section>
+</div>
+
+<section class="grp">
+  <h3 class="grp-h">正在联网的应用<span class="sp"></span><button class="link" data-go="apps">全部分流规则</button></h3>
+  <div class="box tbl"><div class="th" style="grid-template-columns:1fr 70px 170px"><span>应用</span><span>连接</span><span>去向</span></div>${live}</div>
+</section>`;
+  return mainWindow('main', body, `<button class="b ghost icon" title="重新检测" data-act="envRun">${ic('refresh')}</button>`, { overlay: overlay() });
+}
+
+/* ================= 页面：主代理 ================= */
+function pageProxy() {
+  const chain = S.proxyMode === 'chain';
+  const node = NODES.find(n => n.id === S.proxyNode);
+  const hops = [['本机', 'Mac', '全部应用', ''], ['虚拟机', 'mihomo', '主代理引擎', ''], ['第 1 跳 · 中转', '香港 HK-03', 'Hysteria2 · UDP ✓', 'mid'], ['第 2 跳 · 最终出口', 'US-Residential-LA', 'SOCKS5 · UDP ✓', 'fin'], ['网站看到', '203.0.113.24', '美国 洛杉矶', '']]
+    .map(([k, n, s, c], i, a) => `<div class="hop ${c}"><small>${k}</small><b>${n}</b><span>${s}</span></div>${i < a.length - 1 ? `<span class="harr">${ic('arrow')}</span>` : ''}`).join('');
+  const nodes = NODES.map(n => `<div class="tr${S.proxyNode === n.id ? ' sel' : ''}" style="grid-template-columns:22px 1fr 110px 80px 90px 70px" data-act="proxyNode" data-v="${n.id}">
+<input type="radio" class="rd" ${S.proxyNode === n.id ? 'checked' : ''} tabindex="-1"><span style="font-weight:${S.proxyNode === n.id ? 600 : 400}">${n.n}</span><span style="color:var(--ink2)">${n.src}</span><span style="color:var(--ink2)">${n.p}</span><span>${n.udp ? '<span class="badge ok">UDP</span>' : '<span class="badge warn">仅 TCP</span>'}</span><span style="color:var(--ink2)">${n.ms}</span></div>`).join('');
+  const body = `
+<p style="color:var(--ink2)">Mac 上所有流量默认都走主代理，就像插了一块出国网卡。时区和语言在你应用主代理时按它的出口确定并锁定，之后出口漂移不会自动改；主代理检查不通过时，走代理的流量全部断开。</p>
+<section class="grp">
+  <h3 class="grp-h">当前主代理 · 链式代理<span class="sp"></span><span class="badge ok">检查通过 · 28 秒前</span></h3>
+  <div class="box">
+    <div class="hops">${hops}</div>
+    <div class="r"><div class="l">出口 IP</div><span class="v mono">203.0.113.24</span></div>
+    <div class="r"><div class="l">位置与时区</div><span class="v">美国 洛杉矶 · America/Los_Angeles</span></div>
+    <div class="r"><div class="l">UDP</div><span class="v"><span class="badge ok">支持</span> 两跳都支持，UDP 经主代理转发</span></div>
+    <div class="r"><div class="l">延迟</div><span class="v">236 ms</span></div>
+    <div class="r"><div class="l">出口变化规则<small>复查时出口和基准怎么比；出口落在大陆一律不通过</small></div>${pop(['固定 IP', '同一城市', '同一国家或地区', '不限'], '同一国家或地区')}</div>
+    <div class="r"><span style="flex:1"></span><div class="acts"><button class="b">更新订阅</button><button class="b">${ic('refresh')}重新检查</button></div></div>
+  </div>
+</section>
+
+<section class="grp">
+  <h3 class="grp-h">更换主代理<span class="sp"></span><span class="segc">${[['single', '单个节点'], ['chain', '链式代理']].map(([v, l]) => `<button class="${S.proxyMode === v ? 'on' : ''}" data-act="proxyMode" data-v="${v}">${l}</button>`).join('')}</span></h3>
+  <div class="box">
+    ${chain ? `<div class="r"><div class="l">第 1 跳 · 中转</div>${pop(['香港 HK-03 · Hysteria2 · UDP', '香港 HK-01 · VLESS · UDP', '公司出口（HTTP）· 仅 TCP'], '香港 HK-03 · Hysteria2 · UDP')}</div>
+      <div class="r"><div class="l">第 2 跳 · 最终出口</div>${pop(['US-Residential-LA · SOCKS5 · UDP', '美国 洛杉矶 01 · VLESS · UDP'], '')}</div>
+      <div class="r"><button class="b">${ic('plus')}添加中转</button><span style="flex:1;color:var(--ink2);font-size:12px;text-align:right">预览：Mac → 香港 HK-03 → US-Residential-LA → 目标网站</span></div>`
+      : `<div class="tbl"><div class="th" style="grid-template-columns:22px 1fr 110px 80px 90px 70px"><span></span><span>节点</span><span>来源</span><span>协议</span><span>UDP</span><span>延迟</span></div>${nodes}</div>
+      ${node && !node.udp ? `<div class="r"><span class="inote warn" style="margin:0">${ic('warn')} 「${node.n}」是 HTTP 代理，只能转 TCP。选它作主代理后 UDP 会全部拦截：网页正常，视频会议、语音通话、游戏可能用不了。</span></div>` : ''}`}
+    <div class="r"><span style="flex:1;color:var(--ink2);font-size:12px">应用需要 Touch ID 或登录密码。应用后重新检查，期间走代理的流量断开；地区会变时先列出将被强制结束的 Claude 进程，确认后才执行。</span><button class="b lg pri">应用主代理</button></div>
+  </div>
+</section>
+
+<section class="grp">
+  <h3 class="grp-h">节点来源</h3>
+  <div class="box">
+    ${[['机场 A', 'Clash 订阅', '38 个节点 · 3 小时前更新 · 每 12 小时自动更新'], ['住宅 IP', '手动 SOCKS5', '1 个节点 · 支持 UDP · 用户名密码已保存'], ['公司出口', '手动 HTTP', '1 个节点 · 仅 TCP'], ['backup.yaml', '本地 YAML', '12 个节点 · 11 月 3 日导入']]
+      .map(([n, k, m]) => `<div class="r"><div class="l"><span style="font-weight:600">${n}</span><small>${m}</small></div><span class="badge gray">${k}</span></div>`).join('')}
+    <div class="r" style="padding:5px 8px"><button class="b ghost icon" data-act="sheet" data-v="addSource">${ic('plus')}</button><button class="b ghost icon">${ic('minus')}</button><span style="flex:1"></span><span style="font-size:11px;color:var(--ink2)">账号密码只保存在本机</span></div>
+  </div>
+</section>`;
+  return mainWindow('proxy', body, '', { overlay: overlay() });
+}
+
+/* ================= 页面：分流出口 ================= */
+function pageExits() {
+  const rows = EXITS.map(e => {
+    const st = e.st === 'ok' ? '<span class="badge ok">检查通过</span>' : e.st === 'tcp' ? '<span class="badge warn">通过 · 仅 TCP</span>' : '<span class="badge bad">未通过</span>';
+    return `<div class="tr" style="grid-template-columns:1.6fr 1fr 1fr 70px 70px 110px 28px;align-items:start">
+<div class="nm" style="align-items:flex-start"><span class="appi" style="background:${e.e === 'WireGuard' ? '#88171A' : e.e === 'OpenVPN' ? '#E07A1F' : e.e === 'mihomo' ? '#3B5BA9' : '#4C4C4C'};font-size:9px">${e.e.slice(0, 2)}</span><div class="t"><span class="mono" style="font-weight:600;font-size:13px">${e.id}</span><small>${e.e} · ${e.src}</small>${e.note ? `<span class="inote ${e.st === 'bad' ? 'bad' : 'warn'}">${e.note}</span>` : ''}</div></div>
+<span>${e.where}</span><span class="mono" style="color:var(--ink2)">${e.ip}</span><span style="color:var(--ink2)">${e.ms}</span><span style="color:var(--ink2)">${e.udp}</span>
+<div style="display:flex;flex-direction:column;gap:3px">${st}<small style="font-size:11px;color:var(--ink2)">${e.users ? '在用：' + e.users : '没有应用在用'}</small></div>
+<button class="b ghost icon" style="width:22px">${ic('info')}</button></div>`;
+  }).join('');
+  const body = `
+<p style="color:var(--ink2)">可选。只有在「应用分流」里指定了它的应用才走它；一个都不装，所有流量照样走主代理。分流出口失效时，指定它的应用自动改走主代理。</p>
+<section class="grp">
+  <h3 class="grp-h">已添加 · ${EXITS.length}</h3>
+  <div class="box tbl"><div class="th" style="grid-template-columns:1.6fr 1fr 1fr 70px 70px 110px 28px"><span>出口</span><span>位置</span><span>出口 IP</span><span>延迟</span><span>UDP</span><span>状态</span><span></span></div>${rows}
+  <div class="tr" style="padding:5px 8px;display:flex"><button class="b ghost icon" data-act="sheet" data-v="addExit">${ic('plus')}</button><button class="b ghost icon">${ic('minus')}</button></div></div>
+  <p class="grp-f">订阅和配置文件经主代理下载。OpenVPN、WireGuard 各自运行在独立的网络命名空间里，可以同时启用多个。</p>
+</section>`;
+  return mainWindow('exits', body, `<button class="b">${ic('refresh')}全部重新检查</button><button class="b pri" data-act="sheet" data-v="addExit">${ic('plus')}添加分流出口…</button>`, { overlay: overlay() });
+}
+
+/* ================= 页面：应用分流 ================= */
+function pageApps() {
+  let rows = APPS;
+  if (S.appFilter === 'live') rows = rows.filter(a => a.cn > 0);
+  if (S.appFilter === 'ruled') rows = rows.filter(a => S.routes[a.k] !== 'main');
+  const body = rows.map(a => {
+    const r = S.routes[a.k];
+    const opts = a.claude ? ROUTE_OPTS.filter(o => o[0] !== 'direct') : ROUTE_OPTS;
+    let note = '';
+    if (a.claude) note = `<span class="inote teal">${ic('lock')} Claude 不能设为"本机网络"（环境检测第 09 项）。回国后不允许启动。</span>`;
+    else if (r === 'vless-de') note = `<span class="inote warn">vless-de 检查未通过，暂时改走主代理。</span>`;
+    else if (r === 'home-http') note = `<span class="inote warn">home-http 不支持 UDP，这个应用的 UDP 走主代理。</span>`;
+    else if (a.note) note = `<span class="inote ${a.note[0]}">${a.note[1]}</span>`;
+    return `<div class="tr" style="grid-template-columns:1fr 60px 240px 90px;align-items:start">
+<div class="nm" style="align-items:flex-start"><span class="appi" style="background:${a.c}">${a.i}</span><div class="t"><span style="font-weight:600">${a.n}</span><small class="mono">${a.id}</small>${note}</div></div>
+<span style="color:var(--ink2);padding-top:3px">${a.cn}</span>
+<span>${pop(opts, r, `data-act="route" data-v="${a.k}" style="width:230px"`)}</span>
+<span style="padding-top:2px"><input type="checkbox" class="sw" data-act="offline" data-v="${a.k}" ${r === 'direct' && S.offline[a.k] ? 'checked' : ''} ${r === 'direct' ? '' : 'disabled'}></span></div>`;
+  }).join('');
+  const page = `
+<section class="grp">
+  <div class="box"><div class="r"><div class="l"><span style="font-weight:600">没有单独设置的应用</span><small>识别不出所属应用的连接也按这条处理</small></div>${pop(['走主代理（美国 洛杉矶）', '禁止联网'], '走主代理（美国 洛杉矶）')}</div></div>
+</section>
+<section class="grp">
+  <h3 class="grp-h"><span class="segc">${[['all', `全部 ${APPS.length}`], ['live', '正在联网'], ['ruled', '已单独设置']].map(([v, l]) => `<button class="${S.appFilter === v ? 'on' : ''}" data-act="appFilter" data-v="${v}">${l}</button>`).join('')}</span></h3>
+  <div class="box tbl"><div class="th" style="grid-template-columns:1fr 60px 240px 90px"><span>应用</span><span>连接</span><span>去向</span><span>断网时允许</span></div>${body}
+  <div class="tr" style="display:flex;justify-content:center;padding:12px;color:var(--ink2);font-size:12px;border-top:1px dashed var(--sep)">把应用从 Finder 或程序坞拖到这里，即可添加规则</div></div>
+  <p class="grp-f">修改立即生效，已建立的连接不会被打断。Claude 的域名（claude.ai、anthropic.com 等）不管哪个应用访问都不会走本机网络。把应用改成「本机网络」需要 Touch ID 或登录密码。「断网时允许」只对走本机网络的应用有效：停用后这些应用仍可以联网，其他全部断开。</p>
+</section>`;
+  return mainWindow('apps', page, `<span style="position:relative;display:inline-flex;align-items:center"><span style="position:absolute;left:7px;color:var(--ink3);display:flex">${ic('search')}</span><input class="tf" placeholder="搜索应用" style="width:190px;padding-left:26px"></span>`, { overlay: overlay() });
+}
+
+/* ================= 页面：环境检测 ================= */
+function pageEnv() {
+  const row = (e) => {
+    const st = envState(e[0]);
+    const val = st === 'skip' ? '已跳过（不算通过）' : st === 'off' ? '未运行' : st === 'wait' ? '检查中…' : st === 'bad' ? '<span style="color:var(--bad)">国内 STUN 回报了本机真实 IP</span>' : e[4];
+    return `<div class="r">${mk(st)}<div class="l"><span><span class="mono" style="color:var(--ink3);margin-right:6px">${e[0]}</span>${e[1]}</span><small>${e[2]}</small>${st === 'warn' && e[0] === '16' ? '<span class="inote warn">Chrome 设置 → 语言 → 把 English (United States) 移到最上面。</span>' : ''}${st === 'warn' && e[0] === '14' ? '<span class="inote warn">仅供参考：ISP 分类不等于住宅认证。</span>' : ''}${st === 'bad' ? '<span class="inote bad">可能有程序绕过了接管直接发 UDP。走代理的流量已关闭，正在运行的 Claude 没有网络但不会被结束。查看日志里的进程记录后点「重新检测」。</span>' : ''}</div><span class="v" style="font-size:12px;max-width:300px">${val}</span></div>`;
+  };
+  const body = `
+<p style="color:var(--ink2)">启用后，从 Mac 本机应用的角度再查一遍：探测流量和真实应用一样经过虚拟网卡、分流规则和主代理。<b style="color:var(--ink)">硬性项明确不通过时关闭所有走代理的流量，并且不允许启动 Claude；查询服务临时不可用只算"无法判断"，不会断网。</b>运行中每 10 分钟一次，网络切换、更换主代理、切换地区后会立即补跑。</p>
+<section class="grp">
+  <h3 class="grp-h">硬性项 · 不通过就关闭代理流量<span class="sp"></span><span class="x">${S.mode === 'abroad' || S.mode === 'envfail' ? '3 分钟前 · 用时 6.2 秒' : ''}</span></h3>
+  <div class="box">${ENV.filter(e => e[3] === 'hard').map(row).join('')}</div>
+</section>
+<section class="grp">
+  <h3 class="grp-h">警告项 · 只提示，不阻断<span class="sp"></span><button class="link" data-act="prefs" data-v="env">在设置里跳过某项…</button></h3>
+  <div class="box">${ENV.filter(e => e[3] === 'soft').map(row).join('')}</div>
+</section>
+<section class="grp">
+  <h3 class="grp-h">设备体检 · 按需运行，不参与放行</h3>
+  <div class="box">
+    <div class="r">${ic('font')}<div class="l">中文字体<small>系统和用户字体目录里随中文办公软件安装的字体，可能成为地区特征</small></div><span class="v">发现 3 个：SimSun、Microsoft YaHei、FZShuTi</span><button class="b">在"字体册"中打开</button></div>
+    <div class="r"><span style="flex:1;color:var(--ink2);font-size:12px">上次体检：今天 20:41</span><button class="b">${ic('refresh')}重新体检</button></div>
+  </div>
+  <p class="grp-f">检查项参考了 claude-switcher 的启动前审计思路。本项目用 Go 重写，没有复制它的代码。</p>
+</section>`;
+  return mainWindow('env', body, `<button class="b" data-act="envRun" ${S.mode === 'home' || S.mode === 'offline' ? 'disabled' : ''}>${S.envRunning ? '<span class="spin"></span>' : ic('refresh')}重新检测</button>`, { overlay: overlay() });
+}
+
+/* ================= 页面：地区 ================= */
+function pageRegion() {
+  const follow = S.region === 'follow';
+  const items = [['Mac 时区', 'systemsetup', '洛杉矶（UTC−8）', '上海（UTC+8）', '立即'], ['Mac 自动设置时区', 'com.apple.timezone.auto', '已关闭', '开启', '立即'], ['Mac 语言', 'AppleLanguages', 'English (US)', '简体中文', '应用重启后；系统界面要重启 Mac'], ['Mac 地区格式', 'AppleLocale', 'en_US', 'zh_CN', '应用重启后'], ['虚拟机时区', '/etc/localtime', 'America/Los_Angeles', 'UTC', '立即'], ['虚拟机语言', 'LANG / LC_ALL', 'en_US.UTF-8', 'C.UTF-8', '引擎重启后']]
+    .map(([n, w, now, orig, when]) => `<div class="tr" style="grid-template-columns:1.3fr 1fr 1fr 1.3fr"><div class="t" style="display:flex;flex-direction:column"><span>${n}</span><small class="mono" style="font-size:11px;color:var(--ink2)">${w}</small></div><span style="font-weight:600">${now}</span><span style="color:var(--ink2)">${orig}</span><span><span class="badge ${when === '立即' ? 'ok' : 'warn'}">${when}</span></span></div>`).join('');
+  const body = `
+<p style="color:var(--ink2)">时区和语言同时修改 Mac 和虚拟机。第一次启用前的设置会被记下，「一键回国」时原样恢复。</p>
+<section class="grp">
+  <h3 class="grp-h">地区来源</h3>
+  <div class="box">
+    <div class="r"><label class="inl"><input type="radio" class="rd" name="rg" ${follow ? 'checked' : ''} data-act="region" data-v="follow">跟随主代理</label><span class="v" style="flex:1">已锁定：美国 · 洛杉矶 · America/Los_Angeles · en-US</span></div>
+    <div class="r"><label class="inl"><input type="radio" class="rd" name="rg" ${follow ? '' : 'checked'} data-act="region" data-v="manual">手动指定</label><span style="flex:1"></span>${pop(['America/Los_Angeles（UTC−8）', 'America/New_York（UTC−5）', 'Asia/Tokyo（UTC+9）', 'Europe/London（UTC+0）'], '', follow ? 'disabled' : '')}${pop(['English (US)', 'English (UK)', '日本語'], '', follow ? 'disabled' : '')}</div>
+  </div>
+  <p class="grp-f">地区是锁定的：出口 IP 漂到别的城市不会自动改时区。出口换了国家时环境检测会不通过；同一国家但时区不同只给警告。</p>
+</section>
+<section class="grp">
+  <h3 class="grp-h">地区变化时</h3>
+  <div class="box">
+    <div class="r">${ic('lock')}<div class="l"><span style="font-weight:600">Claude 强制结束</span><small>地区只在你启用、应用主代理、切换地区时才变。确认框会列出将被结束的 Claude 进程，确认后强制结束，不会自动重新打开。</small></div><span class="badge acc">始终</span></div>
+    <div class="r">${ic('apps')}<div class="l"><span style="font-weight:600">其他应用</span><small>不强制。下面列出还在用旧语言的应用，自己决定要不要重启。</small></div><button class="b">重启这些应用</button></div>
+    <div class="r">${ic('restart')}<div class="l"><span style="font-weight:600">系统界面</span><small>访达、菜单栏、登录窗口的语言要重启 Mac 才生效，会弹窗引导重启。</small></div><button class="b" data-act="showReboot">预览重启提示</button></div>
+  </div>
+</section>
+<section class="grp">
+  <h3 class="grp-h">修改内容</h3>
+  <div class="box tbl"><div class="th" style="grid-template-columns:1.3fr 1fr 1fr 1.3fr"><span>项目</span><span>现在</span><span>回国后恢复为</span><span>生效</span></div>${items}</div>
+</section>
+<section class="grp">
+  <h3 class="grp-h">还在用旧语言的应用</h3>
+  <div class="box">
+    <div class="r"><span class="appi" style="background:#3E7C8C">G</span><div class="l">Google Chrome</div><span class="v">简体中文</span></div>
+    <div class="r"><span class="appi" style="background:#2F9E5B">微</span><div class="l">微信</div><span class="v">简体中文</span></div>
+  </div>
+  <p class="grp-f">浏览器发送的语言（Accept-Language）由浏览器自己的设置决定。定位服务可以通过附近的 Wi-Fi 推算真实位置，建议关闭浏览器的定位权限。</p>
+</section>`;
+  return mainWindow('region', body, '', { overlay: overlay() });
+}
+
+/* ================= 页面：引擎与虚拟机 ================= */
+function pageEngines() {
+  const eng = [['mihomo', '主代理（含链式代理）；Clash 订阅类分流出口', '[版本]', true, '主代理 + 1 个分流'], ['sing-box', '分流核心；SS / VMess / VLESS / Trojan / Hysteria2 / TUIC', '[版本]', false, '核心 + 2 个分流'], ['OpenVPN', '.ovpn，每个一个网络命名空间', '[版本]', false, '1 个分流'], ['WireGuard', '.conf，内核模块', '[版本]', false, '1 个分流'], ['shadowsocks-rust', '第二版', '未安装', false, '—'], ['Xray', '第二版', '未安装', false, '—']]
+    .map(([n, r, v, up, inst]) => `<div class="tr" style="grid-template-columns:130px 1fr 100px 130px 130px"><b style="font-weight:600">${n}</b><span style="color:var(--ink2);font-size:12px">${r}</span><span class="mono">${v}</span><span><span class="badge ${inst === '—' ? 'gray' : 'ok'}">${inst}</span></span><span style="display:flex;gap:6px">${v === '未安装' ? '<button class="b">安装</button>' : up ? '<button class="b pri">升级</button><button class="b">回滚</button>' : '<button class="b">回滚</button>'}</span></div>`).join('');
+  const svc = [['com.claude-abroad.guard', '开机守护，最先加载断网保护'], ['com.claude-abroad.abroadd', '接管网络、分流、DNS、状态机'], ['com.claude-abroad.vm', '运行虚拟机（_abroad 用户）']]
+    .map(([n, d]) => `<div class="r">${mk('ok')}<div class="l"><span class="mono" style="font-size:12px">${n}</span><small>${d}</small></div><span class="v">已在"登录项"中允许</span></div>`).join('');
+  const body = `
+<div class="cols">
+  <section class="grp">
+    <h3 class="grp-h">口袋虚拟机<span class="sp"></span><span class="badge ok">运行中 · 3 小时</span></h3>
+    <div class="box">
+      <div class="r"><div class="l">系统</div><span class="v">Alpine Linux 3.22（arm64）</span></div>
+      <div class="r"><div class="l">CPU / 内存</div><span class="v">1 核 · 214 / 256 MB</span></div>
+      <div class="r"><div class="l">数据盘</div><span class="v">82 / 256 MB</span></div>
+      <div class="r"><div class="l">调试终端<small>默认关闭，虚拟机里没有 SSH 和登录用户</small></div><input type="checkbox" class="sw"></div>
+      <div class="r"><span style="flex:1"></span><button class="b">重启虚拟机</button><button class="b">查看日志</button></div>
+    </div>
+  </section>
+  <section class="grp">
+    <h3 class="grp-h">本机接管</h3>
+    <div class="box">
+      <div class="r"><div class="l">允许局域网<small>打印机、NAS、路由器后台；只放行同网段</small></div><input type="checkbox" class="sw" checked></div>
+      ${[['断网保护（pf）', '默认拦截所有接口 · 每 5 秒巡检'], ['虚拟网卡', 'utun6 · 198.18.0.1/15'], ['系统 DNS', '198.18.0.2'], ['IPv6', '已关闭 · Wi-Fi、以太网']].map(([n, d]) => `<div class="r">${mk('ok')}<div class="l">${n}</div><span class="v mono" style="font-size:11px">${d}</span></div>`).join('')}
+      <div class="r">${mk('ok')}<div class="l">Claude 启动管控<small>域名解析锁 + 发现即结束</small></div><span class="v">已启用</span></div>
+    </div>
+  </section>
+</div>
+<section class="grp"><h3 class="grp-h">后台服务</h3><div class="box">${svc}</div>
+  <p class="grp-f">应用打不开时，可以在终端执行 <code>sudo abroad restore --force</code> 恢复本机网络。</p></section>
+<section class="grp"><h3 class="grp-h">引擎</h3>
+  <div class="box tbl"><div class="th" style="grid-template-columns:130px 1fr 100px 130px 130px"><span>引擎</span><span>用途</span><span>版本</span><span>实例</span><span></span></div>${eng}</div>
+  <p class="grp-f">引擎都装在虚拟机里，下载后按固定的 SHA-256 校验，升级失败可以回滚。</p></section>`;
+  return mainWindow('engines', body, '', { overlay: overlay() });
+}
+
+/* ================= 弹窗 ================= */
+function overlay() {
+  if (!S.sheet) return '';
+  const fn = SHEETS[S.sheet];
+  return fn ? `<div class="dim">${fn()}</div>` : '';
+}
+const procList = () => `<div class="box">${PROCS.map(([n, w, d, c, i]) => `<div class="r"><span class="appi" style="background:${c}">${i}</span><div class="l"><span style="font-weight:600">${n}</span><small>${w} · ${d}</small></div><span class="badge bad">强制结束</span></div>`).join('')}</div>`;
+const SHEETS = {
+  restore1: () => `<div class="sheet">
+<div style="display:flex;gap:12px;align-items:flex-start">${APPICON(48)}<div style="display:flex;flex-direction:column;gap:4px"><h2>一键回国</h2><p class="lead">回国前会先<b style="color:var(--ink)">强制结束</b>下面这些 Claude 相关进程，确认它们都退出后，才恢复本机网络、时区和语言。</p></div></div>
+${procList()}
+<p class="lead" style="font-size:12px">未保存的内容会丢失，Claude Code 正在执行的任务会中断。<b style="color:var(--ink)">回国后不允许再启动 Claude</b>，自己点 Claude 图标、在终端输入 <code>claude</code> 都会被拦下；只有卸载 Claude 出国才解除。</p>
+<div class="box"><div class="r">${ic('warn')}<div class="l"><span>浏览器里的 claude.ai 页面无法单独关闭</span><small>请先手动关掉。也可以勾选下面的选项一起强制退出浏览器。</small></div></div>
+<div class="r"><label class="inl"><input type="checkbox" class="cb" data-act="killBrowsers" ${S.killBrowsers ? 'checked' : ''}>同时强制退出浏览器（Google Chrome、Safari）</label></div></div>
+<div class="box"><div class="r"><div class="l">回国后</div><span class="v">本机网络 · 上海（UTC+8）· 简体中文</span></div></div>
+<div class="foot"><span style="font-size:11px;color:var(--ink2)">继续需要 Touch ID 或登录密码</span><span class="sp"></span><button class="b lg" data-act="closeSheet">取消</button><button class="b lg pri" data-act="restore2">继续…</button></div></div>`,
+
+  restore2: () => alertBox('强制结束 Claude 并回国？', `将强制结束 ${S.killBrowsers ? '10 个 Claude 相关进程和 2 个浏览器' : '10 个 Claude 相关进程'}。未保存的内容会丢失，此操作无法撤销。回国后 Claude 无法启动。`, '强制结束并回国', 'restoreRun'),
+
+  restoreRun: () => runSheet('正在回国…', [`结束 ${S.killBrowsers ? '10 个 Claude 相关进程和 2 个浏览器' : '10 个 Claude 相关进程'}（先请求退出，3 秒后强制）`, '复查：Claude 进程已全部退出', '关闭虚拟机', '撤掉 DNS、路由和虚拟网卡', '恢复 IPv6', '恢复时区和语言（上海 · 简体中文）', '卸载断网保护']),
+
+  restoreFail: () => `<div class="sheet">
+<div style="display:flex;gap:12px;align-items:flex-start"><div class="aicon" style="width:48px;height:48px">${APPICON(48)}<span class="w" style="width:22px;height:22px">${ic('warn')}</span></div><div style="display:flex;flex-direction:column;gap:4px"><h2>已中止回国</h2><p class="lead">有 1 个进程两次都没能结束。为了避免它用本机网络重新连接，回国已中止，网络保持「已出国」不变。</p></div></div>
+<div class="box"><div class="r"><span class="appi" style="background:#7A4A35">›_</span><div class="l"><span class="mono" style="font-weight:600">claude</span><small>PID 48211 · 由 root 启动 · 状态：不可中断（U）</small></div><span class="badge bad">仍在运行</span></div></div>
+<p class="lead" style="font-size:12px">可以在「活动监视器」里手动结束它，或重启 Mac 后再试。</p>
+<div class="foot"><button class="b lg">打开活动监视器</button><span class="sp"></span><button class="b lg" data-act="closeSheet">关闭</button><button class="b lg pri" data-act="restore2">重试</button></div></div>`,
+
+  reboot: () => `<div class="alert"><div class="aicon">${APPICON(64)}<span class="w" style="background:var(--accent);color:#fff">${ic('restart')}</span></div>
+<h2>需要重启 Mac</h2><p>${S.mode === 'home' ? '语言已恢复为简体中文。Claude 已结束，回国状态下不允许启动；其他应用可以稍后自己重启。<br>访达、菜单栏和登录窗口要重启 Mac 后才会变回简体中文。' : '语言已改为 English (US)。Claude 已强制结束，可以随时点「打开 Claude」；其他应用可以稍后自己重启。<br>访达、菜单栏和登录窗口要重启 Mac 后才会换成新语言。重启是安全的：开机时会先加载断网保护，再恢复接管。'}</p>
+<div class="bs"><button class="b pri" data-act="rebootNow">立即重启</button><button class="b" data-act="rebootLater">稍后</button></div></div>`,
+
+  uninstall1: () => `<div class="sheet">
+<div style="display:flex;gap:12px;align-items:flex-start"><div class="aicon" style="width:48px;height:48px">${APPICON(48)}<span class="w" style="width:22px;height:22px;background:var(--bad);color:#fff">${ic('trash')}</span></div><div style="display:flex;flex-direction:column;gap:4px"><h2>卸载 Claude 出国</h2><p class="lead">卸载会依次完成下面这些事。完成后 <b style="color:var(--ink)">Claude 可以在本机网络下正常启动</b>，Claude 出国不再管控。</p></div></div>
+<div class="box">${[['强制结束 Claude 相关进程', '同一键回国，结束不了就中止'], ['恢复本机网络、IPv6、时区和语言', '和一键回国相同'], ['解除 Claude 启动管控', '删除 Claude 域名解析锁'], ['注销后台服务', 'guard、abroadd、vm'], ['删除数据', '_abroad 用户、虚拟机、订阅与凭据、日志'], ['把应用移到废纸篓', '最后一步，可以取消']].map(([a, b], i) => `<div class="r"><span class="mk wait" style="font-size:11px;font-weight:700">${i + 1}</span><div class="l">${a}<small>${b}</small></div></div>`).join('')}</div>
+${procList()}
+<div class="foot"><button class="b lg" data-act="closeSheet">取消</button><button class="b lg dest-fill" data-act="uninstall2">继续…</button></div></div>`,
+
+  uninstall2: () => alertBox('确定卸载 Claude 出国？', '将强制结束 10 个 Claude 相关进程，恢复本机网络，并删除全部服务和数据。订阅和节点也会删除，此操作无法撤销。', '强制结束并卸载', 'uninstallRun'),
+
+  uninstallRun: () => runSheet('正在卸载…', ['强制结束 10 个 Claude 相关进程', '复查：Claude 进程已全部退出', '恢复本机网络、IPv6、时区和语言', '解除 Claude 启动管控（移除系统扩展）', '注销 3 个后台服务', '删除 _abroad 用户和数据']),
+
+  uninstallDone: () => `<div class="alert"><div class="aicon">${APPICON(64)}</div><h2>已卸载</h2><p>网络、时区和语言都已恢复，Claude 可以正常启动了。<br>语言恢复为简体中文，系统界面要重启 Mac 后才会变回来。</p>
+<div class="bs"><button class="b pri" data-act="uninstallTrash">移到废纸篓并重启…</button><button class="b" data-act="uninstallTrash">仅移到废纸篓</button></div></div>`,
+
+  addSource: () => `<div class="sheet"><h2>添加主代理的节点来源</h2>
+<span class="segc lg" style="align-self:flex-start">${[['sub', '订阅链接'], ['file', '本地文件'], ['manual', '手动节点']].map(([v, l]) => `<button class="${S.addTab === v ? 'on' : ''}" data-act="addTab" data-v="${v}">${l}</button>`).join('')}</span>
+${S.addTab === 'sub' ? `<div class="box"><div class="r"><div class="l">名称</div><input class="tf" style="width:300px" placeholder="机场 B"></div><div class="r"><div class="l">订阅地址</div><input class="tf" style="width:300px" placeholder="https://…"></div><div class="r"><label class="inl"><input type="checkbox" class="cb">通过本机网络下载这份订阅</label></div></div><p class="grp-f">以 Clash 客户端身份下载。不勾选时经当前主代理下载，失败不会自动改用本机网络。</p>`
+    : S.addTab === 'file' ? `<div class="box" style="padding:26px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--ink2);border:1.5px dashed var(--ctl-line)">${ic('doc')}<span>把 YAML / YML / JSON 文件拖到这里</span><button class="b">选择文件…</button><span style="font-size:11px">单个不超过 8 MiB，也可以直接粘贴 Clash/Mihomo YAML</span></div>`
+    : `<div class="box"><div class="r"><div class="l">类型</div>${pop(['SOCKS5', 'HTTP'], 'SOCKS5')}</div><div class="r"><div class="l">服务器</div><input class="tf" style="width:220px" placeholder="host"><input class="tf" style="width:70px" placeholder="端口"></div><div class="r"><div class="l">用户名 / 密码</div><input class="tf" style="width:140px" placeholder="可选"><input class="tf" type="password" style="width:140px" placeholder="可选"></div></div><p class="grp-f">HTTP 只能转 TCP；SOCKS5 服务器支持 UDP ASSOCIATE 时可以转发 UDP。</p>`}
+<div class="foot"><button class="b lg" data-act="closeSheet">取消</button><button class="b lg pri" data-act="closeSheet">导入并验证</button></div></div>`,
+
+  addExit: () => `<div class="sheet"><h2>添加分流出口</h2>
+<span class="segc lg" style="align-self:flex-start">${[['sub', 'Clash 订阅'], ['file', '配置文件'], ['link', '分享链接'], ['manual', '手动节点']].map(([v, l]) => `<button class="${S.addTab === v ? 'on' : ''}" data-act="addTab" data-v="${v}">${l}</button>`).join('')}</span>
+<div class="box"><div class="r"><div class="l">名称</div><input class="tf" style="width:300px" placeholder="${{ sub: 'clash-jp', file: 'ovpn-sg', link: 'ss-hk', manual: 'home-socks' }[S.addTab] || 'clash-jp'}"></div>
+<div class="r"><div class="l">${{ sub: '订阅地址', file: '文件', link: '链接', manual: '地址' }[S.addTab] || '订阅地址'}</div>${S.addTab === 'file' ? '<button class="b">选择 .ovpn / .conf 文件…</button>' : `<input class="tf" style="width:300px" placeholder="${{ sub: 'https://…', link: 'ss:// vmess:// vless:// trojan:// hy2:// tuic://', manual: 'socks5://user:pass@host:1080 或 http://host:8080' }[S.addTab] || 'https://…'}">`}</div></div>
+<p class="grp-f">${{ sub: '另一份 Clash/Mihomo 订阅，由单独的 mihomo 进程运行，和主代理互不影响。', file: 'OpenVPN 和 WireGuard 各自运行在独立的网络命名空间里。', link: '单个节点链接，由 sing-box 运行。可以一次粘贴多行。', manual: 'HTTP 只能转 TCP；用它的应用的 UDP 会改走主代理。' }[S.addTab] || ''}</p>
+<div class="foot"><button class="b lg" data-act="closeSheet">取消</button><button class="b lg pri" data-act="closeSheet">导入并检查</button></div></div>`
+};
+function alertBox(title, text, okLabel, okAct) {
+  const n = S.countdown;
+  return `<div class="alert"><div class="aicon">${APPICON(64)}<span class="w">${ic('warn')}</span></div><h2>${title}</h2><p>${text}</p>
+<div class="bs"><button class="b dest-fill" data-act="${okAct}" ${n > 0 ? 'disabled' : ''}>${okLabel}${n > 0 ? `（${n}）` : ''}</button><button class="b" data-act="closeSheet">取消</button></div></div>`;
+}
+function runSheet(title, steps) {
+  const items = steps.map((l, i) => {
+    const k = i < S.runStep ? 'ok' : i === S.runStep ? 'wait' : 'todo';
+    return `<li class="${k === 'todo' ? 'todo' : ''}">${k === 'ok' ? mk('ok') : k === 'wait' ? mk('wait') : mk('off')}${l}</li>`;
+  }).join('');
+  return `<div class="sheet" style="width:440px"><div style="display:flex;gap:12px;align-items:center">${APPICON(40)}<h2>${title}</h2></div><ul class="box steps-run">${items}</ul><p class="grp-f">请不要关机或断开电源。</p></div>`;
+}
+
+/* ================= 菜单栏下拉 ================= */
+function menuDrop() {
+  const m = MODES[S.mode];
+  const can = { enable: S.mode === 'offline' || S.mode === 'home', stop: !['offline', 'home'].includes(S.mode), restore: S.mode !== 'home' };
+  return `<div class="menu" style="right:200px">
+<div class="hd"><b style="display:flex;align-items:center;gap:6px"><span class="dot" style="background:${m.dot}"></span>${m.title}</b>
+<span class="m"><span>出口 IP</span><span class="mono">${m.ip}</span></span><span class="m"><span>地区</span><span>${S.mode === 'home' ? '上海 · 简体中文' : '洛杉矶 · English (US)'}</span></span><span class="m"><span>环境检测</span><span>${S.mode === 'abroad' ? '硬性 12/12 · 2 个警告' : S.mode === 'envfail' ? '<span style="color:var(--bad)">第 08 项未通过</span>' : '未运行'}</span></span><span class="m"><span>Claude</span><span>${m.claude}</span></span>
+${S.rebootPending ? '<span class="m" style="color:var(--warn)"><span>需要重启 Mac</span><span>语言待生效</span></span>' : ''}</div>
+<hr>
+<div class="mi ${can.enable ? '' : 'dis'}" data-act="${can.enable ? 'enable' : ''}">启用</div>
+<div class="mi ${can.stop ? '' : 'dis'}" data-act="${can.stop ? 'disable' : ''}">停用（断网）</div>
+<div class="mi ${can.restore ? '' : 'dis'}" data-act="${can.restore ? 'restore' : ''}">一键回国…</div>
+<div class="mi ${S.mode === 'abroad' || S.mode === 'envfail' ? '' : 'dis'}" data-act="envRun">重新检测环境</div>
+<div class="mi ${S.mode === 'abroad' ? '' : 'dis'}" data-act="${S.mode === 'abroad' ? 'openClaude' : ''}">打开 Claude</div>
+${S.rebootPending ? '<div class="mi" data-act="rebootNow">重启 Mac…</div>' : ''}
+<hr>
+<div class="mi" data-go="main">打开 Claude 出国<span class="k">⌘O</span></div>
+<div class="mi" data-act="prefs" data-v="general">设置…<span class="k">⌘,</span></div>
+<hr>
+<div class="mi" data-act="quitInfo">退出 Claude 出国<span class="k">⌘Q</span></div>
+</div>`;
+}
+function menubar() {
+  const m = MODES[S.mode];
+  return `<div class="mbar"><svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M13.3 10.6c0-2 1.6-2.9 1.7-3-.9-1.4-2.4-1.5-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.3 2-1.4 2.4-.4 6 1 8 .7 1 1.5 2 2.5 2s1.4-.6 2.6-.6 1.5.6 2.6.6 1.7-1 2.4-2c.8-1.1 1.1-2.2 1.1-2.3 0 0-2.1-.8-2.1-3.1zM11.4 4.6c.5-.7.9-1.6.8-2.5-.8 0-1.8.5-2.3 1.2-.5.6-1 1.5-.8 2.4.9.1 1.8-.4 2.3-1.1z"/></svg>
+<b>Claude 出国</b><span>文件</span><span>编辑</span><span>显示</span><span>窗口</span><span>帮助</span><span class="sp"></span>
+<span class="si${S.menu ? ' on' : ''}" data-act="menu" title="Claude 出国">${ic('hat')}<span class="sdot" style="background:${m.dot}"></span></span>
+<span class="si">${ic('wifi')}</span><span class="si">${ic('search')}</span><span>11月12日 周四 21:30</span></div>`;
+}
+function notif() {
+  if (!S.notif) return '';
+  const [title, body, kind] = S.notif;
+  return `<div class="notif">${APPICON(36)}<div class="t"><b>${title}</b><span>${body}</span></div><span class="tm">现在</span></div>`;
+}
+
+/* ================= 设置窗口 ================= */
+function prefsWindow() {
+  const tabs = [['general', '通用', 'gear'], ['env', '环境检测', 'shield'], ['claude', '回国与 Claude', 'home'], ['advanced', '高级', 'cpu']];
+  let body = '';
+  if (S.prefsTab === 'general') body = `
+<section class="grp"><div class="box">
+<div class="r"><div class="l">登录时打开 Claude 出国</div><input type="checkbox" class="sw" checked></div>
+<div class="r"><div class="l">在菜单栏显示图标</div><input type="checkbox" class="sw" checked></div></div></section>
+<section class="grp"><h3 class="grp-h">通知</h3><div class="box">
+<div class="r"><div class="l">断网、闸门关闭、环境检测失败<small>安全相关，不能关闭</small></div><input type="checkbox" class="sw" checked disabled></div>
+<div class="r"><div class="l">分流出口改走主代理</div><input type="checkbox" class="sw" checked></div>
+<div class="r"><div class="l">UDP 不可用</div><input type="checkbox" class="sw" checked></div>
+<div class="r"><div class="l">拦截了 Claude 的启动</div><input type="checkbox" class="sw" checked></div></div></section>
+<section class="grp"><h3 class="grp-h">更新</h3><div class="box">
+<div class="r"><div class="l">自动检查更新<small>经主代理下载，替换前先停服务</small></div><input type="checkbox" class="sw" checked></div>
+<div class="r"><div class="l">当前版本</div><span class="v">0.1.0（示例）</span><button class="b">检查更新…</button></div></div></section>`;
+  if (S.prefsTab === 'env') body = `
+<section class="grp"><h3 class="grp-h">警告项</h3><div class="box">
+${ENV.filter(e => e[3] === 'soft').map(e => `<div class="r"><div class="l">${e[0]} ${e[1]}<small>${e[2]}</small></div><input type="checkbox" class="sw" data-act="envToggle" data-v="${e[0]}" ${S.envOff[e[0]] ? '' : 'checked'}></div>`).join('')}</div>
+<p class="grp-f">关掉的项目不再探测，检测页显示"已跳过"，不算通过。</p></section>
+<section class="grp"><h3 class="grp-h">硬性项</h3><div class="box"><div class="r">${ic('lock')}<div class="l">01–12 共 12 项<small>出口、时区、语言、IPv6、DNS、WebRTC、系统代理、Claude 去向与可达性等。不能关闭、不能降级为警告。</small></div></div></div></section>
+<section class="grp"><h3 class="grp-h">频率</h3><div class="box"><div class="r"><div class="l">定时检测</div>${pop(['每 10 分钟', '每 30 分钟'], '每 10 分钟')}</div><div class="r"><div class="l">启动 Claude 前<small>最近一次结果超过 10 分钟就先补跑</small></div><span class="badge acc">始终</span></div></div></section>`;
+  if (S.prefsTab === 'claude') body = `
+<section class="grp"><h3 class="grp-h">回国前强制结束的进程</h3><div class="box">
+${[['Claude 桌面版', 'com.anthropic.claudefordesktop + 全部 Helper'], ['Claude Code 命令行', 'claude · node …@anthropic-ai/claude-code'], ['IDE 里的 Claude Code', 'VS Code、JetBrains 插件启动的 claude']].map(([a, b]) => `<div class="r"><input type="checkbox" class="cb" checked><div class="l">${a}<small class="mono">${b}</small></div></div>`).join('')}
+<div class="r"><input type="checkbox" class="cb" checked disabled><div class="l">上述进程的全部子进程<small>MCP server、它启动的 shell 和工具，始终包含</small></div></div>
+<div class="r" style="padding:5px 8px"><button class="b ghost icon">${ic('plus')}</button><button class="b ghost icon">${ic('minus')}</button></div></div>
+<p class="grp-f">同一份清单也用于：地区变化时强制结束 Claude、环境检测失败时结束 Claude、回国后的启动管控。</p></section>
+<section class="grp"><h3 class="grp-h">回国</h3><div class="box">
+<div class="r"><div class="l">默认同时强制退出浏览器</div><input type="checkbox" class="sw"></div>
+<div class="r">${ic('lock')}<div class="l">二次确认<small>始终开启，第二个确认按钮 3 秒后才能点</small></div><span class="badge acc">始终</span></div>
+<div class="r">${ic('lock')}<div class="l">回国后不允许启动 Claude<small>只有卸载 Claude 出国才解除</small></div><span class="badge acc">始终</span></div>
+<div class="r">${ic('lock')}<div class="l">不会自动打开 Claude<small>开机、启用、检测通过后都不会自动打开，只能你自己点「打开 Claude」</small></div><span class="badge acc">始终</span></div>
+<div class="r"><div class="l">Claude 的"登录时打开"<small>开机时会被拦下，建议在 Claude 的设置里关掉</small></div><span class="v"><span class="badge warn">已开启 · 建议关闭</span></span><button class="b">怎么关…</button></div>
+<div class="r"><div class="l">管控方式<small>回国后 Claude 的域名解析不了；被打开时马上结束并通知</small></div><span class="v">域名解析锁 + 发现即结束</span></div></div></section>`;
+  if (S.prefsTab === 'advanced') body = `
+<section class="grp"><div class="box">
+<div class="r">${ic('terminal')}<div class="l">命令行工具<small class="mono">/usr/local/bin/abroad</small></div><button class="b">安装…</button></div>
+<div class="r"><div class="l">日志<small>出口 IP 等敏感字段已脱敏</small></div><button class="b">导出诊断包…</button></div></div></section>
+<section class="grp"><h3 class="grp-h">卸载</h3><div class="box">
+<div class="r">${ic('trash')}<div class="l"><span style="font-weight:600">卸载 Claude 出国</span><small>恢复本机网络和地区，解除 Claude 启动管控，删除全部后台服务和数据。卸载后 Claude 可以正常启动。直接把应用拖进废纸篓不会解除管控。</small></div><button class="b dest" data-act="uninstall">卸载…</button></div></div></section>`;
+  const t = tabs.find(x => x[0] === S.prefsTab);
+  return `<div class="win" style="left:330px;top:120px;width:620px;height:560px;flex-direction:column">
+<div class="traffic"><i></i><i></i><i></i></div>
+<div class="prefs-tb"><span class="ttl">${t[1]}</span><div class="prefs-tabs">${tabs.map(([v, l, i]) => `<button class="${S.prefsTab === v ? 'on' : ''}" data-act="prefsTab" data-v="${v}">${ic(i)}${l}</button>`).join('')}</div></div>
+<div class="scroll" style="margin-top:78px">${body}</div>
+${S.sheet && (S.sheet.startsWith('uninstall')) ? overlay() : ''}
+</div>`;
+}
+
+/* ================= 安装引导窗口 ================= */
+function setupWindow() {
+  const st = S.setup;
+  const steps = ['允许后台服务', '配置主代理', '检查与环境检测', '启用'];
+  const left = steps.map((l, i) => `<div class="sstep ${i < st.step ? 'done' : i === st.step ? 'cur' : ''}"><i>${i < st.step ? '✓' : i + 1}</i>${l}</div>`).join('');
+  let body = '', foot = '';
+  if (st.step === 0) {
+    const svc = [['接管网络', 'com.claude-abroad.abroadd'], ['运行虚拟机', 'com.claude-abroad.vm'], ['开机守护', 'com.claude-abroad.guard'], ['Claude 启动管控', '域名解析锁（/etc/resolver）']];
+    body = `<h1>允许后台服务</h1><p class="lead">Claude 出国需要在后台接管网络、运行一台口袋虚拟机，并管控 Claude 的启动。请在"系统设置"里允许一次。</p>
+<div class="box">${svc.map(([a, b]) => `<div class="r">${st.allowed ? mk('ok') : st.allowing ? mk('wait') : mk('off')}<div class="l">${a}<small class="mono">${b}</small></div><span class="v">${st.allowed ? '已允许' : '等待允许'}</span></div>`).join('')}</div>
+${st.allowed ? `<div class="box"><div class="r">${mk('ok')}<div class="l">校验虚拟机镜像（SHA-256）</div></div><div class="r">${mk('ok')}<div class="l">创建 _abroad 系统用户</div></div></div>` : `<p class="grp-f">位置：系统设置 → 通用 → 登录项。</p>`}`;
+    foot = `<span class="sp"></span>${st.allowed ? '' : `<button class="b lg" data-act="setupAllow">${st.allowing ? '<span class="spin"></span>等待中…' : '打开系统设置…'}</button>`}<button class="b lg pri" data-act="setupNext" ${st.allowed ? '' : 'disabled'}>继续</button>`;
+  } else if (st.step === 1 && st.stage === 'import') {
+    body = `<h1>配置主代理</h1><p class="lead">选一个主代理，整台 Mac 的流量默认都从它出去。这一步不能跳过。</p>
+<span class="segc lg" style="align-self:flex-start">${[['sub', '订阅链接'], ['file', '本地文件'], ['manual', '手动节点']].map(([v, l]) => `<button class="${st.tab === v ? 'on' : ''}" data-act="setupTab" data-v="${v}">${l}</button>`).join('')}</span>
+${st.tab === 'sub' ? `<div class="box"><div class="r"><div class="l">订阅地址</div><input class="tf lg" style="width:330px" placeholder="https://…"></div></div>
+<div class="box" style="background:linear-gradient(0deg,var(--warn-soft),var(--warn-soft)),var(--box)"><div class="r"><label class="inl" style="align-items:flex-start"><input type="checkbox" class="cb" style="margin-top:2px"><span><b>通过本机网络下载这份订阅</b><br><span style="color:var(--ink2);font-size:12px">现在还没有可用的代理，只能先用本机网络下载。不勾选就不下载，失败也不会自动改用本机网络。</span></span></label></div></div>`
+      : st.tab === 'file' ? `<div class="box" style="padding:28px;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--ink2);border:1.5px dashed var(--ctl-line)">${ic('doc')}<span>把 YAML / YML / JSON 文件拖到这里</span><button class="b">选择文件…</button></div>`
+      : `<div class="box"><div class="r"><div class="l">类型</div>${pop(['SOCKS5', 'HTTP'], 'SOCKS5', '', true)}</div><div class="r"><div class="l">服务器</div><input class="tf lg" style="width:220px" placeholder="host"><input class="tf lg" style="width:80px" placeholder="端口"></div><div class="r"><div class="l">用户名 / 密码</div><input class="tf lg" style="width:150px" placeholder="可选"><input class="tf lg" type="password" style="width:150px" placeholder="可选"></div></div><p class="grp-f">HTTP 只能转 TCP，UDP 会被拦截。</p>`}`;
+    foot = `<span class="sp"></span><button class="b lg pri" data-act="setupImport">导入并验证</button>`;
+  } else if (st.step === 1) {
+    const sel = NODES.find(n => n.id === st.node);
+    body = `<h1>选择节点</h1><p class="lead">已导入「机场 A」，共 38 个节点。需要中转时切到"链式代理"。</p>
+<span class="segc lg" style="align-self:flex-start">${[['single', '单个节点'], ['chain', '链式代理']].map(([v, l]) => `<button class="${st.mode === v ? 'on' : ''}" data-act="setupMode" data-v="${v}">${l}</button>`).join('')}</span>
+${st.mode === 'chain' ? `<div class="box"><div class="r"><div class="l">第 1 跳 · 中转</div>${pop(['香港 HK-03 · UDP', '香港 HK-01 · UDP'], '', '', true)}</div><div class="r"><div class="l">第 2 跳 · 最终出口</div>${pop(['美国 洛杉矶 01 · UDP', '＋ 手动添加住宅 SOCKS5…'], '', '', true)}</div></div>`
+      : `<div class="box tbl">${NODES.map(n => `<div class="tr${st.node === n.id ? ' sel' : ''}" style="grid-template-columns:22px 1fr 80px 80px 70px" data-act="setupNode" data-v="${n.id}"><input type="radio" class="rd" ${st.node === n.id ? 'checked' : ''} tabindex="-1"><span>${n.n}</span><span style="color:var(--ink2)">${n.p}</span><span>${n.udp ? '<span class="badge ok">UDP</span>' : '<span class="badge warn">仅 TCP</span>'}</span><span style="color:var(--ink2)">${n.ms}</span></div>`).join('')}</div>
+${sel && !sel.udp ? `<span class="inote warn">${ic('warn')} 这个节点只能转 TCP，UDP 会全部拦截。网页正常，视频会议、语音通话、游戏可能用不了。</span>` : ''}`}`;
+    foot = `<button class="b lg" data-act="setupBack">换个来源</button><span class="sp"></span><button class="b lg pri" data-act="setupApply">应用主代理</button>`;
+  } else if (st.step === 2) {
+    const names = [['经主代理访问 HTTPS', '182 ms'], ['UDP 转发', '支持'], ['出口 IPv4 有效', '203.0.113.24'], ['出口不在大陆地址段', '美国'], ['经主代理的 DoH 解析', '正常']];
+    body = `<h1>${st.done ? '主代理检查通过' : '正在检查主代理…'}</h1><p class="lead">这一步只检查主代理本身，还没有接管 Mac 的网络。启用后还会跑 17 项环境检测，硬性项全部通过才放行。</p>
+<div class="box">${names.map(([n, v], i) => `<div class="r">${st.done || i === 0 ? mk('ok') : mk('wait')}<div class="l">${n}</div><span class="v">${st.done || i === 0 ? v : '检查中'}</span></div>`).join('')}</div>
+${st.done ? `<div class="box" style="background:linear-gradient(0deg,var(--teal-soft),var(--teal-soft)),var(--box)"><div class="r"><div class="l"><span style="font-size:11px;color:var(--teal)">启用后切换为</span><b>美国 洛杉矶 · America/Los_Angeles · English (US)</b><small>回国时恢复为 上海 · 简体中文</small></div></div>
+<div class="r">${ic('info')}<div class="l"><small>语言变化后 Claude 会被强制结束；系统界面语言需要重启 Mac，届时会提示。回国后不允许启动 Claude，只有卸载才解除。</small></div></div></div>` : ''}`;
+    foot = `<span class="sp"></span><button class="b lg pri" data-act="setupFinish" ${st.done ? '' : 'disabled'}>启用，整机出关</button>`;
+  }
+  return `<div class="win" style="left:240px;top:90px;width:800px;height:600px">
+<div class="setup"><div class="left"><div class="traffic"><i></i><i></i><i></i></div>${APPICON(56)}<div><h2>欢迎使用 Claude 出国</h2><p style="margin-top:4px">给整台 Mac 插一块出国网卡。</p></div><div style="display:flex;flex-direction:column;gap:2px">${left}</div></div>
+<div class="right"><div class="body">${body}</div><div class="foot">${foot}</div></div></div></div>`;
+}
+
+/* ================= 四种状态对照 ================= */
+function statesBoard() {
+  const cards = ['abroad', 'checking', 'envfail', 'offline', 'home'].map(k => {
+    const m = MODES[k]; const [bg, fg] = CLR[m.c];
+    return `<div class="box" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:22px;border-radius:5px;background:var(--gray-soft);position:relative">${ic('hat')}<span class="dot" style="position:absolute;right:5px;bottom:3px;width:6px;height:6px;background:${m.dot}"></span></span><span style="font-size:11px;color:var(--ink2)">菜单栏图标</span><span style="flex:1"></span><span class="badge" style="background:${bg};color:${fg}">${m.pill}</span></div>
+<div class="hero" style="background:${bg};padding:12px"><div class="ico" style="width:34px;height:34px;background:var(--box);color:${fg}">${ic(m.icon)}</div><div class="txt"><h2 style="font-size:16px">${m.title}</h2><p style="font-size:12px">${m.desc}</p></div></div>
+<div style="display:flex;gap:16px;font-size:12px;color:var(--ink2)"><span>闸门：${m.gate}</span><span>Claude：${m.claude}</span></div></div>`;
+  }).join('');
+  return `<div class="win" style="left:60px;top:46px;width:1160px;height:752px;flex-direction:column"><div class="traffic"><i></i><i></i><i></i></div>
+<div class="toolbar" style="padding-left:90px"><h1>状态对照（设计参考）</h1><span class="sp"></span><span class="sub">颜色只有一个含义：青色放行 · 黄色检查中 · 红色断网 · 灰色本机网络</span></div>
+<div class="scroll" style="display:grid;grid-template-columns:1fr 1fr;align-content:start">${cards}</div></div>`;
+}
+
+/* ================= 渲染 ================= */
+const MAIN_PAGES = { main: pageMain, proxy: pageProxy, exits: pageExits, apps: pageApps, env: pageEnv, region: pageRegion, engines: pageEngines };
+const ROUTES = ['main', 'proxy', 'exits', 'apps', 'env', 'region', 'engines', 'setup', 'settings', 'states'];
+const RNAMES = { main: '总览', proxy: '主代理', exits: '分流出口', apps: '应用分流', env: '环境检测', region: '地区', engines: '引擎', setup: '安装引导', settings: '设置窗口', states: '状态对照' };
+
+function route() { const h = location.hash.slice(1); return ROUTES.includes(h) ? h : 'main'; }
+function render() {
+  const p = route();
+  const sc = document.getElementById('scroll');
+  const keep = sc && sc.dataset.page === p ? sc.scrollTop : 0;
+  let html = menubar();
+  if (S.uninstalled) {
+    html += `<div style="position:absolute;inset:26px 0 0 0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.9);font-size:15px;text-shadow:0 1px 4px rgba(0,0,0,.4)">Claude 出国已卸载。点下方「重置原型」重新开始。</div>`;
+  } else if (p === 'setup') html += setupWindow();
+  else if (p === 'states') html += statesBoard();
+  else if (p === 'settings') { S.page = 'main'; html += pageMain().replace('class="win"', 'class="win inactive"').replace('<div class="dim">', '<div class="dim" style="display:none">') + prefsWindow(); }
+  else html += MAIN_PAGES[p]();
+  if (S.menu) html += menuDrop();
+  html += notif();
+  document.getElementById('stage').innerHTML = html;
+  const ns = document.getElementById('scroll'); if (ns) { ns.dataset.page = p; ns.scrollTop = keep; }
+  renderProto(p);
+  document.documentElement.dataset.theme = S.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+function renderProto(p) {
+  const links = ROUTES.map(id => `<a href="#${id}" class="${id === p ? 'on' : ''}">${RNAMES[id]}</a>`).join('');
+  document.getElementById('proto').innerHTML = `<span class="lbl">原型</span>${links}<span class="sep"></span>
+<span class="lbl">状态</span>${['abroad', 'checking', 'envfail', 'offline', 'home'].map(k => `<button class="${S.mode === k ? 'on' : ''}" data-proto="mode" data-v="${k}">${MODES[k].pill}</button>`).join('')}<span class="sep"></span>
+<span class="lbl">模拟</span><button data-proto="launchClaude">点 Claude 图标</button><button data-proto="reboot">重启提示</button><button class="${S.stuck ? 'on' : ''}" data-proto="stuck">回国时进程结束不了</button><span class="sep"></span>
+<button data-proto="theme">${S.theme === 'dark' ? '深色' : S.theme === 'light' ? '浅色' : '外观跟随系统'}</button><button data-proto="reset">重置原型</button>`;
+}
+function fit() {
+  const vp = document.getElementById('viewport');
+  const s = Math.min(vp.clientWidth / 1280, vp.clientHeight / 820, 1);
+  document.getElementById('stage').style.transform = `scale(${s})`;
+}
+function set(fn) { fn(); render(); }
+function notify(title, body, ms = 4500) { S.notif = [title, body]; render(); later(() => set(() => { S.notif = null; }), ms); }
+function countdown(next) { S.countdown = 3; const tick = () => { if (S.sheet !== next) return; if (S.countdown > 0) { S.countdown--; render(); later(tick, 1000); } }; later(tick, 1000); }
+function runSteps(sheet, n, onDone, failAt = -1) {
+  S.sheet = sheet; S.runStep = 0; render();
+  const step = () => {
+    if (S.sheet !== sheet) return;
+    if (S.runStep === failAt) { set(() => { S.sheet = 'restoreFail'; }); return; }
+    if (S.runStep >= n) { onDone(); return; }
+    S.runStep++; render(); later(step, 520);
+  };
+  later(step, 520);
+}
+function startEnable() {
+  clearAll();
+  set(() => { S.mode = 'checking'; S.menu = false; });
+  later(() => {
+    notify('已强制结束 Claude', '语言改为 English (US)、时区改为洛杉矶。Claude 已结束，检测通过后点「打开 Claude」即可使用新语言。');
+    later(() => set(() => { S.mode = 'abroad'; S.sheet = 'reboot'; }), 1600);
+  }, 1500);
+}
+
+document.addEventListener('click', (e) => {
+  const pr = e.target.closest('[data-proto]');
+  if (pr) {
+    const v = pr.dataset.v;
+    switch (pr.dataset.proto) {
+      case 'mode': clearAll(); set(() => { S.mode = v; S.sheet = null; S.uninstalled = false; }); break;
+      case 'stuck': set(() => { S.stuck = !S.stuck; }); break;
+      case 'theme': set(() => { S.theme = S.theme === '' ? 'light' : S.theme === 'light' ? 'dark' : ''; }); break;
+      case 'reboot': set(() => { S.sheet = 'reboot'; if (!MAIN_PAGES[route()]) location.hash = 'main'; }); break;
+      case 'launchClaude':
+        if (S.mode === 'home') notify('不允许启动 Claude', '现在是本机网络（已回国）。要使用 Claude，请先启用 Claude 出国；如果不再使用，可以在设置里一键卸载。', 6000);
+        else if (S.mode === 'checking' || S.mode === 'envfail') notify('暂不允许启动 Claude', S.mode === 'checking' ? '环境检测还没完成，通过后就可以启动。' : '环境检测第 08 项未通过，修好并重新检测后才能启动。', 6000);
+        else notify('Claude 已启动', S.mode === 'offline' ? '当前已断网，Claude 没有网络。' : '是你自己打开的，允许启动。Claude 出国不会自动打开它。');
+        break;
+      case 'reset': clearAll(); Object.assign(S, { mode: 'abroad', sheet: null, menu: false, notif: null, rebootPending: false, uninstalled: false, stuck: false, setup: { step: 0, allowed: false, allowing: false, stage: 'import', tab: 'sub', mode: 'single', node: 'la01', checking: false, done: false } }); location.hash = 'main'; render(); break;
+    }
+    return;
+  }
+  const go = e.target.closest('[data-go]');
+  if (go) { S.menu = false; location.hash = go.dataset.go; return; }
+  const el = e.target.closest('[data-act]');
+  if (!el) { if (S.menu && !e.target.closest('.menu')) set(() => { S.menu = false; }); return; }
+  if (el.tagName === 'SELECT' || (el.tagName === 'INPUT' && el.type !== 'radio' && !el.closest('.tr'))) return;
+  const v = el.dataset.v;
+  switch (el.dataset.act) {
+    case 'menu': set(() => { S.menu = !S.menu; }); break;
+    case 'enable': startEnable(); break;
+    case 'disable': clearAll(); set(() => { S.mode = 'offline'; S.menu = false; }); notify('已断网', '服务已停用，除"断网时允许"的应用外全部断网。'); break;
+    case 'restore': set(() => { S.menu = false; S.sheet = 'restore1'; if (!MAIN_PAGES[route()]) location.hash = 'main'; }); break;
+    case 'restore2': set(() => { S.sheet = 'restore2'; }); countdown('restore2'); break;
+    case 'restoreRun': runSteps('restoreRun', 7, () => { set(() => { S.sheet = 'reboot'; S.mode = 'home'; }); notify('已回国', '本机网络已恢复。回国状态下不允许启动 Claude。'); }, S.stuck ? 1 : -1); break;
+    case 'killBrowsers': S.killBrowsers = el.checked; break;
+    case 'closeSheet': set(() => { S.sheet = null; }); break;
+    case 'rebootNow': set(() => { S.sheet = null; S.rebootPending = false; S.menu = false; }); notify('正在重启…', '（原型）重启后语言生效，开机先加载断网保护。'); break;
+    case 'rebootLater': set(() => { S.sheet = null; S.rebootPending = true; }); break;
+    case 'showReboot': set(() => { S.sheet = 'reboot'; }); break;
+    case 'envRun': if (S.mode === 'home' || S.mode === 'offline') break; S.menu = false; set(() => { S.envRunning = true; }); later(() => set(() => { S.envRunning = false; if (S.mode === 'envfail') S.mode = 'abroad'; }), 1600); break;
+    case 'prefs': S.menu = false; S.prefsTab = v || 'general'; location.hash = 'settings'; render(); break;
+    case 'prefsTab': set(() => { S.prefsTab = v; }); break;
+    case 'uninstall': set(() => { S.sheet = 'uninstall1'; }); break;
+    case 'uninstall2': set(() => { S.sheet = 'uninstall2'; }); countdown('uninstall2'); break;
+    case 'uninstallRun': runSteps('uninstallRun', 6, () => set(() => { S.sheet = 'uninstallDone'; S.mode = 'home'; })); break;
+    case 'uninstallTrash': set(() => { S.sheet = null; S.uninstalled = true; }); break;
+    case 'openClaude': S.menu = false; notify('Claude 已打开', '打开前补跑了环境检测：硬性 12/12 通过。'); break;
+    case 'quitInfo': S.menu = false; notify('后台服务继续运行', '退出应用不会停止接管，也不会解除 Claude 启动管控。'); break;
+    case 'sheet': set(() => { S.addTab = 'sub'; S.sheet = v; }); break;
+    case 'addTab': set(() => { S.addTab = v; }); break;
+    case 'proxyMode': set(() => { S.proxyMode = v; }); break;
+    case 'proxyNode': set(() => { S.proxyNode = v; }); break;
+    case 'appFilter': set(() => { S.appFilter = v; }); break;
+    case 'region': set(() => { S.region = v; }); break;
+    case 'setupAllow': set(() => { S.setup.allowing = true; }); later(() => set(() => { S.setup.allowing = false; S.setup.allowed = true; }), 1400); break;
+    case 'setupNext': set(() => { S.setup.step = 1; }); break;
+    case 'setupTab': set(() => { S.setup.tab = v; }); break;
+    case 'setupImport': set(() => { S.setup.stage = 'nodes'; }); break;
+    case 'setupBack': set(() => { S.setup.stage = 'import'; }); break;
+    case 'setupMode': set(() => { S.setup.mode = v; }); break;
+    case 'setupNode': set(() => { S.setup.node = v; }); break;
+    case 'setupApply': set(() => { S.setup.step = 2; S.setup.done = false; }); later(() => set(() => { S.setup.done = true; }), 1500); break;
+    case 'setupFinish': S.setup.step = 3; location.hash = 'main'; startEnable(); break;
+  }
+});
+document.addEventListener('change', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  if (el.dataset.act === 'route') set(() => { S.routes[el.dataset.v] = el.value; });
+  if (el.dataset.act === 'offline') set(() => { S.offline[el.dataset.v] = el.checked; });
+  if (el.dataset.act === 'killBrowsers') S.killBrowsers = el.checked;
+  if (el.dataset.act === 'envToggle') set(() => { S.envOff[el.dataset.v] = !el.checked; });
+});
+window.addEventListener('hashchange', () => { S.menu = false; if (!['settings'].includes(route()) && S.sheet && S.sheet.startsWith('uninstall') && route() !== 'settings') S.sheet = null; render(); });
+window.addEventListener('resize', fit);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+render(); fit();
+</script>
+</body>
+</html>

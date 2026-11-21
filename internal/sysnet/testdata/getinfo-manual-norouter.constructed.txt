@@ -1,0 +1,7 @@
+DHCP Configuration
+Client ID: 
+IPv6: Manual
+IPv6 IP address: 2001:db8::5
+IPv6 Prefix Length: 64
+IPv6 Router: none
+Ethernet Address: 00:00:5e:00:53:01

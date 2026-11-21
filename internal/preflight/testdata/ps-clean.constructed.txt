@@ -1,0 +1,16 @@
+COMM
+/sbin/launchd
+/usr/libexec/logd
+/usr/libexec/smd
+/usr/libexec/UserEventAgent
+/usr/libexec/configd
+/System/Library/CoreServices/powerd.bundle/powerd
+/usr/libexec/IOMFB_bics_daemon
+/usr/libexec/remoted
+/usr/libexec/watchdogd
+/usr/libexec/warmd
+/usr/libexec/kernelmanagerd
+/usr/libexec/diskarbitrationd
+/usr/libexec/thermalmonitord
+/usr/libexec/xprotectd
+/usr/libexec/opendirectoryd

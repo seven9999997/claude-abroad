@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>主代理</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#FBF7F2}
+a{color:#2F6170}a:hover{color:#1F4F5B}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: #FBF7F2; font-family: Inter, 'Noto Sans SC', sans-serif; color: #2B2B2B">
+<div style="flex: 1 1 232px; max-width: 100%; display: flex">
+<dc-import name="Sidebar" active="proxy" hint-size="100%,1000px"></dc-import>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 800">主代理</h1>
+<p style="margin: 0; font-size: 14px; color: #4A4239">全部流量默认走它，时区和语言也跟着它的出口走。主代理检查不通过时，整机断网。</p>
+</header>
+
+<section aria-labelledby="cur" style="padding: 24px; border-radius: 20px; background: #EEF5F6; border: 1px solid #C9DEE2; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 13px; font-weight: 600; color: #1F4F5B">当前主代理 · 链式代理</span>
+<h2 id="cur" style="margin: 0; font-size: 28px; font-weight: 900">美国 洛杉矶 · 住宅出口</h2>
+</div>
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 700; background: #DCEFE5; color: #1E6B48">检查通过 · 28 秒前</span>
+</div>
+
+<ol aria-label="流量路径" style="margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px">
+<sc-for list="{{hops}}" as="h" hint-placeholder-count="5">
+<li style="display: flex; align-items: center; gap: 8px">
+<div style="min-width: 128px; padding: 12px 14px; border-radius: 12px; background: {{h.bg}}; border: 1px solid {{h.border}}; color: {{h.fg}}; display: flex; flex-direction: column; gap: 3px">
+<span style="font-size: 11px; font-weight: 600; opacity: 0.85">{{h.kind}}</span>
+<span style="font-size: 14px; font-weight: 700">{{h.name}}</span>
+<span style="font-size: 12px; opacity: 0.85">{{h.sub}}</span>
+</div>
+<sc-if value="{{h.arrow}}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="font-size: 18px; color: #5F564C">→</span></sc-if>
+</li>
+</sc-for>
+</ol>
+
+<dl style="margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 3px"><dt style="font-size: 12px; color: #5F564C">出口 IP</dt><dd style="margin: 0; font-size: 15px; font-weight: 600; font-family: Inter, monospace">203.0.113.24</dd></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><dt style="font-size: 12px; color: #5F564C">时区</dt><dd style="margin: 0; font-size: 15px; font-weight: 600">America/Los_Angeles</dd></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><dt style="font-size: 12px; color: #5F564C">延迟</dt><dd style="margin: 0; font-size: 15px; font-weight: 600">236 ms</dd></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><dt style="font-size: 12px; color: #5F564C">UDP</dt><dd style="margin: 0; font-size: 15px; font-weight: 600">支持</dd></div>
+</dl>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" style="min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1.5px solid #2B2B2B; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">重新检查</button>
+<button type="button" style="min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid #CFC3B4; background: #FFFFFF; font: inherit; font-size: 14px; cursor: pointer">更新订阅</button>
+</div>
+</section>
+
+<section aria-labelledby="chg" style="padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+<h2 id="chg" style="margin: 0; font-size: 16px; font-weight: 700">更换主代理</h2>
+<div role="radiogroup" aria-label="代理方式" style="display: inline-flex; padding: 4px; border-radius: 12px; background: #F3ECE2; gap: 4px">
+<button type="button" role="radio" aria-checked="{{single}}" onClick="{{pickSingle}}" style="{{singleStyle}}">单个节点</button>
+<button type="button" role="radio" aria-checked="{{chain}}" onClick="{{pickChain}}" style="{{chainStyle}}">链式代理</button>
+</div>
+</div>
+
+<sc-if value="{{chain}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end">
+<label style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600">第 1 跳 · 中转
+<select style="min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid #CFC3B4; background: #FBF7F2; font: inherit; font-size: 14px">
+<option>香港 HK-03 · 机场 A</option>
+<option>香港 HK-01 · 机场 A</option>
+<option>日本 东京 02 · 机场 A</option>
+</select>
+</label>
+<span aria-hidden="true" style="padding-bottom: 12px; font-size: 18px; color: #5F564C">→</span>
+<label style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600">第 2 跳 · 最终出口
+<select style="min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid #CFC3B4; background: #FBF7F2; font: inherit; font-size: 14px">
+<option>US-Residential-LA · 住宅 IP（SOCKS5）</option>
+<option>美国 洛杉矶 01 · 机场 A</option>
+</select>
+</label>
+<button type="button" style="min-height: 44px; padding: 0 14px; border-radius: 10px; border: 1px dashed #A99B8A; background: #FFFFFF; font: inherit; font-size: 13px; cursor: pointer">＋ 加一跳</button>
+</div>
+<p style="margin: 0; font-size: 13px; color: #4A4239">流量先连中转，再由中转连最终出口。网站看到的是最终出口的 IP；出口检查和地区同步都以最终出口为准。</p>
+</sc-if>
+
+<sc-if value="{{single}}" hint-placeholder-val="{{ false }}">
+<div role="radiogroup" aria-label="节点" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px">
+<sc-for list="{{nodes}}" as="n" hint-placeholder-count="6">
+<button type="button" role="radio" aria-checked="{{n.on}}" onClick="{{n.pick}}" style="{{n.style}}">
+<span style="font-size: 14px; font-weight: 700">{{n.name}}</span>
+<span style="font-size: 12px; color: #5F564C">{{n.src}} · {{n.ms}}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding-top: 4px; border-top: 1px solid #F0E8DD">
+<button type="button" style="min-height: 44px; padding: 0 22px; border-radius: 10px; border: none; background: #A94E2E; color: #FFFFFF; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer">应用主代理</button>
+<span style="flex: 1 1 320px; font-size: 13px; color: #8F1C13">应用后会断开所有走主代理的连接并重新检查，检查期间整机断网（分流出口和本机网络的应用不受影响）。</span>
+</div>
+</section>
+
+<section aria-labelledby="srcs" style="padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+<h2 id="srcs" style="margin: 0; font-size: 16px; font-weight: 700">节点来源</h2>
+<button type="button" style="min-height: 40px; padding: 0 16px; border-radius: 10px; border: 1.5px solid #2B2B2B; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">添加来源</button>
+</div>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column">
+<sc-for list="{{sources}}" as="s" hint-placeholder-count="3">
+<li style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid #F0E8DD">
+<span style="flex: 1 1 200px; font-weight: 600">{{s.name}}</span>
+<span style="padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: #EFE7DC; color: #3D362F">{{s.kind}}</span>
+<span style="flex: 1 1 220px; font-size: 13px; color: #4A4239">{{s.meta}}</span>
+</li>
+</sc-for>
+</ul>
+<p style="margin: 0; font-size: 13px; color: #4A4239">支持 Clash/Mihomo 订阅链接、本地 YAML / YML / JSON、手动 HTTP / SOCKS5 节点。账号密码只保存在本机。</p>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { mode: 'chain', node: 'la01' };
+  }
+  renderVals() {
+    const chain = this.state.mode === 'chain';
+    const seg = 'min-height: 36px; padding: 0 14px; border-radius: 9px; border: none; font: inherit; font-size: 14px; cursor: pointer; ';
+    const segOn = seg + 'background: #2B2B2B; color: #FFFFFF; font-weight: 700;';
+    const segOff = seg + 'background: transparent; color: #3D362F;';
+    const hops = [
+      { kind: '本机', name: 'Mac', sub: '全部应用', bg: '#FFFFFF', border: '#E6DCCF', fg: '#2B2B2B', arrow: true },
+      { kind: '虚拟机', name: 'mihomo', sub: '主代理引擎', bg: '#FFFFFF', border: '#E6DCCF', fg: '#2B2B2B', arrow: true },
+      { kind: '第 1 跳 · 中转', name: '香港 HK-03', sub: '机场 A · 38 ms', bg: '#FFFFFF', border: '#C9DEE2', fg: '#1F4F5B', arrow: true },
+      { kind: '第 2 跳 · 最终出口', name: 'US-Residential-LA', sub: '住宅 IP · SOCKS5', bg: '#2F6170', border: '#2F6170', fg: '#FFFFFF', arrow: true },
+      { kind: '网站看到', name: '203.0.113.24', sub: '美国 洛杉矶', bg: '#FFFFFF', border: '#E6DCCF', fg: '#2B2B2B', arrow: false }
+    ];
+    const card = 'min-height: 64px; padding: 10px 14px; border-radius: 12px; font: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 4px; justify-content: center; ';
+    const list = [
+      ['la01', '美国 洛杉矶 01', '机场 A', '182 ms'],
+      ['resi', 'US-Residential-LA', '住宅 IP', '211 ms'],
+      ['tyo02', '日本 东京 02', '机场 A', '96 ms'],
+      ['hk03', '香港 HK-03', '机场 A', '38 ms'],
+      ['hk01', '香港 HK-01', '机场 A', '41 ms'],
+      ['sg01', '新加坡 01', '机场 A', '74 ms']
+    ];
+    const nodes = list.map(([id, name, src, ms]) => ({
+      name, src, ms, on: this.state.node === id,
+      pick: () => this.setState({ node: id }),
+      style: card + (this.state.node === id ? 'border: 2px solid #2B2B2B; background: #FBF7F2;' : 'border: 1px solid #CFC3B4; background: #FFFFFF;')
+    }));
+    const sources = [
+      { name: '机场 A', kind: 'Clash 订阅', meta: '38 个节点 · 3 小时前更新 · 每 12 小时自动更新' },
+      { name: '住宅 IP', kind: '手动 SOCKS5', meta: '1 个节点 · 用户名密码已保存' },
+      { name: 'backup.yaml', kind: '本地 YAML', meta: '12 个节点 · 导入于 11 月 3 日' }
+    ];
+    return {
+      chain, single: !chain, hops, nodes, sources,
+      chainStyle: chain ? segOn : segOff,
+      singleStyle: chain ? segOff : segOn,
+      pickChain: () => this.setState({ mode: 'chain' }),
+      pickSingle: () => this.setState({ mode: 'single' })
+    };
+  }
+}
+</script>
+</body>
+</html>

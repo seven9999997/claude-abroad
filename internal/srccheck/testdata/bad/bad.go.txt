@@ -1,0 +1,5 @@
+package bad
+
+import "os/exec"
+
+func f() { _ = exec.Command("/sbin/route", "add") }

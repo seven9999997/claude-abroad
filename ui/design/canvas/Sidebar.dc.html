@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>侧栏</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<nav aria-label="主导航" style="box-sizing: border-box; width: 100%; min-height: 100%; padding: 24px 16px; background: #F3ECE2; border-right: 1px solid #E6DCCF; display: flex; flex-direction: column; gap: 28px; font-family: Inter, 'Noto Sans SC', sans-serif; color: #2B2B2B">
+<div style="display: flex; align-items: center; gap: 10px; padding: 0 8px">
+<svg width="40" height="40" viewBox="0 0 64 64" aria-hidden="true">
+<ellipse cx="32" cy="40" rx="20" ry="21" fill="#D97757"></ellipse>
+<path d="M18 24 Q19 12 32 12 Q45 12 46 24 Z" fill="#F2C14E"></path>
+<rect x="18" y="19" width="28" height="4" fill="#3E7C8C"></rect>
+<ellipse cx="32" cy="24.5" rx="19" ry="3.5" fill="#E8B33E"></ellipse>
+<ellipse cx="26" cy="37" rx="2.4" ry="3.2" fill="#2B2B2B"></ellipse>
+<ellipse cx="38" cy="37" rx="2.4" ry="3.2" fill="#2B2B2B"></ellipse>
+<path d="M28.5 43 Q32 46.5 35.5 43" fill="none" stroke="#2B2B2B" stroke-width="1.8" stroke-linecap="round"></path>
+</svg>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 17px; font-weight: 800; letter-spacing: 0.2px">Claude 出国</span>
+<span style="font-size: 12px; color: #5F564C">整机出关，一键回国</span>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<sc-for list="{{items}}" as="item" hint-placeholder-count="6">
+<a href="{{item.href}}" style="{{item.style}}">
+<span style="width: 20px; display: inline-flex; justify-content: center; color: inherit">{{item.glyph}}</span>
+<span>{{item.label}}</span>
+</a>
+</sc-for>
+</div>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: #FBF7F2; border: 1px solid #E6DCCF; font-size: 12px; color: #5F564C">
+<div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 4px; background: #2F7D5B"></span><span>abroadd 运行中</span></div>
+<div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 4px; background: #2F7D5B"></span><span>虚拟机 · 214 MB / 256 MB</span></div>
+<div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 4px; background: #2F7D5B"></span><span>断网保护 · 已加载</span></div>
+</div>
+</nav>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"active":{"editor":"enum","options":["main","proxy","exits","apps","region","engines"],"default":"main"},"$preview":{"width":232,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const active = this.props.active ?? 'main';
+    const base = 'display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border-radius: 10px; font-size: 15px; text-decoration: none; ';
+    const nav = [
+      { id: 'main', label: '总览', glyph: '◎', href: 'Main.dc.html' },
+      { id: 'proxy', label: '主代理', glyph: '★', href: 'MainProxy.dc.html' },
+      { id: 'exits', label: '分流出口', glyph: '↗', href: 'Exits.dc.html' },
+      { id: 'apps', label: '应用分流', glyph: '⇄', href: 'Apps.dc.html' },
+      { id: 'region', label: '地区', glyph: '◷', href: 'Region.dc.html' },
+      { id: 'engines', label: '引擎与虚拟机', glyph: '▣', href: 'Engines.dc.html' }
+    ];
+    return {
+      items: nav.map((n) => ({
+        ...n,
+        style: base + (n.id === active
+          ? 'background: #2B2B2B; color: #FFFFFF; font-weight: 600;'
+          : 'color: #3D362F; font-weight: 500;')
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

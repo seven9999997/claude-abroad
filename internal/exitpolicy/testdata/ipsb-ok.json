@@ -1,0 +1,18 @@
+{
+ "region": "Example State",
+ "organization": "Example Hosting",
+ "region_code": "EX",
+ "isp": "Example Hosting",
+ "city": "Exampleville",
+ "asn_organization": "Example Hosting",
+ "postal_code": "00000",
+ "asn": 64500,
+ "latitude": 0.0,
+ "ip": "203.0.113.7",
+ "continent_code": "NA",
+ "offset": -28800,
+ "country": "United States",
+ "timezone": "America/Los_Angeles",
+ "country_code": "US",
+ "longitude": 0.0
+}

@@ -1,0 +1,490 @@
+C:Q1EtSHPmnMwkMrb8GUwFjJw6oYEbg=
+P:bash
+V:5.2.37-r0
+A:aarch64
+S:499996
+I:3291995
+T:The GNU Bourne Again shell
+U:https://www.gnu.org/software/bash/bash.html
+L:GPL-3.0-or-later
+o:bash
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1727144961
+c:dfdce3cefb431614e410ac9bc3665d33ea45020c
+D:/bin/sh so:libc.musl-aarch64.so.1 so:libreadline.so.8
+p:cmd:bash=5.2.37-r0
+
+C:Q17sl7kg8x9RIIESvAae0CdT0fd84=
+P:gmp
+V:6.3.0-r3
+A:aarch64
+S:223215
+I:460616
+T:free library for arbitrary precision arithmetic
+U:https://gmplib.org/
+L:LGPL-3.0-or-later OR GPL-2.0-or-later
+o:gmp
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1739225587
+c:187e3f7791d3390e18bc06969a5f34c385fd883e
+D:so:libc.musl-aarch64.so.1
+p:so:libgmp.so.10=10.5.0
+
+C:Q1vqLwiiKHM0TOlyELC7Zf/PkZo7M=
+P:iproute2
+V:6.15.0-r0
+A:aarch64
+S:169505
+I:708026
+T:IP Routing Utilities
+U:https://wiki.linuxfoundation.org/networking/iproute2
+L:GPL-2.0-or-later
+o:iproute2
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1748417877
+c:c432580e7c774b1b180e11782e8dd8f570cd2dcb
+D:iproute2-minimal iproute2-tc iproute2-ss /bin/sh so:libc.musl-aarch64.so.1 so:libcap.so.2 so:libmnl.so.0
+p:cmd:bridge=6.15.0-r0 cmd:ctstat=6.15.0-r0 cmd:genl=6.15.0-r0 cmd:ifstat=6.15.0-r0 cmd:lnstat=6.15.0-r0 cmd:nstat=6.15.0-r0 cmd:routel=6.15.0-r0 cmd:rtacct=6.15.0-r0 cmd:rtmon=6.15.0-r0 cmd:rtstat=6.15.0-r0
+
+C:Q19IByRZXCiFWSKiGCT3HLpYfNLVQ=
+P:iproute2-minimal
+V:6.15.0-r0
+A:aarch64
+S:279598
+I:684363
+T:IP Routing Utilities (/sbin/ip only)
+U:https://wiki.linuxfoundation.org/networking/iproute2
+L:GPL-2.0-or-later
+o:iproute2
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1748417877
+c:c432580e7c774b1b180e11782e8dd8f570cd2dcb
+D:so:libc.musl-aarch64.so.1 so:libcap.so.2 so:libelf.so.1 so:libmnl.so.0
+p:cmd:ip=6.15.0-r0
+
+C:Q1DjGbsjcxxUuQ4bftD7Lm5zVGpec=
+P:iproute2-ss
+V:6.15.0-r0
+A:aarch64
+S:48244
+I:135568
+T:IP Routing Utilities (socket statistics tool)
+U:https://wiki.linuxfoundation.org/networking/iproute2
+L:GPL-2.0-or-later
+o:iproute2
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1748417877
+c:c432580e7c774b1b180e11782e8dd8f570cd2dcb
+D:so:libc.musl-aarch64.so.1 so:libcap.so.2 so:libmnl.so.0
+p:cmd:ss=6.15.0-r0
+
+C:Q16VDc+6BoQkXnTBeSunpsfeV30fE=
+P:iproute2-tc
+V:6.15.0-r0
+A:aarch64
+S:260809
+I:645394
+T:IP Routing Utilities (traffic control and XDP support)
+U:https://wiki.linuxfoundation.org/networking/iproute2
+L:GPL-2.0-or-later
+o:iproute2
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1748417877
+c:c432580e7c774b1b180e11782e8dd8f570cd2dcb
+D:so:libc.musl-aarch64.so.1 so:libcap.so.2 so:libelf.so.1 so:libmnl.so.0 so:libxtables.so.12
+p:cmd:tc=6.15.0-r0
+
+C:Q14oUK3hLwMo08gzeHwYV6noOpxrw=
+P:jansson
+V:2.14.1-r0
+A:aarch64
+S:49781
+I:132936
+T:lightweight JSON library
+U:http://www.digip.org/jansson/
+L:MIT
+o:jansson
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1748356373
+c:9161ac3604718ebb3c85b5795f0a084d45362571
+D:so:libc.musl-aarch64.so.1
+p:so:libjansson.so.4=4.14.1
+
+C:Q1bVDu9IQkyEFbdwqGLSvxDQnakfo=
+P:libcap-ng
+V:0.8.5-r0
+A:aarch64
+S:12804
+I:134480
+T:POSIX capabilities library
+U:https://people.redhat.com/sgrubb/libcap-ng/index.html
+L:GPL-2.0-or-later AND LGPL-2.1-or-later
+o:libcap-ng
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1715080084
+c:eca5824ffb9bd4158a839862d2e760724bf38b37
+D:so:libc.musl-aarch64.so.1
+p:so:libcap-ng.so.0=0.0.0 so:libdrop_ambient.so.0=0.0.0
+
+C:Q1z7E+cPczQLf8xhnwO8kk8OAYy6k=
+P:libcap2
+V:2.78-r0
+A:aarch64
+S:24114
+I:134744
+T:POSIX 1003.1e capabilities (libraries)
+U:https://sites.google.com/site/fullycapable/
+L:BSD-3-Clause OR GPL-2.0-only
+o:libcap
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1775909514
+c:f1c200cd047f2bbd6dfffc9ddb73d9e3a980cdea
+D:so:libc.musl-aarch64.so.1
+p:so:libcap.so.2=2.78 so:libpsx.so.2=2.78
+
+C:Q1Zp4sXyU0mSuWZ2JfwbJEUtstLN8=
+P:libcrypto3
+V:3.5.9-r0
+A:aarch64
+S:2293157
+I:5027302
+T:Crypto library from openssl
+U:https://www.openssl.org/
+L:Apache-2.0
+o:openssl
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1790753340
+c:b6d0d5c5639c0034e9073c39e9ff139e28e71818
+k:100
+D:so:libc.musl-aarch64.so.1
+p:so:libcrypto.so.3=3
+
+C:Q1KyFywyN0dAR+6UjRRvrn/EuC+Yo=
+P:libelf
+V:0.193-r0
+A:aarch64
+S:44640
+I:133080
+T:Library to read, modify and create ELF files
+U:https://sourceware.org/elfutils/
+L:GPL-3.0-or-later AND ( GPL-2.0-or-later OR LGPL-3.0-or-later )
+o:elfutils
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1746200225
+c:dc9603691bcc8473911a223cfd0f3e713e6a5e2c
+D:so:libc.musl-aarch64.so.1 so:libz.so.1 so:libzstd.so.1
+p:elfutils-libelf=0.193-r0 so:libelf.so.1=0
+
+C:Q1q8UfSXFfILW6Z12rIfPoUUFEblc=
+P:libintl
+V:0.24.1-r0
+A:aarch64
+S:41977
+I:198408
+T:GNU gettext runtime library
+U:https://www.gnu.org/software/gettext/gettext.html
+L:LGPL-2.1-or-later
+o:gettext
+m:Carlo Landmeter <clandmeter@alpinelinux.org>
+t:1747039874
+c:215a26431d1b09c56cb2a9ffe10175feb9518fd8
+D:so:libc.musl-aarch64.so.1
+p:so:libintl.so.8=8.4.3
+
+C:Q17eeNnlhWjwbZ84z6xyaH+WzRu+Q=
+P:libmnl
+V:1.0.5-r2
+A:aarch64
+S:9507
+I:67472
+T:Library for minimalistic netlink
+U:https://www.netfilter.org/projects/libmnl/
+L:LGPL-2.1-or-later
+o:libmnl
+m:Francesco Colista <fcolista@alpinelinux.org>
+t:1710257622
+c:fc95c59998285564fbcb0bfb2443898c62e10171
+D:so:libc.musl-aarch64.so.1
+p:so:libmnl.so.0=0.2.0
+
+C:Q1eN0aix+QSEdxEBdhzpINhIYfU34=
+P:libncursesw
+V:6.5_p20250503-r0
+A:aarch64
+S:161279
+I:396160
+T:Console display library (libncursesw)
+U:https://invisible-island.net/ncurses/
+L:X11
+o:ncurses
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1746535506
+c:3fefbe8dda8b3e85458edb190e2f3a69ad16035c
+D:ncurses-terminfo-base=6.5_p20250503-r0 so:libc.musl-aarch64.so.1
+p:so:libncursesw.so.6=6.5
+
+C:Q15dnG5eK4oPVr9ufjtqc1xjOwN6U=
+P:libnftnl
+V:1.2.9-r0
+A:aarch64
+S:66995
+I:204216
+T:Netfilter library providing interface to the nf_tables subsystem
+U:https://netfilter.org/projects/libnftnl
+L:GPL-2.0-or-later
+o:libnftnl
+m:Jakub Jirutka <jakub@jirutka.cz>
+t:1744996558
+c:454d33629e8f46c9b43d5c0937ac65f93678a2a8
+D:so:libc.musl-aarch64.so.1 so:libmnl.so.0
+p:libnftnl-libs=1.2.9-r0 so:libnftnl.so.11=11.6.0
+
+C:Q1TmET5Txc34/gM7tK2OnG7wp7aOg=
+P:libssl3
+V:3.5.9-r0
+A:aarch64
+S:374074
+I:868240
+T:SSL shared libraries
+U:https://www.openssl.org/
+L:Apache-2.0
+o:openssl
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1790753340
+c:b6d0d5c5639c0034e9073c39e9ff139e28e71818
+k:100
+D:libcrypto3=3.5.9-r0 so:libc.musl-aarch64.so.1 so:libcrypto.so.3
+p:so:libssl.so.3=3
+
+C:Q1Z1UTIzZYWIsJPTbNooghmCBzIMc=
+P:libxtables
+V:1.8.11-r1
+A:aarch64
+S:26325
+I:67320
+T:Linux kernel firewall, NAT and packet mangling tools (xtables library)
+U:https://www.netfilter.org/projects/iptables/index.html
+L:GPL-2.0-or-later
+o:iptables
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1738513213
+c:28277d5f4176c119ea7253e017491512095a4acf
+D:so:libc.musl-aarch64.so.1
+p:so:libxtables.so.12=12.7.0
+
+C:Q18jforHVFVxs/9GgEFNkLO7jcH4M=
+P:lz4-libs
+V:1.10.0-r0
+A:aarch64
+S:72093
+I:132856
+T:LZ4 is lossless compression algorithm with fast decoder @ multiple GB/s per core. (libraries)
+U:https://github.com/lz4/lz4
+L:BSD-2-Clause AND GPL-2.0-or-later
+o:lz4
+m:Stuart Cardall <developer@it-offshore.co.uk>
+t:1721704147
+c:a886e2e46171e6d5991dc91c492ae748a83b40e4
+D:so:libc.musl-aarch64.so.1
+p:so:liblz4.so.1=1.10.0
+
+C:Q11ZvT26OvOa2C+9yjRDsqnkWivTs=
+P:lzo
+V:2.10-r5
+A:aarch64
+S:73932
+I:198392
+T:LZO -- a real-time data compression library
+U:https://www.oberhumer.com/opensource/lzo
+L:GPL-2.0-or-later
+o:lzo
+m:Michael Mason <ms13sp@gmail.com>
+t:1730669024
+c:9c7716c2221405ce7810ba3eaaa1f62d2e646c20
+D:so:libc.musl-aarch64.so.1
+p:so:liblzo2.so.2=2.0.0
+
+C:Q1JAqR2UwijevqCQ0bzOuH0exRjjs=
+P:musl
+V:1.2.5-r13
+A:aarch64
+S:418149
+I:723480
+T:the musl c library (libc) implementation
+U:https://musl.libc.org/
+L:MIT
+o:musl
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1792598497
+c:ddaf59b84bc6983a37d6e24d2210c2c4791642bb
+p:so:libc.musl-aarch64.so.1=1
+
+C:Q1z+9MZgAIbIwW2bDiZ1UQWH9sKb8=
+P:musl-locales
+V:0.1.0-r1
+A:aarch64
+S:41671
+I:203512
+T:Locales support for musl
+U:https://git.adelielinux.org/adelie/musl-locales/-/wikis/home
+L:LGPL-3.0-only
+o:musl-locales
+m:TBK <alpine@jjtc.eu>
+t:1683253214
+c:65780305dd2517157357121ccddbe95c84e6d5a4
+D:so:libc.musl-aarch64.so.1 so:libintl.so.8
+p:cmd:locale=0.1.0-r1
+
+C:Q11Yrfe1KShgLsmr6BN7B/JKdEVBg=
+P:ncurses-terminfo-base
+V:6.5_p20250503-r0
+A:aarch64
+S:21749
+I:101107
+T:Descriptions of common terminals
+U:https://invisible-island.net/ncurses/
+L:X11
+o:ncurses
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1746535506
+c:3fefbe8dda8b3e85458edb190e2f3a69ad16035c
+
+C:Q1IGKjqgecjxtprw3z/emzvUsfPyc=
+P:nftables
+V:1.1.3-r0
+A:aarch64
+S:333320
+I:905719
+T:Netfilter tables userspace tools
+U:https://netfilter.org/projects/nftables
+L:GPL-2.0-or-later
+o:nftables
+m:Francesco Colista <fcolista@alpinelinux.org>
+t:1745389069
+c:c9ce7ca52682f0b1f682e456bfd44c60b846fa35
+D:/bin/sh so:libc.musl-aarch64.so.1 so:libgmp.so.10 so:libjansson.so.4 so:libmnl.so.0 so:libnftnl.so.11 so:libreadline.so.8
+p:so:libnftables.so.1=1.1.0 cmd:nft=1.1.3-r0
+
+C:Q18lLuAnX7BAgDOD/AWhGxveu/XrQ=
+P:openresolv
+V:3.14.1-r0
+A:aarch64
+S:15978
+I:55153
+T:A framework for managing DNS information
+U:https://roy.marples.name/projects/openresolv
+L:BSD-2-Clause
+o:openresolv
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1744790324
+c:698593864b87d65b0e3d546de733905f2b384a07
+p:cmd:resolvconf=3.14.1-r0
+
+C:Q1xDR39Ky/BURCuQSCPatZfN1co34=
+P:openvpn
+V:2.6.20-r0
+A:aarch64
+S:336184
+I:859788
+T:Robust, and highly configurable VPN (Virtual Private Network)
+U:https://openvpn.net/
+L:GPL-2.0-only WITH openvpn-openssl-exception
+o:openvpn
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1777443242
+c:ce9570b4ed95a74adbfcaa59bf064b26010716e9
+D:iproute2-minimal /bin/sh so:libc.musl-aarch64.so.1 so:libcap-ng.so.0 so:libcrypto.so.3 so:liblz4.so.1 so:liblzo2.so.2 so:libssl.so.3
+p:cmd:openvpn=2.6.20-r0
+
+C:Q11P7g/8LJDb/cao/Qy5MSOuLJMss=
+P:readline
+V:8.2.13-r1
+A:aarch64
+S:123568
+I:352676
+T:GNU readline library
+U:https://tiswww.cwru.edu/php/chet/readline/rltop.html
+L:GPL-3.0-or-later
+o:readline
+m:Celeste <cielesti@protonmail.com>
+t:1747304947
+c:be0833caee3020f089f02c5d7223e971a9a11ffb
+D:so:libc.musl-aarch64.so.1 so:libncursesw.so.6
+p:so:libreadline.so.8=8.2
+
+C:Q1Nsu6as98xM9kntdO7RNa6/PLyX4=
+P:tzdata
+V:2026f-r0
+A:aarch64
+S:190865
+I:452202
+T:Timezone data
+U:https://www.iana.org/time-zones
+L:Public-Domain
+o:tzdata
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1793798004
+c:ab5f4cab3da6422f90c404a16df1415092ef632e
+
+C:Q1BoMM+rjJ7QZfvrnrNPdLzSjd/8s=
+P:wireguard-tools
+V:1.0.20250521-r0
+A:aarch64
+S:1463
+I:1
+T:Next generation secure network tunnel: userspace tools
+U:https://www.wireguard.com
+L:GPL-2.0-only
+o:wireguard-tools
+m:Stuart Cardall <developer@it-offshore.co.uk>
+t:1747836699
+c:4c98b0e381847dd9ba44a1f96da9e780621fcee4
+D:wireguard-tools-wg wireguard-tools-wg-quick
+
+C:Q1i+YxJj32bcvXJtpxhP6SC4Bi/l0=
+P:wireguard-tools-wg
+V:1.0.20250521-r0
+A:aarch64
+S:27219
+I:68432
+T:Next generation secure network tunnel: userspace tools (wg)
+U:https://www.wireguard.com
+L:GPL-2.0-only
+o:wireguard-tools
+m:Stuart Cardall <developer@it-offshore.co.uk>
+t:1747836699
+c:4c98b0e381847dd9ba44a1f96da9e780621fcee4
+D:so:libc.musl-aarch64.so.1
+p:cmd:wg=1.0.20250521-r0
+
+C:Q1aSX2K+BdBxzapKFKIAfbF5Q380s=
+P:wireguard-tools-wg-quick
+V:1.0.20250521-r0
+A:aarch64
+S:6103
+I:13390
+T:Next generation secure network tunnel: userspace tools (wg-quick)
+U:https://www.wireguard.com
+L:GPL-2.0-only
+o:wireguard-tools
+m:Stuart Cardall <developer@it-offshore.co.uk>
+t:1747836699
+c:4c98b0e381847dd9ba44a1f96da9e780621fcee4
+D:wireguard-tools-wg=1.0.20250521-r0 bash cmd:resolvconf iproute2
+p:cmd:wg-quick=1.0.20250521-r0
+
+C:Q1pY1EMMkasJle7uz+Pc0lNsql++4=
+P:zstd-libs
+V:1.5.7-r0
+A:aarch64
+S:362854
+I:657240
+T:Zstandard - Fast real-time compression algorithm (libraries)
+U:https://facebook.github.io/zstd/
+L:BSD-3-Clause OR GPL-2.0-or-later
+o:zstd
+m:Natanael Copa <ncopa@alpinelinux.org>
+t:1740423096
+c:fc7fd35c7bf99156ae31962877c074f679f45b73
+D:so:libc.musl-aarch64.so.1
+p:so:libzstd.so.1=1.5.7

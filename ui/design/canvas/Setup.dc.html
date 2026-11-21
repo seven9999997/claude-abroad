@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>安装引导</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F3ECE2}
+a{color:#2F6170}a:hover{color:#1F4F5B}
+</style>
+</helmet>
+<div style="min-height: 100vh; box-sizing: border-box; padding: 40px 16px; background: #F3ECE2; font-family: Inter, 'Noto Sans SC', sans-serif; color: #2B2B2B; display: flex; justify-content: center">
+<div style="width: 100%; max-width: 920px; display: flex; flex-direction: column; gap: 20px">
+
+<header style="display: flex; align-items: center; gap: 16px">
+<svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+<ellipse cx="32" cy="40" rx="20" ry="21" fill="#D97757"></ellipse>
+<path d="M18 24 Q19 12 32 12 Q45 12 46 24 Z" fill="#F2C14E"></path>
+<rect x="18" y="19" width="28" height="4" fill="#3E7C8C"></rect>
+<ellipse cx="32" cy="24.5" rx="19" ry="3.5" fill="#E8B33E"></ellipse>
+<ellipse cx="26" cy="37" rx="2.4" ry="3.2" fill="#2B2B2B"></ellipse>
+<ellipse cx="38" cy="37" rx="2.4" ry="3.2" fill="#2B2B2B"></ellipse>
+<path d="M28.5 43 Q32 46.5 35.5 43" fill="none" stroke="#2B2B2B" stroke-width="1.8" stroke-linecap="round"></path>
+</svg>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-size: 26px; font-weight: 900">欢迎使用 Claude 出国</h1>
+<p style="margin: 0; font-size: 14px; color: #4A4239">出发前先办好"护照"：选一个主代理，整台 Mac 的流量默认都从它出去。</p>
+</div>
+</header>
+
+<ol aria-label="安装步骤" style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{steps}}" as="s" hint-placeholder-count="4">
+<li style="display: flex; flex-direction: column; gap: 8px">
+<span style="height: 6px; border-radius: 3px; background: {{s.bar}}"></span>
+<span style="font-size: 13px; font-weight: {{s.weight}}; color: {{s.fg}}">{{s.label}}</span>
+</li>
+</sc-for>
+</ol>
+
+<section style="padding: 28px; border-radius: 20px; background: #FFFFFF; border: 1px solid #E6DCCF; display: flex; flex-direction: column; gap: 20px">
+
+<sc-if value="{{isImport}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 22px; font-weight: 800">配置主代理</h2>
+<p style="margin: 0; font-size: 14px; color: #4A4239">这一步不能跳过。主代理配好之前，「启用」按钮不可用，Mac 保持原来的网络。</p>
+</div>
+<div role="tablist" aria-label="导入方式" style="display: flex; flex-wrap: wrap; gap: 8px">
+<sc-for list="{{tabs}}" as="t" hint-placeholder-count="3">
+<button type="button" role="tab" aria-selected="{{t.on}}" onClick="{{t.pick}}" style="{{t.style}}">{{t.label}}</button>
+</sc-for>
+</div>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600">{{tab.field}}
+<input type="text" placeholder="{{tab.ph}}" style="min-height: 48px; box-sizing: border-box; padding: 0 14px; border-radius: 12px; border: 1px solid #CFC3B4; background: #FBF7F2; font: inherit; font-size: 15px; font-weight: 400">
+</label>
+<sc-if value="{{tab.isSub}}" hint-placeholder-val="{{ true }}">
+<label style="display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #FBF4E4; font-size: 13px; line-height: 1.6; color: #3D362F">
+<input type="checkbox" style="width: 18px; height: 18px; margin-top: 2px">
+<span><b>通过本机网络下载这份订阅。</b>现在还没有可用的代理，订阅只能先用本机网络下载。不勾选就不下载，下载失败也不会自动改用本机网络。</span>
+</label>
+</sc-if>
+<div style="display: flex; justify-content: flex-end">
+<button type="button" onClick="{{doImport}}" style="min-height: 48px; padding: 0 24px; border-radius: 12px; border: none; background: #A94E2E; color: #FFFFFF; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer">导入并验证</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isNodes}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 22px; font-weight: 800">选择节点</h2>
+<p style="margin: 0; font-size: 14px; color: #4A4239">已导入「机场 A」，共 38 个节点。需要中转时切到"链式代理"。</p>
+</div>
+<div role="radiogroup" aria-label="代理方式" style="display: inline-flex; padding: 4px; border-radius: 12px; background: #F3ECE2; gap: 4px">
+<button type="button" role="radio" aria-checked="{{single}}" onClick="{{pickSingle}}" style="{{singleStyle}}">单个节点</button>
+<button type="button" role="radio" aria-checked="{{chain}}" onClick="{{pickChain}}" style="{{chainStyle}}">链式代理</button>
+</div>
+</div>
+<sc-if value="{{single}}" hint-placeholder-val="{{ true }}">
+<div role="radiogroup" aria-label="节点" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px">
+<sc-for list="{{nodes}}" as="n" hint-placeholder-count="6">
+<button type="button" role="radio" aria-checked="{{n.on}}" onClick="{{n.pick}}" style="{{n.style}}">
+<span style="font-size: 14px; font-weight: 700">{{n.name}}</span>
+<span style="font-size: 12px; color: #5F564C">{{n.ms}}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{chain}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end">
+<label style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600">第 1 跳 · 中转
+<select style="min-height: 48px; padding: 0 10px; border-radius: 12px; border: 1px solid #CFC3B4; background: #FBF7F2; font: inherit; font-size: 14px"><option>香港 HK-03 · 38 ms</option><option>香港 HK-01 · 41 ms</option></select>
+</label>
+<span aria-hidden="true" style="padding-bottom: 14px; font-size: 18px; color: #5F564C">→</span>
+<label style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600">第 2 跳 · 最终出口
+<select style="min-height: 48px; padding: 0 10px; border-radius: 12px; border: 1px solid #CFC3B4; background: #FBF7F2; font: inherit; font-size: 14px"><option>美国 洛杉矶 01</option><option>＋ 手动添加住宅 SOCKS5 节点…</option></select>
+</label>
+</div>
+</sc-if>
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px">
+<button type="button" onClick="{{back}}" style="min-height: 48px; padding: 0 20px; border-radius: 12px; border: 1px solid #CFC3B4; background: #FFFFFF; font: inherit; font-size: 15px; cursor: pointer">换个来源</button>
+<button type="button" onClick="{{apply}}" style="min-height: 48px; padding: 0 24px; border-radius: 12px; border: none; background: #A94E2E; color: #FFFFFF; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer">应用主代理</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isCheck}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 22px; font-weight: 800">{{checkTitle}}</h2>
+<p style="margin: 0; font-size: 14px; color: #4A4239">只检查主代理本身，还没有接管 Mac 的网络。</p>
+</div>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px">
+<sc-for list="{{checks}}" as="c" hint-placeholder-count="4">
+<li style="display: flex; align-items: center; gap: 12px; font-size: 15px">
+<span style="width: 26px; height: 26px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; background: {{c.bg}}; color: {{c.fg}}">{{c.mark}}</span>
+<span style="flex: 1">{{c.label}}</span>
+<span style="font-size: 13px; color: #5F564C">{{c.note}}</span>
+</li>
+</sc-for>
+</ul>
+<sc-if value="{{done}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 18px; border-radius: 14px; background: #EEF5F6; border: 1px solid #C9DEE2">
+<div style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #1F4F5B">出口</span><span style="font-size: 18px; font-weight: 800">美国 · 洛杉矶</span><span style="font-size: 13px; font-family: Inter, monospace">203.0.113.24</span></div>
+<div style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #1F4F5B">启用后会切换为</span><span style="font-size: 15px; font-weight: 700">America/Los_Angeles · English (US)</span><span style="font-size: 13px; color: #4A4239">回国时恢复为 上海 · 简体中文</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; align-items: stretch">
+<a href="Main.dc.html" style="min-height: 56px; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: #A94E2E; color: #FFFFFF; text-decoration: none; font-size: 17px; font-weight: 800">启用，整机出关</a>
+<p style="margin: 0; font-size: 13px; color: #4A4239; text-align: center">启用后会加载断网保护：服务停止或主代理检查不通过时整机断网，点「一键回国」才恢复。</p>
+</div>
+</sc-if>
+</div>
+</sc-if>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":920}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { stage: 'import', tab: 'sub', mode: 'single', node: 'la01', done: false };
+  }
+  componentWillUnmount() { clearTimeout(this.timer); }
+  renderVals() {
+    const st = this.state;
+    const stepIdx = { import: 1, nodes: 1, check: st.done ? 3 : 2 }[st.stage];
+    const labels = ['① 安装组件', '② 配置主代理', '③ 出口检查', '④ 启用'];
+    const steps = labels.map((label, i) => ({
+      label,
+      bar: i < stepIdx ? '#3E7C8C' : i === stepIdx ? '#A94E2E' : '#E0D5C7',
+      fg: i === stepIdx ? '#2B2B2B' : '#5F564C',
+      weight: i === stepIdx ? '800' : '500'
+    }));
+    const defs = {
+      sub: { label: '订阅链接', field: 'Clash / Mihomo 订阅地址', ph: 'https://…', isSub: true },
+      file: { label: '本地文件', field: '配置文件', ph: '选择 .yaml / .yml / .json 文件', isSub: false },
+      manual: { label: '手动节点', field: 'HTTP / SOCKS5 地址', ph: 'socks5://user:pass@host:1080', isSub: false }
+    };
+    const tb = 'min-height: 40px; padding: 0 16px; border-radius: 10px; font: inherit; font-size: 14px; cursor: pointer; ';
+    const tabs = ['sub', 'file', 'manual'].map((id) => ({
+      label: defs[id].label, on: st.tab === id,
+      pick: () => this.setState({ tab: id }),
+      style: tb + (st.tab === id ? 'border: 1.5px solid #2B2B2B; background: #2B2B2B; color: #FFFFFF; font-weight: 700;' : 'border: 1px solid #CFC3B4; background: #FFFFFF; color: #3D362F;')
+    }));
+    const seg = 'min-height: 36px; padding: 0 14px; border-radius: 9px; border: none; font: inherit; font-size: 14px; cursor: pointer; ';
+    const chain = st.mode === 'chain';
+    const card = 'min-height: 64px; padding: 10px 14px; border-radius: 12px; font: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 4px; justify-content: center; ';
+    const nodes = [['la01', '美国 洛杉矶 01', '182 ms'], ['tyo02', '日本 东京 02', '96 ms'], ['sg01', '新加坡 01', '74 ms'], ['hk03', '香港 HK-03', '38 ms'], ['uk01', '英国 伦敦 01', '231 ms'], ['de01', '德国 法兰克福 01', '204 ms']].map(([id, name, ms]) => ({
+      name, ms, on: st.node === id,
+      pick: () => this.setState({ node: id }),
+      style: card + (st.node === id ? 'border: 2px solid #2B2B2B; background: #FBF7F2;' : 'border: 1px solid #CFC3B4; background: #FFFFFF;')
+    }));
+    const pass = (label, note) => ({ label, note, mark: '✓', bg: '#DCEFE5', fg: '#1E6B48' });
+    const wait = (label) => ({ label, note: '检查中', mark: '…', bg: '#F6EBD0', fg: '#7A5A0F' });
+    const checks = st.done
+      ? [pass('经主代理访问 HTTPS', '182 ms'), pass('出口 IPv4 有效', ''), pass('出口不在大陆地址段', 'US'), pass('经主代理的 DoH 解析正常', '')]
+      : [pass('经主代理访问 HTTPS', '182 ms'), wait('出口 IPv4 有效'), wait('出口不在大陆地址段'), wait('经主代理的 DoH 解析正常')];
+    return {
+      steps, tabs, tab: defs[st.tab], nodes, checks, done: st.done,
+      checkTitle: st.done ? '主代理检查通过' : '正在检查主代理…',
+      isImport: st.stage === 'import', isNodes: st.stage === 'nodes', isCheck: st.stage === 'check',
+      chain, single: !chain,
+      chainStyle: seg + (chain ? 'background: #2B2B2B; color: #FFFFFF; font-weight: 700;' : 'background: transparent; color: #3D362F;'),
+      singleStyle: seg + (chain ? 'background: transparent; color: #3D362F;' : 'background: #2B2B2B; color: #FFFFFF; font-weight: 700;'),
+      pickChain: () => this.setState({ mode: 'chain' }),
+      pickSingle: () => this.setState({ mode: 'single' }),
+      doImport: () => this.setState({ stage: 'nodes' }),
+      back: () => this.setState({ stage: 'import' }),
+      apply: () => {
+        this.setState({ stage: 'check', done: false });
+        clearTimeout(this.timer);
+        this.timer = setTimeout(() => this.setState({ done: true }), 1600);
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

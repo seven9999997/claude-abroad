@@ -1,0 +1,7 @@
+{
+  "comment": "开发用：本机单独起的 mihomo（M2-3 实测回环主代理的 UDP 中继）。版本与 guest/manifest.json 的 mihomo 一致；sha256 取自 GitHub 发布接口的 digest 字段（.gz 文件）。",
+  "version": "1.19.34",
+  "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.34/mihomo-darwin-arm64-v1.19.34.gz",
+  "sha256": "1a7a20eca63fbbaec90137717465bfde488d0db2a3a79b8fadebf9b2545b6e4c",
+  "license": "GPL-3.0"
+}

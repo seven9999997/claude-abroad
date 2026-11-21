@@ -1,0 +1,6 @@
+DHCP Configuration
+Client ID: 
+IPv6: Link-local only
+IPv6 IP address: none
+IPv6 Router: none
+Ethernet Address: 00:00:5e:00:53:01

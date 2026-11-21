@@ -1,0 +1,6 @@
+package good
+
+// Routes 只是个名字；route 出现在注释里不算。
+type Routes interface{ Add() error }
+
+var msg = "加路由失败"

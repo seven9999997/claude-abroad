@@ -1,0 +1,6 @@
+   route to: 127.0.0.1
+destination: 127.0.0.1
+  interface: lo0
+      flags: <UP,HOST,DONE,LOCAL>
+ recvpipe  sendpipe  ssthresh  rtt,msec    rttvar  hopcount      mtu     expire
+   49152     49152         0         1         1         0     16384         0 

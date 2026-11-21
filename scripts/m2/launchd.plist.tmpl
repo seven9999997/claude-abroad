@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 开发用（M2-9c）：scripts/m2/run.sh 安装，scripts/m2/restore.sh 移除。KeepAlive 让 abroadd 被结束后由 launchd 拉起。 -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>@LABEL@</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@ABROADD@</string>
+    <string>--state-dir</string><string>@STATE@</string>
+    <string>--vm-dir</string><string>@VMDIR@</string>
+    <string>--main-proxy-store</string><string>@STORE@</string>
+    <string>--exit-check-host</string><string>@EXIT@</string>
+    <string>--pf-user</string><string>@USER@</string>
+    <string>--dev-skip-claude-kill</string>
+    <string>--dev-skip-region</string>
+  </array>
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>StandardErrorPath</key><string>@LOG@</string>
+  <key>StandardOutPath</key><string>@LOG@</string>
+</dict>
+</plist>

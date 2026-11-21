@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Claude 出国</title>
+  <!-- 背景 -->
+  <circle cx="256" cy="256" r="244" fill="#F4EDE4"/>
+  <!-- 航线与飞机 -->
+  <path d="M60 190 Q 250 40 448 140" fill="none" stroke="#CDBBA7" stroke-width="5" stroke-linecap="round" stroke-dasharray="4 16"/>
+  <g transform="translate(450 140) rotate(28)">
+    <path d="M-26 0 L22 0 Q30 0 30 4 Q30 8 22 8 L-26 8 Z" fill="#3E7C8C"/>
+    <path d="M-2 4 L-16 -22 L-8 -22 L12 4 Z" fill="#3E7C8C"/>
+    <path d="M-2 6 L-16 30 L-8 30 L12 6 Z" fill="#3E7C8C"/>
+    <path d="M-24 4 L-30 -10 L-24 -10 L-16 4 Z" fill="#3E7C8C"/>
+  </g>
+  <!-- 云 -->
+  <g fill="#FFFFFF" opacity="0.9">
+    <ellipse cx="120" cy="120" rx="34" ry="14"/><ellipse cx="140" cy="110" rx="22" ry="14"/>
+    <ellipse cx="392" cy="232" rx="26" ry="10"/><ellipse cx="406" cy="224" rx="16" ry="10"/>
+  </g>
+  <!-- 地面阴影 -->
+  <ellipse cx="262" cy="444" rx="176" ry="16" fill="#E4D6C6"/>
+
+  <!-- 行李箱 -->
+  <g transform="translate(312 250)">
+    <rect x="46" y="-22" width="8" height="66" rx="3" fill="#5A5A5A"/>
+    <rect x="72" y="-22" width="8" height="66" rx="3" fill="#5A5A5A"/>
+    <rect x="40" y="-30" width="46" height="13" rx="6.5" fill="#2B2B2B"/>
+    <rect x="0" y="40" width="126" height="150" rx="20" fill="#3E7C8C"/>
+    <rect x="0" y="40" width="126" height="150" rx="20" fill="none" stroke="#2F6170" stroke-width="4"/>
+    <rect x="30" y="40" width="10" height="150" fill="#2F6170" opacity="0.55"/>
+    <rect x="86" y="40" width="10" height="150" fill="#2F6170" opacity="0.55"/>
+    <!-- 贴纸 -->
+    <circle cx="62" cy="88" r="20" fill="#F2C14E"/>
+    <text x="62" y="94" font-family="Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#2B2B2B" text-anchor="middle">US</text>
+    <g transform="translate(58 148) rotate(-10)">
+      <rect x="-30" y="-14" width="60" height="28" rx="5" fill="#FFFFFF"/>
+      <text x="0" y="5" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#D97757" text-anchor="middle">TOKYO</text>
+    </g>
+    <circle cx="104" cy="122" r="11" fill="#F4EDE4"/>
+    <path d="M98 122 L110 122 M104 116 L104 128" stroke="#3E7C8C" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="26" cy="196" r="11" fill="#2B2B2B"/>
+    <circle cx="100" cy="196" r="11" fill="#2B2B2B"/>
+  </g>
+
+  <!-- 右臂：拉着行李箱 -->
+  <path d="M276 334 Q 330 312 372 228" fill="none" stroke="#D97757" stroke-width="24" stroke-linecap="round"/>
+
+  <!-- 脚 -->
+  <ellipse cx="172" cy="418" rx="24" ry="13" fill="#B85F42"/>
+  <ellipse cx="236" cy="418" rx="24" ry="13" fill="#B85F42"/>
+
+  <!-- 身体 -->
+  <ellipse cx="204" cy="320" rx="92" ry="100" fill="#D97757"/>
+  <ellipse cx="176" cy="262" rx="30" ry="16" fill="#E58B6D" opacity="0.45"/>
+
+  <!-- 帽子 -->
+  <path d="M146 232 Q 150 182 204 180 Q 258 182 262 232 Z" fill="#F2C14E"/>
+  <rect x="148" y="212" width="112" height="12" fill="#3E7C8C"/>
+  <ellipse cx="204" cy="234" rx="78" ry="13" fill="#E8B33E"/>
+
+  <!-- 脸 -->
+  <ellipse cx="178" cy="302" rx="9" ry="12" fill="#2B2B2B"/>
+  <ellipse cx="232" cy="302" rx="9" ry="12" fill="#2B2B2B"/>
+  <circle cx="181" cy="297" r="3" fill="#FFFFFF"/>
+  <circle cx="235" cy="297" r="3" fill="#FFFFFF"/>
+  <ellipse cx="156" cy="328" rx="13" ry="7" fill="#F2A08A"/>
+  <ellipse cx="254" cy="328" rx="13" ry="7" fill="#F2A08A"/>
+  <path d="M190 330 Q 205 346 220 330" fill="none" stroke="#2B2B2B" stroke-width="4.5" stroke-linecap="round"/>
+
+  <!-- 右手 -->
+  <circle cx="372" cy="226" r="14" fill="#D97757"/>
+
+  <!-- 左臂：举起护照 -->
+  <path d="M128 318 Q 84 278 92 222" fill="none" stroke="#D97757" stroke-width="24" stroke-linecap="round"/>
+  <g transform="translate(92 176) rotate(-12)">
+    <rect x="-34" y="-46" width="68" height="90" rx="7" fill="#1F3A5F"/>
+    <rect x="-34" y="-46" width="8" height="90" rx="3" fill="#17304F"/>
+    <circle cx="2" cy="-12" r="16" fill="none" stroke="#E8C468" stroke-width="3"/>
+    <ellipse cx="2" cy="-12" rx="7" ry="16" fill="none" stroke="#E8C468" stroke-width="2.5"/>
+    <path d="M-14 -12 L18 -12" stroke="#E8C468" stroke-width="2.5"/>
+    <text x="2" y="24" font-family="Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="1" fill="#E8C468" text-anchor="middle">PASSPORT</text>
+  </g>
+  <circle cx="94" cy="220" r="14" fill="#D97757"/>
+</svg>

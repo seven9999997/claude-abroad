@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>总览</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#FBF7F2}
+a{color:#2F6170}a:hover{color:#1F4F5B}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: #FBF7F2; font-family: Inter, 'Noto Sans SC', sans-serif; color: #2B2B2B">
+<div style="flex: 1 1 232px; max-width: 100%; display: flex">
+<dc-import name="Sidebar" active="main" hint-size="100%,1000px"></dc-import>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 800">总览</h1>
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; background: {{m.pillBg}}; color: {{m.pillFg}}"><span style="width: 8px; height: 8px; border-radius: 4px; background: {{m.dot}}"></span>{{m.pill}}</span>
+</header>
+
+<section aria-label="当前状态" style="display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch; padding: 28px; border-radius: 20px; background: {{m.heroBg}}; border: 1px solid {{m.heroBorder}}">
+<div style="flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+<span style="font-size: 14px; font-weight: 600; color: {{m.pillFg}}">{{m.kicker}}</span>
+<h2 style="margin: 0; font-size: 44px; line-height: 1.1; font-weight: 900">{{m.headline}}</h2>
+<p style="margin: 0; font-size: 16px; line-height: 1.6; color: #4A4239; max-width: 520px">{{m.desc}}</p>
+<dl style="margin: 4px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px"><dt style="font-size: 12px; color: #5F564C">出口 IP</dt><dd style="margin: 0; font-size: 16px; font-weight: 600; font-family: Inter, monospace">{{m.ip}}</dd></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><dt style="font-size: 12px; color: #5F564C">主代理</dt><dd style="margin: 0; font-size: 16px; font-weight: 600">{{m.exit}}</dd></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><dt style="font-size: 12px; color: #5F564C">网络闸门</dt><dd style="margin: 0; font-size: 16px; font-weight: 600">{{m.gate}}</dd></div>
+</dl>
+</div>
+<div style="flex: 1 1 280px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-content: center">
+<button type="button" onClick="{{enable}}" disabled="{{m.enableDisabled}}" style="min-height: 88px; padding: 14px; border-radius: 16px; border: none; background: {{m.enableBg}}; color: #FFFFFF; font: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 4px; justify-content: center">
+<span style="font-size: 18px; font-weight: 800">启用</span>
+<span style="font-size: 12px; opacity: 0.9">接管流量，检查后放行</span>
+</button>
+<button type="button" onClick="{{disable}}" style="min-height: 88px; padding: 14px; border-radius: 16px; border: 1.5px solid #B42318; background: #FFFFFF; color: #8F1C13; font: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 4px; justify-content: center">
+<span style="font-size: 18px; font-weight: 800">停用</span>
+<span style="font-size: 12px">整机断网</span>
+</button>
+<button type="button" onClick="{{restore}}" style="min-height: 88px; padding: 14px; border-radius: 16px; border: 1.5px solid #2B2B2B; background: #FFFFFF; color: #2B2B2B; font: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 4px; justify-content: center">
+<span style="font-size: 18px; font-weight: 800">一键回国</span>
+<span style="font-size: 12px; color: #4A4239">恢复本机网络与地区</span>
+</button>
+<a href="Region.dc.html" style="min-height: 88px; box-sizing: border-box; padding: 14px; border-radius: 16px; border: 1.5px solid #3E7C8C; background: #FFFFFF; color: #1F4F5B; text-decoration: none; display: flex; flex-direction: column; gap: 4px; justify-content: center">
+<span style="font-size: 18px; font-weight: 800">切换地区</span>
+<span style="font-size: 12px">{{m.regionShort}}</span>
+</a>
+</div>
+</section>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px">
+
+<section aria-labelledby="chk" style="padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center"><h3 id="chk" style="margin: 0; font-size: 16px; font-weight: 700">出口检查</h3><span style="font-size: 12px; color: #5F564C">{{m.checkedAt}}</span></div>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+<sc-for list="{{m.checks}}" as="c" hint-placeholder-count="5">
+<li style="display: flex; align-items: center; gap: 10px; font-size: 14px">
+<span style="width: 22px; height: 22px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: {{c.bg}}; color: {{c.fg}}">{{c.mark}}</span>
+<span style="flex: 1">{{c.label}}</span>
+<span style="font-size: 12px; color: #5F564C">{{c.note}}</span>
+</li>
+</sc-for>
+</ul>
+</section>
+
+<section aria-labelledby="reg" style="padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center"><h3 id="reg" style="margin: 0; font-size: 16px; font-weight: 700">当前地区</h3><a href="Region.dc.html" style="font-size: 13px">调整</a></div>
+<div style="display: flex; flex-direction: column; gap: 12px; font-size: 14px">
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #5F564C">Mac</span><span style="font-weight: 600">{{m.macRegion}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #5F564C">虚拟机</span><span style="font-weight: 600; font-family: Inter, monospace; font-size: 13px">{{m.vmRegion}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #5F564C">回国后恢复为</span><span>上海（UTC+8） · 简体中文</span></div>
+</div>
+</section>
+
+<section aria-labelledby="flow" style="padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center"><h3 id="flow" style="margin: 0; font-size: 16px; font-weight: 700">连接去向</h3><span style="font-size: 12px; color: #5F564C">当前活动连接</span></div>
+<div style="display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: #EFE7DC">
+<span style="width: {{m.barProxy}}; background: #3E7C8C"></span>
+<span style="width: {{m.barDirect}}; background: #D97757"></span>
+<span style="width: {{m.barBlock}}; background: #2B2B2B"></span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; font-size: 13px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #1F4F5B; font-weight: 600">主代理 / 分流</span><span style="font-size: 22px; font-weight: 800">{{m.nProxy}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #8F3E22; font-weight: 600">本机网络</span><span style="font-size: 22px; font-weight: 800">{{m.nDirect}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #2B2B2B; font-weight: 600">已拦截</span><span style="font-size: 22px; font-weight: 800">{{m.nBlock}}</span></div>
+</div>
+</section>
+</div>
+
+<section aria-labelledby="apps" style="padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: center"><h3 id="apps" style="margin: 0; font-size: 16px; font-weight: 700">正在联网的应用</h3><a href="Apps.dc.html" style="font-size: 13px">全部分流规则</a></div>
+<div style="overflow-x: auto">
+<table style="width: 100%; min-width: 560px; border-collapse: collapse; font-size: 14px">
+<thead><tr style="text-align: left; color: #5F564C; font-size: 12px"><th style="padding: 8px 0; font-weight: 500">应用</th><th style="padding: 8px 0; font-weight: 500">连接</th><th style="padding: 8px 0; font-weight: 500">去向</th></tr></thead>
+<tbody>
+<sc-for list="{{apps}}" as="a" hint-placeholder-count="5">
+<tr style="border-top: 1px solid #F0E8DD">
+<td style="padding: 10px 0"><span style="display: inline-flex; align-items: center; gap: 10px"><span style="width: 28px; height: 28px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #FFFFFF; background: {{a.color}}">{{a.initial}}</span>{{a.name}}</span></td>
+<td style="padding: 10px 0; color: #4A4239">{{a.conns}}</td>
+<td style="padding: 10px 0"><span style="display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: {{a.chipBg}}; color: {{a.chipFg}}">{{a.route}}</span></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"startMode":{"editor":"enum","options":["abroad","checking","offline","home"],"default":"abroad"},"$preview":{"width":1280,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { mode: null };
+  }
+  componentWillUnmount() { clearTimeout(this.timer); }
+  renderVals() {
+    const mode = this.state.mode ?? this.props.startMode ?? 'abroad';
+    const pass = (label, note) => ({ label, note, mark: '✓', bg: '#DCEFE5', fg: '#1E6B48' });
+    const wait = (label) => ({ label, note: '检查中', mark: '…', bg: '#F6EBD0', fg: '#7A5A0F' });
+    const off = (label) => ({ label, note: '未运行', mark: '–', bg: '#EFE7DC', fg: '#5F564C' });
+    const names = ['经主代理访问 HTTPS', '出口 IPv4 有效', '出口不在大陆地址段', 'DoH 解析正常', '本机接管就绪（pf / 路由 / DNS）'];
+    const modes = {
+      abroad: {
+        pill: '已出国', pillBg: '#DCEBEE', pillFg: '#1F4F5B', dot: '#2F7D5B',
+        heroBg: '#EEF5F6', heroBorder: '#C9DEE2',
+        kicker: '全部流量经虚拟机发出', headline: '已出国 · 美国 洛杉矶',
+        desc: '主代理检查通过，网络已放行。Mac 和虚拟机的时区、语言已切换到主代理出口所在地；Chrome、终端走分流出口，微信、公司内网工具走本机网络。',
+        ip: '203.0.113.24', exit: '香港中转 → 美国住宅', gate: '放行中 · 62 秒后续期',
+        enableBg: '#9A948C', enableDisabled: true, regionShort: '跟随出口 · 洛杉矶',
+        checkedAt: '28 秒前', checks: [pass(names[0], '182 ms'), pass(names[1], ''), pass(names[2], 'US'), pass(names[3], ''), pass(names[4], '')],
+        macRegion: '洛杉矶（UTC−8） · English (US)', vmRegion: 'America/Los_Angeles · en_US.UTF-8',
+        nProxy: '146', nDirect: '23', nBlock: '4', barProxy: '84%', barDirect: '13%', barBlock: '3%'
+      },
+      checking: {
+        pill: '检查中', pillBg: '#F6EBD0', pillFg: '#6B4F0D', dot: '#C99A22',
+        heroBg: '#FBF4E4', heroBorder: '#EBDDB8',
+        kicker: '外网暂时关闭', headline: '正在检查出口…',
+        desc: '已接管全部流量，断网保护已加载。主代理检查通过后自动放行，并同步时区和语言。',
+        ip: '—', exit: '香港中转 → 美国住宅', gate: '检查中',
+        enableBg: '#9A948C', enableDisabled: true, regionShort: '检查通过后同步',
+        checkedAt: '进行中', checks: [pass(names[0], '190 ms'), pass(names[1], ''), wait(names[2]), wait(names[3]), pass(names[4], '')],
+        macRegion: '上海（UTC+8） · 简体中文', vmRegion: '等待出口检查',
+        nProxy: '0', nDirect: '21', nBlock: '0', barProxy: '0%', barDirect: '100%', barBlock: '0%'
+      },
+      offline: {
+        pill: '已断网', pillBg: '#FBE3E0', pillFg: '#8F1C13', dot: '#B42318',
+        heroBg: '#FDF1EF', heroBorder: '#F2C9C3',
+        kicker: '断网保护生效中', headline: '已断网',
+        desc: '服务已停用，除断网白名单外的应用都无法联网。时区和语言保持不变，避免断网前后露出变化。点「一键回国」才会恢复本机网络。',
+        ip: '—', exit: '已停止', gate: '关闭',
+        enableBg: '#A94E2E', enableDisabled: false, regionShort: '保持 · 洛杉矶',
+        checkedAt: '已停止', checks: names.map(off),
+        macRegion: '洛杉矶（UTC−8） · English (US)', vmRegion: '虚拟机已关闭',
+        nProxy: '0', nDirect: '0', nBlock: '38', barProxy: '0%', barDirect: '0%', barBlock: '100%'
+      },
+      home: {
+        pill: '本机网络', pillBg: '#EFE7DC', pillFg: '#3D362F', dot: '#7A7067',
+        heroBg: '#FFFFFF', heroBorder: '#E6DCCF',
+        kicker: '未接管', headline: '已回国',
+        desc: '已恢复本机网络：断网保护、虚拟网卡和 DNS 设置都已撤掉，时区和语言恢复为上海 / 简体中文。',
+        ip: '本机', exit: '—', gate: '未启用',
+        enableBg: '#A94E2E', enableDisabled: false, regionShort: '上海 · 简体中文',
+        checkedAt: '未运行', checks: names.map(off),
+        macRegion: '上海（UTC+8） · 简体中文', vmRegion: '虚拟机已关闭',
+        nProxy: '0', nDirect: '—', nBlock: '0', barProxy: '0%', barDirect: '100%', barBlock: '0%'
+      }
+    };
+    const m = modes[mode];
+    const chip = {
+      proxy: { chipBg: '#DCEBEE', chipFg: '#1F4F5B' },
+      direct: { chipBg: '#FBE6DD', chipFg: '#8F3E22' },
+      block: { chipBg: '#2B2B2B', chipFg: '#FFFFFF' }
+    };
+    const apps = [
+      { name: 'Google Chrome', initial: 'C', color: '#3E7C8C', conns: 64, kind: 'proxy', route: '分流 · wg-us 美国' },
+      { name: 'Claude', initial: 'C', color: '#A94E2E', conns: 12, kind: 'proxy', route: '主代理 · 美国住宅' },
+      { name: 'Terminal · git / curl', initial: 'T', color: '#2B2B2B', conns: 9, kind: 'proxy', route: '分流 · clash-jp 日本' },
+      { name: '微信', initial: '微', color: '#2F7D5B', conns: 18, kind: 'direct', route: '本机网络' },
+      { name: 'Telemetry Helper', initial: 'H', color: '#7A7067', conns: 4, kind: 'block', route: '禁止联网' }
+    ].map((a) => ({ ...a, ...chip[a.kind] }));
+    return {
+      m, apps,
+      enable: () => {
+        this.setState({ mode: 'checking' });
+        clearTimeout(this.timer);
+        this.timer = setTimeout(() => this.setState({ mode: 'abroad' }), 1800);
+      },
+      disable: () => { clearTimeout(this.timer); this.setState({ mode: 'offline' }); },
+      restore: () => { clearTimeout(this.timer); this.setState({ mode: 'home' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

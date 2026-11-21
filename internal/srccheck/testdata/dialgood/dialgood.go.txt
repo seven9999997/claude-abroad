@@ -1,0 +1,10 @@
+package x
+
+import (
+	"net"
+	"net/netip"
+)
+
+// 只用类型和地址解析，不拨号。
+func a(c net.Conn) netip.Addr { _ = c.Close(); a, _ := netip.ParseAddr("1.2.3.4"); return a }
+func b() (string, string, error) { return net.SplitHostPort("a:1") }

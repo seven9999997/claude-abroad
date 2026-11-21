@@ -1,0 +1,20 @@
+table <abroad_lan> { 169.254.0.0/16, 192.168.1.0/24, 224.0.0.0/4 }
+pass out quick on lo0 all no state
+block drop out quick inet6 all
+pass out quick on utun5 all no state
+pass out quick inet proto udp from any port 68 to 255.255.255.255 port 67
+pass out quick inet proto udp from any port 68 to 10.0.0.0/8 port 67
+pass out quick inet proto udp from any port 68 to 100.64.0.0/10 port 67
+pass out quick inet proto udp from any port 68 to 169.254.0.0/16 port 67
+pass out quick inet proto udp from any port 68 to 172.16.0.0/12 port 67
+pass out quick inet proto udp from any port 68 to 192.168.0.0/16 port 67
+pass out quick inet proto tcp all user _abroad
+pass out quick inet proto udp all user _abroad
+pass out quick inet to <abroad_lan>
+pass out quick on bridge100 inet to 10.0.0.0/8
+pass out quick on bridge100 inet to 172.16.0.0/12
+pass out quick on bridge100 inet to 192.168.0.0/16
+pass out quick on vmenet0 inet to 10.0.0.0/8
+pass out quick on vmenet0 inet to 172.16.0.0/12
+pass out quick on vmenet0 inet to 192.168.0.0/16
+block drop out quick all

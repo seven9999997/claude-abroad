@@ -1,0 +1,5 @@
+<dictionary> {
+  ServerAddresses : <array> {
+    0 : 198.18.0.2
+  }
+}

@@ -1,0 +1,18 @@
+package x
+
+import (
+	"context"
+	stdnet "net"
+	"net/http"
+	"syscall"
+
+	"golang.org/x/sys/unix"
+)
+
+func a() { _, _ = stdnet.Dial("tcp", "1.2.3.4:80") }               // 1
+func b() { var d stdnet.Dialer; _, _ = d.DialContext(context.TODO(), "tcp", "x") } // 2
+func c() { _, _ = stdnet.ListenPacket("udp", ":0") }                 // 3
+func d() { _, _ = syscall.Socket(2, 1, 0) }                          // 4
+func e() { _, _ = unix.Socket(2, 1, 0) }                             // 5
+func f() { _, _ = http.Get("http://x") }                             // 6
+func g() { _ = &stdnet.Dialer{} }                                    // 7

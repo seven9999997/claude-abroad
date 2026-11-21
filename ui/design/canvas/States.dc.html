@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>四种状态</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 920px; box-sizing: border-box; padding: 40px; background: #FBF7F2; font-family: Inter, 'Noto Sans SC', sans-serif; color: #2B2B2B; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 800">四种状态</h1>
+<p style="margin: 0; font-size: 14px; color: #4A4239">总览页顶部状态卡在四种状态下的样子。颜色只有一个含义：青色已放行，黄色检查中，红色断网，灰色本机网络。</p>
+</div>
+<div style="flex: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px">
+<sc-for list="{{states}}" as="s" hint-placeholder-count="4">
+<article style="padding: 24px; border-radius: 20px; background: {{s.bg}}; border: 1px solid {{s.border}}; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<span style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; font-size: 14px; font-weight: 700; background: {{s.pillBg}}; color: {{s.pillFg}}"><span style="width: 8px; height: 8px; border-radius: 4px; background: {{s.dot}}"></span>{{s.pill}}</span>
+<span style="font-size: 12px; color: #5F564C; font-family: Inter, monospace">{{s.code}}</span>
+</div>
+<h2 style="margin: 0; font-size: 30px; font-weight: 900">{{s.headline}}</h2>
+<dl style="margin: 0; display: grid; grid-template-columns: 72px 1fr; row-gap: 8px; column-gap: 12px; font-size: 14px">
+<dt style="color: #5F564C">网络</dt><dd style="margin: 0">{{s.net}}</dd>
+<dt style="color: #5F564C">地区</dt><dd style="margin: 0">{{s.region}}</dd>
+<dt style="color: #5F564C">断网保护</dt><dd style="margin: 0">{{s.pf}}</dd>
+</dl>
+<div style="margin-top: auto; display: flex; flex-wrap: wrap; gap: 8px">
+<span style="padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; background: {{s.b1bg}}; color: {{s.b1fg}}">启用</span>
+<span style="padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; background: {{s.b2bg}}; color: {{s.b2fg}}">停用</span>
+<span style="padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; background: #FFFFFF; color: #2B2B2B; border: 1px solid #CFC3B4">一键回国</span>
+<span style="padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; background: #FFFFFF; color: #1F4F5B; border: 1px solid #C9DEE2">切换地区</span>
+</div>
+</article>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":920}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const on = { b1bg: '#A94E2E', b1fg: '#FFFFFF' };
+    const offBtn = { b1bg: '#E0D9D0', b1fg: '#5F564C' };
+    const stopOn = { b2bg: '#FFFFFF', b2fg: '#8F1C13' };
+    const stopOff = { b2bg: '#E0D9D0', b2fg: '#5F564C' };
+    const states = [
+      { code: 'ENABLED', pill: '已出国', pillBg: '#DCEBEE', pillFg: '#1F4F5B', dot: '#2F7D5B', bg: '#EEF5F6', border: '#C9DEE2',
+        headline: '已出国 · 美国 洛杉矶', net: '全部流量经主代理或分流出口发出；指定应用走本机网络', region: '洛杉矶 · English (US)（Mac 与虚拟机）', pf: '已加载', ...offBtn, ...stopOn },
+      { code: 'ENABLING', pill: '检查中', pillBg: '#F6EBD0', pillFg: '#6B4F0D', dot: '#C99A22', bg: '#FBF4E4', border: '#EBDDB8',
+        headline: '正在检查主代理…', net: '已接管，外网暂时关闭；本机网络的应用不受影响', region: '检查通过后同步', pf: '已加载', ...offBtn, ...stopOn },
+      { code: 'DISABLED', pill: '已断网', pillBg: '#FBE3E0', pillFg: '#8F1C13', dot: '#B42318', bg: '#FDF1EF', border: '#F2C9C3',
+        headline: '已断网', net: '除断网白名单外全部断开；服务崩溃、主代理检查不通过也会进入这里', region: '保持不变，避免断网前后露出变化', pf: '已加载', ...on, ...stopOff },
+      { code: 'RESTORED', pill: '本机网络', pillBg: '#EFE7DC', pillFg: '#3D362F', dot: '#7A7067', bg: '#FFFFFF', border: '#E6DCCF',
+        headline: '已回国', net: '本机网络，和没装过一样', region: '已恢复为 上海 · 简体中文', pf: '已卸载', ...on, ...stopOff }
+    ];
+    return { states };
+  }
+}
+</script>
+</body>
+</html>

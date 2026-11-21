@@ -1,0 +1,20 @@
+pfctl: Use of -f option, could result in flushing of rules
+present in the main ruleset added by the system at startup.
+See /etc/pf.conf for further details.
+
+table <abroad_lan> { 169.254.0.0/16 192.168.1.0/24 224.0.0.0/4 }
+table <__automatic_0> const { 255.255.255.255 10.0.0.0/8 100.64.0.0/10 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 }
+pass out quick on lo0 all no state
+block drop out quick inet6 all
+pass out quick on utun9 all no state
+pass out quick inet proto udp from any port = 68 to <__automatic_0> port = 67 keep state
+pass out quick inet proto tcp all user = 4294967294 flags S/SA keep state
+pass out quick on bridge100 inet from any to 10.0.0.0/8 flags S/SA keep state
+pass out quick on bridge100 inet from any to 172.16.0.0/12 flags S/SA keep state
+pass out quick on bridge100 inet from any to 192.168.0.0/16 flags S/SA keep state
+pass out quick on vmenet0 inet from any to 10.0.0.0/8 flags S/SA keep state
+pass out quick on vmenet0 inet from any to 172.16.0.0/12 flags S/SA keep state
+pass out quick on vmenet0 inet from any to 192.168.0.0/16 flags S/SA keep state
+pass out quick inet proto udp all user = 4294967294 keep state
+pass out quick inet from any to <abroad_lan> flags S/SA keep state
+block drop out quick all

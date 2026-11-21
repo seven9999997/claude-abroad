@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>引擎与虚拟机</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#FBF7F2}
+a{color:#2F6170}a:hover{color:#1F4F5B}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: #FBF7F2; font-family: Inter, 'Noto Sans SC', sans-serif; color: #2B2B2B">
+<div style="flex: 1 1 232px; max-width: 100%; display: flex">
+<dc-import name="Sidebar" active="engines" hint-size="100%,920px"></dc-import>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 800">引擎与虚拟机</h1>
+<p style="margin: 0; font-size: 14px; color: #4A4239">引擎都装在虚拟机里，下载后按固定的 SHA-256 校验，升级失败可以回滚到上一个版本。</p>
+</header>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px">
+<section aria-labelledby="vm" style="padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center"><h2 id="vm" style="margin: 0; font-size: 16px; font-weight: 700">口袋虚拟机</h2><span style="padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #DCEFE5; color: #1E6B48">运行中 · 3 小时</span></div>
+<dl style="margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; font-size: 14px">
+<div style="display: flex; flex-direction: column; gap: 3px"><dt style="font-size: 12px; color: #5F564C">系统</dt><dd style="margin: 0; font-weight: 600">Alpine Linux（arm64）</dd></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><dt style="font-size: 12px; color: #5F564C">CPU</dt><dd style="margin: 0; font-weight: 600">1 核</dd></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><dt style="font-size: 12px; color: #5F564C">内存</dt><dd style="margin: 0; font-weight: 600">214 / 256 MB</dd></div>
+<div style="display: flex; flex-direction: column; gap: 3px"><dt style="font-size: 12px; color: #5F564C">数据盘</dt><dd style="margin: 0; font-weight: 600">82 / 256 MB</dd></div>
+</dl>
+<div style="display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: #EFE7DC"><span style="width: 84%; background: #3E7C8C"></span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" style="min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #CFC3B4; background: #FFFFFF; font: inherit; font-size: 13px; cursor: pointer">重启虚拟机</button>
+<button type="button" style="min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #CFC3B4; background: #FFFFFF; font: inherit; font-size: 13px; cursor: pointer">调整资源</button>
+<button type="button" style="min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #CFC3B4; background: #FFFFFF; font: inherit; font-size: 13px; cursor: pointer">查看日志</button>
+</div>
+<label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #4A4239"><input type="checkbox" style="width: 18px; height: 18px">开启调试终端（默认关闭，虚拟机里没有 SSH 和登录用户）</label>
+</section>
+
+<section aria-labelledby="guard" style="padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; display: flex; flex-direction: column; gap: 12px">
+<h2 id="guard" style="margin: 0; font-size: 16px; font-weight: 700">本机接管组件</h2>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+<sc-for list="{{guard}}" as="g" hint-placeholder-count="5">
+<li style="display: flex; align-items: center; gap: 10px">
+<span style="width: 22px; height: 22px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: #DCEFE5; color: #1E6B48">✓</span>
+<span style="flex: 1">{{g.name}}</span>
+<span style="font-size: 12px; color: #5F564C; font-family: Inter, monospace">{{g.detail}}</span>
+</li>
+</sc-for>
+</ul>
+<p style="margin: 0; padding: 10px 12px; border-radius: 10px; background: #F8F3EC; font-size: 13px; color: #3D362F; line-height: 1.6">面板打不开时，可以在终端执行 <code style="font-family: Inter, monospace; font-weight: 600">sudo abroad restore --force</code> 直接恢复本机网络。</p>
+</section>
+</div>
+
+<section aria-labelledby="eng" style="border-radius: 16px; background: #FFFFFF; border: 1px solid #E6DCCF; overflow-x: auto">
+<h2 id="eng" style="margin: 0; padding: 18px 20px 6px; font-size: 16px; font-weight: 700">引擎</h2>
+<table style="width: 100%; min-width: 760px; border-collapse: collapse; font-size: 14px">
+<thead>
+<tr style="text-align: left; color: #5F564C; font-size: 12px">
+<th style="padding: 10px 20px; font-weight: 500">引擎</th>
+<th style="padding: 10px 8px; font-weight: 500">用途</th>
+<th style="padding: 10px 8px; font-weight: 500">版本</th>
+<th style="padding: 10px 8px; font-weight: 500">实例</th>
+<th style="padding: 10px 20px 10px 8px; font-weight: 500">操作</th>
+</tr>
+</thead>
+<tbody>
+<sc-for list="{{engines}}" as="e" hint-placeholder-count="6">
+<tr style="border-top: 1px solid #F0E8DD">
+<td style="padding: 14px 20px; font-weight: 700">{{e.name}}</td>
+<td style="padding: 14px 8px; color: #4A4239">{{e.role}}</td>
+<td style="padding: 14px 8px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-family: Inter, monospace">{{e.ver}}</span><sc-if value="{{e.newer}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: #8F3E22; font-weight: 600">可升级到 {{e.newer}}</span></sc-if></span></td>
+<td style="padding: 14px 8px"><span style="padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: {{e.bg}}; color: {{e.fg}}">{{e.inst}}</span></td>
+<td style="padding: 14px 20px 14px 8px">
+<div style="display: flex; gap: 6px; flex-wrap: wrap">
+<button type="button" style="min-height: 36px; padding: 0 12px; border-radius: 8px; border: {{e.primaryBorder}}; background: {{e.primaryBg}}; color: {{e.primaryFg}}; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">{{e.primary}}</button>
+<sc-if value="{{e.canRollback}}" hint-placeholder-val="{{ true }}"><button type="button" style="min-height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #CFC3B4; background: #FFFFFF; font: inherit; font-size: 13px; cursor: pointer">回滚</button></sc-if>
+</div>
+</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":920}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const run = { bg: '#DCEFE5', fg: '#1E6B48' };
+    const idle = { bg: '#EFE7DC', fg: '#3D362F' };
+    const quiet = { primaryBorder: '1px solid #CFC3B4', primaryBg: '#FFFFFF', primaryFg: '#2B2B2B' };
+    const loud = { primaryBorder: 'none', primaryBg: '#A94E2E', primaryFg: '#FFFFFF' };
+    const engines = [
+      { name: 'mihomo', role: '主代理（含链式代理）；Clash 订阅类分流出口', ver: '[版本]', newer: '[新版本]', inst: '主代理 + 1 个分流', canRollback: true, primary: '升级', ...run, ...loud },
+      { name: 'sing-box', role: '分流核心；SS / VMess / VLESS / Trojan / Hysteria2 / TUIC', ver: '[版本]', newer: '', inst: '核心 + 2 个分流', canRollback: true, primary: '检查更新', ...run, ...quiet },
+      { name: 'OpenVPN', role: '.ovpn 配置，每个一个网络命名空间', ver: '[版本]', newer: '', inst: '1 个出口', canRollback: true, primary: '检查更新', ...run, ...quiet },
+      { name: 'WireGuard', role: '.conf 配置，内核模块', ver: '[版本]', newer: '', inst: '1 个出口', canRollback: false, primary: '检查更新', ...run, ...quiet },
+      { name: 'shadowsocks-rust', role: 'ss:// 与 SIP008 订阅（第二版）', ver: '未安装', newer: '', inst: '—', canRollback: false, primary: '安装', ...idle, ...quiet },
+      { name: 'Xray', role: 'VLESS-Reality 等（第二版）', ver: '未安装', newer: '', inst: '—', canRollback: false, primary: '安装', ...idle, ...quiet }
+    ];
+    const guard = [
+      { name: '断网保护（pf）', detail: 'com.apple/250.abroad' },
+      { name: '虚拟网卡', detail: 'utun6 · 198.18.0.1/15' },
+      { name: '系统 DNS 指向本服务', detail: '198.18.0.2' },
+      { name: 'IPv6 已关闭', detail: 'Wi-Fi · 以太网' },
+      { name: '开机守护', detail: 'com.claude-abroad.guard' }
+    ];
+    return { engines, guard };
+  }
+}
+</script>
+</body>
+</html>

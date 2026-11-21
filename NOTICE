@@ -1,0 +1,57 @@
+Claude 出国（claude-abroad）
+
+本项目包含来自以下项目的代码：
+
+1. Claude Cage / agent-vm
+   https://github.com/Lee-xeo/Claude-Cage （基于 https://github.com/sylvinus/agent-vm）
+   MIT License，Copyright (c) 2026 Sylvain Zimmer，见 licenses/Claude-Cage-MIT.txt
+   来源提交：26237de
+   对应目录：internal/exitpolicy、internal/netguard、internal/hostproxy、
+   internal/managedproxy、internal/diagnostics、internal/usererror、
+   internal/host（部分）、internal/gate（取自 internal/cage）、
+   internal/physif（物理网卡查询，取自 internal/managedproxy/interface.go）、
+   patches/gvisor-tap-vsock、
+   scripts/update-exit-country-list.mjs、packaging/vz.entitlements
+   （其中 internal/netguard、internal/hostproxy、internal/gate 已在开发中删除；internal/diagnostics、
+   internal/host 和 internal/managedproxy 里宿主端运行代理核心的部分在 M4-8 删除。许可证照旧适用于保留的部分。）
+
+2. gvisor-tap-vsock
+   https://github.com/containers/gvisor-tap-vsock
+   Apache License 2.0，见 third_party/gvisor-tap-vsock/LICENSE
+   third_party/gvisor-tap-vsock 为已应用 patches/gvisor-tap-vsock 补丁的源码，取自 Claude Cage。
+
+3. 大陆 IPv4 地址段数据
+   见 internal/exitpolicy/data/LICENSE 与 source.json（MIT）。
+
+本项目以 Go 模块方式使用（未修改）以下库，按各自许可证分发：
+
+4. hashicorp/yamux v0.1.2
+   https://github.com/hashicorp/yamux
+   Mozilla Public License 2.0，见 licenses/yamux-MPL-2.0.txt
+   源码：https://github.com/hashicorp/yamux/tree/v0.1.2
+
+5. Code-Hex/vz v3.8.0（Virtualization.framework 的 Go 绑定，abroad-vm 使用）
+   https://github.com/Code-Hex/vz
+   MIT License，Copyright (c) 2025 codehex，见 licenses/vz-MIT.txt
+
+6. Code-Hex/go-infinity-channel v1.0.0（vz 的依赖）
+   https://github.com/Code-Hex/go-infinity-channel
+   MIT License，Copyright (c) 2023 codehex，见 licenses/go-infinity-channel-MIT.txt
+
+7. gvisor-tap-vsock 带进的库（abroad-vm 的用户态网络，M1-5b 起），均以 Go 模块方式使用、未修改，
+   许可证全文随各自模块源码分发：
+   - gvisor.dev/gvisor（Apache License 2.0）
+   - github.com/inetaf/tcpproxy（Apache License 2.0）
+   - github.com/google/btree（Apache License 2.0）
+   - github.com/google/gopacket（BSD 3-Clause）
+   - github.com/insomniacslk/dhcp（BSD 3-Clause）
+   - github.com/u-root/uio（BSD 3-Clause）
+   - github.com/pierrec/lz4/v4（BSD 3-Clause）
+   - github.com/sirupsen/logrus（MIT）
+   - github.com/apparentlymart/go-cidr（MIT）
+   - github.com/Microsoft/go-winio（MIT，仅 Windows 构建用到）
+
+另有 golang.org/x/net、x/sys、x/crypto、x/mod、x/text 等 Go 官方扩展库，BSD 3-Clause 许可证，
+随模块源码分发（vz 带进 x/crypto、x/mod）。
+
+"Claude" 是 Anthropic 的商标。本项目与 Anthropic 无关。
