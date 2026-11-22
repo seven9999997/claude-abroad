@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 开发用（M5-11 第二级走查）：scripts/m5/run.sh 安装，scripts/m5/restore.sh 移除。本地接口在共享目录 /var/run/claude-abroad（应用和命令行用默认位置）；
+     地区同步真正接上（不带 dev-skip-region）；下面的跳过结束 Claude 的占位默认替换成 dev-skip-claude-kill，M5_REAL_KILL=1 时替换成空。 -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>@LABEL@</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@ABROADD@</string>
+    <string>--state-dir</string><string>@STATE@</string>
+    <string>--vm-dir</string><string>@VMDIR@</string>
+    <string>--main-proxy-store</string><string>@STORE@</string>
+    <string>--exit-check-host</string><string>@EXIT@</string>
+    <string>--pf-user</string><string>@USER@</string>
+    <string>--socket-dir</string><string>@SOCKDIR@</string>
+@SKIPKILL@
+  </array>
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>StandardErrorPath</key><string>@LOG@</string>
+  <key>StandardOutPath</key><string>@LOG@</string>
+</dict>
+</plist>

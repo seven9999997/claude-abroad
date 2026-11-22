@@ -1,0 +1,47 @@
+# scripts/m5/run.sh、restore.sh 会执行的全部改动类命令（扩展正则，每行一条）。README 的“改动类命令清单”与这里一致；
+# check-commands.sh 用它核对 DRY_RUN=1 空跑的输出。abroadd 自己执行的命令见 internal/daemon/testdata/commands.golden。
+^死人开关 [0-9]+ 秒后执行 .*/scripts/m5/restore\.sh$
+^mkdir -p /var/run/claude-abroad-m5(/snap|/vm|/store)?$
+^chmod (755|700) /var/run/claude-abroad-m5(/vm|/store)?$
+^chown _abroadm5 /var/run/claude-abroad-m5/vm$
+^mkdir -p /Library/Application Support/claude-abroad-m5-snap$
+^chmod 700 /Library/Application Support/claude-abroad-m5-snap$
+^cp -R /var/run/claude-abroad-m5/snap/\. /Library/Application Support/claude-abroad-m5-snap/$
+^mkdir -p /Library/Application Support/claude-abroad-m5/bin /Library/Application Support/claude-abroad-m5/image$
+^cp .*/scripts/dev/out/bin/(abroad-vm|abroadd|abroad) /Library/Application Support/claude-abroad-m5/bin/(abroad-vm|abroadd|abroad)$
+^cp -R guest/out/\. /Library/Application Support/claude-abroad-m5/image/$
+^chown -R root:wheel /Library/Application Support/claude-abroad-m5$
+^chmod -R go-w /Library/Application Support/claude-abroad-m5$
+^dscl \. -(create|delete) /(Users|Groups)/_abroadm5( .*)?$
+^dscacheutil -flushcache$
+^sudo -u _abroadm5 /Library/Application Support/claude-abroad-m5/bin/abroad-vm run --image-dir /Library/Application Support/claude-abroad-m5/image --state-dir /var/run/claude-abroad-m5/vm --direct-sock /var/run/claude-abroad-m5/vm/direct\.sock --direct-peer-uid 0$
+^mkdir -p /var/run/claude-abroad$
+^chown root:wheel /var/run/claude-abroad$
+^chmod 755 /var/run/claude-abroad$
+^rm -rf /var/run/claude-abroad$
+^mkdir -p /usr/local/bin$
+^ln -s /Library/Application Support/claude-abroad-m5/bin/abroad /usr/local/bin/abroad$
+^rm -f /usr/local/bin/abroad$
+^cp /var/run/claude-abroad-m5/com\.claude-abroad\.m5\.abroadd\.plist /Library/LaunchDaemons/com\.claude-abroad\.m5\.abroadd\.plist$
+^chown root:wheel /Library/LaunchDaemons/com\.claude-abroad\.m5\.abroadd\.plist$
+^chmod 644 /Library/LaunchDaemons/com\.claude-abroad\.m5\.abroadd\.plist$
+^launchctl (bootstrap|bootout) system /Library/LaunchDaemons/com\.claude-abroad\.m5\.abroadd\.plist$
+^rm -f /Library/LaunchDaemons/com\.claude-abroad\.m5\.abroadd\.plist$
+^kill( -TERM| -KILL)? <abroad-vm\.pid 里的 PID>$
+^kill <死人开关的 PID>$
+^route -n delete -net (0\.0\.0\.0|128\.0\.0\.0)/1$
+^scutil <<remove State:/Network/Service/claude-abroad/DNS$
+^networksetup -setv6(automatic|off|LinkLocal) .+$
+^/sbin/pfctl -a com\.apple/250\.abroad -F all$
+^/sbin/pfctl -X .+$
+^mv /var/run/claude-abroad-m5/abroadd /var/run/claude-abroad-m5/abroadd\.bak-[0-9-]+$
+^rm -rf /Library/Application Support/claude-abroad-m5(-snap)?$
+^rm -f /var/run/claude-abroad-m5/(user|deadman_pid|pf_tokens|cli_link|sockdir)$
+^route -n delete -net (0\.0\.0\.0/1|128\.0\.0\.0/1)$
+^scutil <<remove State:/Network/Service/claude-abroad/DNS$
+^/usr/sbin/systemsetup -settimezone .+$
+^/usr/bin/defaults (write|delete) /Library/Preferences/com\.apple\.timezone\.auto Active( .*)?$
+^/usr/bin/defaults (write|delete) /Library/Preferences/\.GlobalPreferences AppleLanguages( .*)?$
+^/bin/launchctl asuser [^ ]+ /usr/bin/sudo -u [^ ]+ /usr/bin/defaults (write|delete) -g (AppleLanguages|AppleLocale)( .*)?$
+^/sbin/pfctl -a com\.apple/250\.abroad -F all$
+^/sbin/pfctl -X (<token[12]?>|[0-9]+)$
