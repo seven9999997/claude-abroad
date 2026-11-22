@@ -129,6 +129,10 @@ func TestEndToEnd(t *testing.T) {
 	keep(mustOK(t, r.run("--yes", "main", "use", "sub1"), "main use"))
 	both("main check", "main", "check")
 	both("main apply", "--yes", "main", "apply")
+	txt, _ = both("main exit", "main", "exit")
+	if !strings.Contains(txt.out, "203.0.113.7") || !strings.Contains(txt.out, "US") {
+		t.Fatalf("main exit 应显示出口 IP 和国家：%s", txt.out)
+	}
 
 	// 分流出口：文件和标准输入。
 	keep(mustOK(t, r.run("exit", "add", "wg", "--kind", "wireguard", "--file", writeFile(t, "wg.conf", wgConf)), "exit add --file"))

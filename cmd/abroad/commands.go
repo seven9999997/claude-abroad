@@ -33,6 +33,7 @@ var commands = []command{
 	{path: []string{"uninstall"}, route: "uninstall", later: "卸载在正式安装包里提供；现在请按各份脚本的 README 执行 restore"},
 	{path: []string{"apps"}, route: "apps", run: cmdApps},
 	{path: []string{"main", "show"}, route: "main-get", run: cmdMainShow},
+	{path: []string{"main", "exit"}, route: "main-exit", run: cmdMainExit},
 	{path: []string{"main", "nodes"}, route: "main-sources", run: cmdMainNodes},
 	{path: []string{"main", "check"}, route: "main-check", run: cmdMainCheck},
 	{path: []string{"main", "add-source"}, route: "main-source-add", run: cmdMainAddSource},
@@ -422,6 +423,36 @@ func cmdMainShow(a *app, args []string) int {
 		if v.LAN {
 			fmt.Fprintln(a.stdout, "第一跳是局域网节点，还没有确认：sudo abroad main confirm-lan <节点>")
 		}
+	})
+}
+
+// cmdMainExit 显示主代理出口的 IP 和地区（来自出口基准；status 里不含出口 IP，只有这里显示）。
+func cmdMainExit(a *app, args []string) int {
+	if len(args) > 0 {
+		return usageErr(a, "main exit 不带参数")
+	}
+	resp, code := a.call("GET", "/v1/main-proxy/exit", nil)
+	if code != ExitOK {
+		return code
+	}
+	return a.out(resp, func() {
+		var v struct {
+			Available                           bool
+			IP, Country, Region, City, Timezone string
+			Note                                string
+		}
+		_ = json.Unmarshal(resp.Body, &v)
+		if !v.Available {
+			fmt.Fprintf(a.stdout, "主代理出口：%s\n", v.Note)
+			return
+		}
+		place := v.Country
+		for _, x := range []string{v.Region, v.City} {
+			if x != "" {
+				place += " " + x
+			}
+		}
+		fmt.Fprintf(a.stdout, "主代理出口：%s（%s，%s）\n", v.IP, place, v.Timezone)
 	})
 }
 

@@ -253,3 +253,50 @@ func TestHomeNoConsoleUser(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// M5-7 验收 a：主代理出口信息的专用接口。没有基准时“还没有”；有基准时给 IP、国家、城市、时区；
+// 调用过这个接口之后，状态、事件、日志、任务查询里仍然搜不到出口 IP 和城市（其他用户断开见 TestLevelMatrix，按路由表生成）。
+func TestMainExitAPI(t *testing.T) {
+	m := newMainEnv(t, true)
+	code, b := call(t, m.d, "GET", "/v1/main-proxy/exit", nil)
+	var v MainExitView
+	if code != 200 || json.Unmarshal(b, &v) != nil || v.Available || v.IP != "" || !strings.Contains(v.Note, "还没有") {
+		t.Fatalf("没有基准：%d %s", code, b)
+	}
+	m.addYAML(t, "本地", mainNodesYAML)
+	m.enableWith(t, "exit")
+	code, b = call(t, m.d, "GET", "/v1/main-proxy/exit", nil)
+	if code != 200 || json.Unmarshal(b, &v) != nil || !v.Available || v.IP != "203.0.113.7" || v.Country != "US" || v.City != "Exampleville" || v.Timezone != "America/Los_Angeles" {
+		t.Fatalf("有基准：%d %s", code, b)
+	}
+	// 再调几次，并跑一个异步任务。
+	for i := 0; i < 3; i++ {
+		call(t, m.d, "GET", "/v1/main-proxy/exit", nil)
+	}
+	_, jb := call(t, m.d, "POST", "/v1/disable?async=1", nil)
+	var job struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(jb, &job)
+	var jobView []byte
+	for i := 0; i < 200; i++ {
+		_, jobView = call(t, m.d, "GET", "/v1/jobs/"+job.ID, nil)
+		var j Job
+		if json.Unmarshal(jobView, &j) == nil && j.State != JobRunning {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	_, sb := call(t, m.d, "GET", "/v1/status", nil)
+	all := map[string]string{"状态和事件": string(sb), "日志": m.logs.String(), "任务": string(jb) + string(jobView)}
+	for where, text := range all {
+		for _, x := range []string{"203.0.113.7", "Exampleville", "Example State"} {
+			if strings.Contains(text, x) {
+				t.Errorf("%s里出现了 %q", where, x)
+			}
+		}
+	}
+	if job.ID == "" || len(jobView) == 0 {
+		t.Fatalf("异步任务：%s / %s", jb, jobView)
+	}
+}

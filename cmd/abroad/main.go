@@ -45,7 +45,7 @@ const usage = `用法：abroad [--json] [--yes] [--socket <路径>] <子命令> 
   sudo abroad restore [--force] [--kill-browsers]   一键回国（两步确认）
   sudo abroad uninstall            卸载
   apps                             在联网的应用
-  main show | nodes | check        主代理：当前选择、全部节点、检查
+  main show | nodes | check | exit 主代理：当前选择、全部节点、检查、出口的 IP 和地区
   sudo abroad main add-source --file <配置文件> | --url-file <存订阅地址的文件> | --stdin  [--name <名字>] [--via-host]
   sudo abroad main add-node --file <节点 YAML> [--name <名字>]
   sudo abroad main rm-source <来源 ID>

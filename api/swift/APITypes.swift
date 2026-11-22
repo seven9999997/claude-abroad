@@ -271,6 +271,27 @@ public struct DaemonLANConfirmRequest: Codable, Sendable {
     }
 }
 
+public struct DaemonMainExitView: Codable, Sendable {
+    public var available: Bool
+    public var ip: String?
+    public var country: String?
+    public var region: String?
+    public var city: String?
+    public var timezone: String?
+    public var at: String?
+    public var note: String?
+    enum CodingKeys: String, CodingKey {
+        case available = "available"
+        case ip = "ip"
+        case country = "country"
+        case region = "region"
+        case city = "city"
+        case timezone = "timezone"
+        case at = "at"
+        case note = "note"
+    }
+}
+
 public struct DaemonMainProxyNodeView: Codable, Sendable {
     public var id: String
     public var name: String

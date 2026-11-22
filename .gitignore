@@ -47,3 +47,7 @@ node_modules/
 # M5-1 探查：结果文件和 Swift 的构建目录
 scripts/m5/probe/out/
 scripts/m5/probe/swift/.build/
+
+# Mac 应用（SwiftPM）的构建目录
+/app/.build/
+/app/.swiftpm/

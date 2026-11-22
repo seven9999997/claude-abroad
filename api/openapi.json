@@ -432,6 +432,39 @@
         ],
         "type": "object"
       },
+      "DaemonMainExitView": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "city": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "type": "object"
+      },
       "DaemonMainProxyNodeView": {
         "properties": {
           "id": {
@@ -1843,6 +1876,35 @@
           }
         },
         "x-level": "normal"
+      }
+    },
+    "/v1/main-proxy/exit": {
+      "get": {
+        "description": "主代理出口的 IP、国家、城市、时区（来自出口基准）：“应答里不含出口 IP”的唯一例外，只给界面显示",
+        "operationId": "main-exit",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonMainExitView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
       }
     },
     "/v1/main-proxy/lan-confirm": {
