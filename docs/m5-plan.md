@@ -1,0 +1,214 @@
+# M5 实施计划：接口层、本人授权、主代理管理、命令行与 Mac 应用
+
+> 状态：v2（2026-11-22，architect 审 v1：3 处必须改、4 处建议改、4 处拍板，改动的段落标了【v2】）。v1 草案（2026-11-22，M5-0）。
+> 依据：设计文档 v0.19 第 10.4、11、12、14 节；architect 2026-11-22 判 M4-9 时给出的 M5 开工 7 条前提和 M5-0 到 M5-11 的待办表；用户 2026-11-17 的决定“付费项推迟”（不买开发者账号：签名校验、SMAppService、公证、ES、NE 一律推迟，ad-hoc 签名照用）。
+
+## 0. 总原则
+
+1. **分两半，先 Go 后界面**。前一半（M5-1 到 M5-6）是 Mac、Windows 共用的 Go 接口层：权限分级、本人授权、主代理由 abroadd 持有和下发、异步任务与事件推送、命令行。后一半（M5-7 到 M5-11）才是 Mac 界面。
+2. **付费项推迟，但不悄悄降级**。调用方的代码签名校验做成可替换的接口 `CallerVerifier`，现在接一个名字和输出都写明“未启用”的实现。推迟期间“普通”一级的操作，凡是能做“只读”一级的调用方也能做。这一点写进设计 11.1、`GET /v1/status` 的 `security` 字段、应用的“设置 → 高级”和命令行的 `abroad status`，不能只写在代码注释里。
+3. **敏感操作的本人授权在 M5 做到，不依赖签名**。应用一侧走系统的授权服务（登录密码或指纹）；命令行一侧要求 `sudo`，即对端是 root。abroadd 怎么核验应用交来的凭证，先由 M5-1 探查。行不通时的备选是：敏感操作在应用里只“发起”，由 abroadd 以 root 身份触发系统的管理员认证。
+4. **主代理的配置由 abroadd 持有并下发**：来源的增删和更新、节点和链式代理的选择、局域网和本机节点的“用户确认”、虚拟机重启后的重新下发。订阅地址和凭据存在 secrets 目录（0700，文件 0600），不进日志、应答和 status。`abroad-dev apply-main-proxy` 那条手动下发的路保留给测试。
+5. **接口整理不改变已验收的行为**。路径、任务化、事件推送可以重排。两步确认、互斥（忙标记）、对端身份、输出不含敏感字段，这几条性质必须原样保留。现有的端到端用例（`internal/daemon` 的测试、`daemon-sim`、`scripts/dev/*e2e*`）迁移过去后全部通过；真机脚本（`scripts/m2`、`m3`、`m4`）里调用接口的地方同步改，改完自测和空跑仍通过。
+6. **界面在会话里只做这些**：编译、视图模型和网络层的单元测试、对假系统模式的 abroadd 跑接口层的集成测试。**不在用户的桌面上弹出窗口，也不做界面自动化**。界面走查写成清单交给用户。
+7. **共用部分不带 Mac 的假设**。接口层、任务、事件、主代理管理、命令行的主体都要能交叉编译到 Windows，并在 Windows 上跑单测（经 SSH）。平台相关的只有两处：“对端身份”和“本人授权”，各自放在 `_darwin.go`、`_windows.go` 里，接口相同。
+8. **会话里的安全约束照旧**。不执行任何可能让宿主机断网的操作，不用 `sudo`，不改用户的系统设置。需要 root 的验证（例如真实的 socket 属组、以 root 运行的 abroadd 核验授权凭证）一律写成脚本交给用户，或放进 `integration` 标签、会话里不跑。
+
+## 1. 任务总览与执行顺序
+
+| 任务 | 内容 | 依赖 | 需要用户 |
+|---|---|---|---|
+| M5-1 | 探查（六项，见第 5 节）：授权凭证的核验、未签名应用申请自定义权限项、socket 属组与控制台用户、Swift 访问 unix socket、接口描述到 Swift 类型的生成、只靠命令行工具能否编出 SwiftUI 应用 | — | 部分：需要 root 或桌面弹窗的那几步写成脚本交用户 |
+| M5-2 | 接口层整理：路由表（路径、方法、级别、请求和应答类型集中声明）、三级权限框架、`CallerVerifier`、任务化的启停、事件推送、接口描述文件的生成 | M5-1 的 socket 结论 | 否 |
+| M5-3 | 敏感操作的本人授权接进 abroadd；命令行的 sudo 路径 | M5-1 的授权结论、M5-2 | 真机核验交用户 |
+| M5-4 | 主代理的管理：来源、节点、链式、应用、重启后重下发、局域网节点确认 | M5-2 | 否（真机在 M5-11） |
+| M5-5 | 其余接口：冲突检查、在联网的应用、安装引导进度、引擎与虚拟机状态、登录用户的主目录 | M5-2 | 否 |
+| M5-6 | 命令行 `abroad`（设计 11.3） | M5-2 到 M5-5 | 否 |
+| M5-7 | Mac 应用的骨架：工程、unix socket 网络层、生成的类型、菜单栏、首页 | M5-1、M5-2 | 否（走查在 M5-11） |
+| M5-8 | 安装引导与主代理页面 | M5-4、M5-7 | 否 |
+| M5-9 | 其余页面：分流出口、应用分流、环境检测、地区、引擎与虚拟机、设置 | M5-5、M5-7 | 否 |
+| M5-10 | 回国、切换地区、启用等的确认流程与通知 | M5-3、M5-7 | 否 |
+| M5-11 | 给用户的走查清单与真机步骤（第 14 节 M5 的完成标准） | 全部 | **是** |
+
+前一半做完（M5-6 验收）之后，Windows 侧的 W-3 可以直接用这套接口层（见第 7 节）。
+
+## 2. 接口清点（验收 b）
+
+设计 11.1 接口表的每一行对照现状（代码位置是 2026-11-22 的 `internal/daemon/daemon.go` 的 `handler()` 和各 handler 文件）。“不同”指已有但路径、形式或行为与设计表不一致。
+
+| 设计 11.1 | 现状 | 代码位置 | M5 的处理 |
+|---|---|---|---|
+| `GET /status` | **已有**，路径是 `/v1/status`；内容含状态机、闸门、出口、开流计数、地区、环境检测摘要、规则摘要、直连状态 | `daemon.go` `handler()` 的 status 一段；`Status()` | 保留；加 `security`（签名校验未启用、授权方式）和 `vm`、`engines` 摘要（M5-5） |
+| `GET /preflight` | **没有接口**；冲突检查本身已有，启用时内部调用 | `internal/preflight`、`daemon` 里启用前的检查 | M5-5 加 `GET /v1/preflight`（只读，结果脱敏同包内约定） |
+| `POST /actions/{enable,disable}`（异步、返回任务 ID） | **不同**：`POST /v1/enable`、`/v1/disable`，同步执行，直到完成才返回；启用在地区会变时两步 | `daemon.go` `handleEnable`（`region_api.go`）、`op()` | M5-2 加任务化：同一路径带 `?async=1` 返回 `202 {job}`，不带时保持同步（真机脚本和 daemon-sim 不用改就能继续用）。两步确认在“建任务之前”完成 |
+| `GET /envcheck`、`POST /envcheck/run` | **已有**（`/v1/…`）；“历史”没有 | `envcheck.go` `handleEnvGet`、`handleEnvRun` | 保留；历史只留最近 N 轮的摘要（M5-5），不含地址 |
+| `POST /envcheck/device` | **没有**（设备体检、字体等） | — | 推迟到 M6（不在 M5 的完成标准里；应用的“环境检测”页显示“设备体检：以后的版本提供”） |
+| `GET/PUT /envcheck/settings` | **不同**：只有 `PUT`；当前设置放在 `GET /v1/envcheck` 的 `disabled` 里 | `envcheck.go` `handleEnvSettings` | M5-2 补 `GET /v1/envcheck/settings` |
+| `GET /launchguard` | **没有**：Claude 启动管控要系统扩展（ES，付费项推迟）或兜底方案（M6） | — | 不在 M5；应用里显示“未提供”，接口回 501 并写明原因 |
+| `POST /actions/uninstall` | **没有** | — | M5-5 只做“两步确认 + 预览”的接口骨架和命令行，真正的卸载流程（10.3）随 M6 的安装包；骨架回 501“卸载在正式安装包里提供”，但级别、授权检查照做（敏感） |
+| `POST /v1/baseline` | **已有**，是 `POST /v1/main-proxy/apply` 的别名 | `daemon.go` | 保留别名到 M6，路由表里标“已过时” |
+| `GET /actions/restore/preview`、`POST /actions/restore` | **不同**：`POST /v1/restore`，空请求体回 409 带预览和确认码，带确认码执行 | `confirm.go` `handleRestore` | 保留这一形式（两步确认的性质不变）；路由表里起别名 `POST /v1/actions/restore`；不另设 GET preview（预览必须和确认码一起签发） |
+| 启用、应用主代理、切换地区的两步 | **已有** | `region_api.go` `confirmGate` | 不变；M5-3 在“确认码”之外再要求本人授权（敏感的那几项） |
+| `GET /jobs/{id}`、`GET /events`（SSE） | **没有** | — | M5-2 |
+| `GET/PUT /main-proxy` | **不同**：只有 `POST /v1/main-proxy/apply`（应用主代理）；主代理配置由 `abroad-dev apply-main-proxy` 在外部写 store 并经 ctl.sock 下发 | `region_api.go` `handleApplyMainProxy`；`internal/managedproxy`；`cmd/abroad-dev` | M5-4：`GET /v1/main-proxy`（当前来源、选中的节点或链式、检查结果，不含凭据）、`PUT /v1/main-proxy`（选节点和链式并应用） |
+| `GET/POST/DELETE /main-proxy/sources`、`POST …/{id}/refresh` | **没有接口**；来源导入和订阅抓取的库已有 | `internal/managedproxy`（`store.go`、`import.go`、`fetch.go`） | M5-4 |
+| `POST /main-proxy/check` | **没有单独接口**；检查在“应用主代理”里 | `exitcheck` | M5-4 加 `POST /v1/main-proxy/check`（只检查不保存，普通级） |
+| `GET/POST/DELETE /exits` | **已有**，形式是 `GET /v1/exits`、`GET/PUT/DELETE /v1/exits/{tag}`；导入分享链接没有 | `exits_api.go` | 保留；分享链接导入推迟（设计里标“以后”） |
+| `POST /exits/{id}/check` | **没有**（出口检查由 daemon 定时做） | `exitstore.go`、`exitcheck` | M5-5 加 `POST /v1/exits/{tag}/check`（普通级） |
+| `GET /setup`、`POST /setup/complete` | **没有** | — | M5-5：安装引导进度存状态目录（0600）；主代理未应用时不能完成（422） |
+| `GET/PUT /rules` | **已有**（`/v1/rules`）；“域名置顶只能增加”“允许局域网开关”的校验部分已有（置顶规则不可删由 rules 包保证） | `rules_api.go` 一类、`internal/rules` | 保留；M5-3 按内容分级：改成“本机网络”或改 Claude 相关的规则是敏感，其余是普通（见第 3 节） |
+| `GET /apps` | **没有** | `internal/procinfo`、`stack` 的连接表 | M5-5（应用 ID、连接数、正在使用的出口；不含目的地址） |
+| `GET/PUT /region` | **不同**：只有 `PUT /v1/region`；当前目标在 status 的 `region` | `region_api.go` | M5-2 补 `GET /v1/region` |
+| `GET/POST /engines` | **没有**（引擎随镜像内置，版本在镜像清单里） | `guest/manifest.json`、`imagebuild` | M5-5 只做 `GET /v1/engines`（版本、状态）；安装、升级、回滚推迟到 M6（需要更新机制） |
+
+## 3. 权限分级（验收 c）
+
+### 3.1 三级与推迟期间的实际保证
+
+| 级别 | 设计 11.1 的要求 | 推迟签名校验期间实际由什么保证 |
+|---|---|---|
+| 只读 | 当前控制台用户或 root | 对端 uid（`LOCAL_PEERCRED`/`getpeereid`）等于当前控制台用户的 uid，或为 0；控制台用户的取法由 M5-1 定 |
+| 普通 | 本项目签名的应用或命令行（Team ID 一致） | **与只读相同**（`CallerVerifier` 是“未启用”实现，一律返回“未校验”）。status 的 `security.caller_verification` 为 `"disabled"`，应用和命令行显示提示：“调用方签名校验要等正式签名的版本，现在本机任何以你的身份运行的程序都能启用、停用和重新检测。” |
+| 敏感 | 签名校验之外还要用户本人授权；命令行必须 `sudo` | **本人授权照做，不受推迟影响**：对端是 root（命令行经 `sudo`），或请求带有 abroadd 核验通过的授权凭证（应用一侧，系统授权服务，5 分钟内有效，绑定操作）。两者都没有时一律 403，什么都不改 |
+
+socket：真实模式放在 `/var/run/claude-abroad/api.sock`，目录 0755、socket 0660、属组由 M5-1 定（设计写的是 `admin`；控制台用户不一定在 admin 组时的处理一并定）。开发模式不变（状态目录 0700、socket 0600、只认属主）。
+
+### 3.2 每个接口的级别（含 M2 到 M4 已有的）
+
+| 接口 | 级别 | 说明 |
+|---|---|---|
+| `GET /v1/status`、`/v1/envcheck`、`/v1/envcheck/settings`、`/v1/rules`、`/v1/exits`、`/v1/exits/{tag}`、`/v1/region`、`/v1/main-proxy`、`/v1/main-proxy/sources`（不含凭据）、`/v1/preflight`、`/v1/apps`、`/v1/setup`、`/v1/engines`、`/v1/jobs/{id}`、`/v1/events` | 只读 | 应答里不含凭据、订阅地址、出口 IP、端点地址（沿用现有约定） |
+| `POST /v1/disable` | 普通 | |
+| `POST /v1/enable` | **【v2】按本次调用**：地区不变时普通；地区会变时**敏感** | 见下面的“临时加严”；确认码不是授权 |
+| `POST /v1/envcheck/run`、`/v1/main-proxy/check`、`/v1/exits/{tag}/check` | 普通 | |
+| `PUT /v1/envcheck/settings` | 普通 | 只能关警告项（硬性项关不掉，422），所以不算“关闭保护项” |
+| `PUT /v1/region` | **【v2】按本次调用**：地区不变时普通；地区会变时**敏感** | 会变时要结束 Claude 进程并改 Mac 的时区和语言 |
+| `POST /v1/setup/complete` | 普通 | |
+| `PUT /v1/rules` | **按内容**：普通或敏感 | 【v2】原则一句话：**新规则下，如果存在某条连接比旧规则下更可能走本机网络，或某项保护被关掉，就是敏感**。具体包括：把任何应用改成本机网络（direct）；往 `local_domains` 里加域名（启用状态下本地域名不看应用规则、一律直连，加一个等于把它改成本机网络）；从置顶域名的追加名单 `pinned_extra` 里删域名（删掉后到它的直连不再被收紧）；把 `block_udp_443` 从开改成关；改动 Claude 相关的规则（Claude 应用 ID）；往 `offline_allow` 里加应用；关闭“允许局域网”以外的保护项。反方向（从 `local_domains` 删、往 `pinned_extra` 加、从 `offline_allow` 删、打开 `block_udp_443`、把直连改成 proxy/block）是收紧，算普通；增删 proxy/block 规则、改默认出口为分流出口也是普通。判定是纯函数，表驱动测试覆盖每一类字段的“放松”和“收紧”两个方向；另加性质测试：随机生成新旧两份规则，只要存在一个应用和去向使规则引擎的判定从“不是直连”变成“直连”，分级函数必须返回敏感 |
+| `POST /v1/restore`（回国） | 敏感 | 确认码和本人授权都要 |
+| `POST /v1/actions/uninstall` | 敏感 | 同上（骨架） |
+| `POST /v1/main-proxy/apply`、`PUT /v1/main-proxy` | 敏感 | “更换主代理” |
+| `POST/DELETE /v1/main-proxy/sources`、`PUT /v1/exits/{tag}`、`DELETE /v1/exits/{tag}` | 敏感 | “增删出口和来源” |
+| `POST /v1/main-proxy/sources/{id}/refresh` | 普通 | 只按已有来源更新节点，不换主代理 |
+| `POST /v1/main-proxy/lan-confirm`（局域网或本机节点的用户确认） | 敏感 | 它决定虚拟机出站白名单里能不能出现局域网地址 |
+| 读取凭据、打开调试终端、修改 Claude 进程清单 | 敏感 | M5 不提供这些接口（凭据从不经接口返回；调试终端和进程清单编辑推迟），路由表里不注册 |
+
+**【v2】签名校验推迟期间的临时加严**（architect 必须改 1）：**一个操作如果在本次调用里需要两步确认（要结束 Claude 进程，或要改 Mac 的时区和语言），在调用方签名校验未启用期间就要求本人授权。** 理由：推迟期间“普通”等于“任何以用户身份运行的程序都能调”，而确认码不是授权——发起请求的脚本自己就能拿到确认码再提交回去，于是脚本、npm 包或 Claude Code 自己可以不经用户同意切换地区（强制结束 Claude、改时区和语言）。具体：切换地区且地区会变、启用且地区会变为敏感；启用且地区不变为普通；应用主代理本来就是敏感。级别判定和“是否需要两步确认”用同一个函数的结果（`needsConfirm(op, change)` 同时决定 409 和级别），不写两套条件。签名校验启用之后是否放回普通级，到 M6 再定（设计 11.1 记了这条临时加严）。
+
+## 4. “敏感操作要本人授权”的证明链（验收 d）
+
+设计 11.1 的敏感清单逐条对上：
+
+| 敏感操作（设计 11.1） | 对应接口 | 证明“没有授权时做不了”的测试 |
+|---|---|---|
+| 回国 | `POST /v1/restore` | M5-3：`TestSensitiveDenied` 表驱动（普通用户对端、无凭证 → 403；带过期凭证、用于别的操作的凭证 → 403；每种都核对状态文件、网络快照、进程表没有变化）；命令行 `abroad restore` 不带 sudo 被拒（M5-6 `TestCLISudoRequired`）；`--yes` 不能代替授权（同一用例） |
+| 卸载 | `POST /v1/actions/uninstall` | 同上（骨架阶段也要过这组用例） |
+| 更换主代理 | `POST /v1/main-proxy/apply`、`PUT /v1/main-proxy` | 同上；另核对 secrets 目录和虚拟机下发计数没有变化（M5-4） |
+| 增删出口和来源 | `PUT/DELETE /v1/exits/{tag}`、`POST/DELETE /v1/main-proxy/sources` | 同上；核对出口存储和来源存储没有变化 |
+| 把任何规则改成“本机网络”、修改 Claude 相关的规则 | `PUT /v1/rules`（内容为敏感时） | M5-3：分级纯函数的表驱动测试（每类改动各一例，含“只改普通部分”的反例）；无授权时敏感内容的改规则 403、`rules.yaml` 不变、网络栈规则代数不变 |
+| 修改 Claude 进程清单 | 不提供接口 | M5-2：路由表测试断言不存在这类路径（列一张“不能注册”的清单） |
+| 关闭局域网以外的保护项 | `PUT /v1/rules` 的对应字段；`PUT /v1/envcheck/settings` 关硬性项已是 422 | M5-3 同上；`TestEnvSettingsHardItems`（已有）保留 |
+| 打开调试终端、读取凭据 | 不提供接口 | M5-2：同上的“不能注册”清单；M5-4：任何应答、日志、status 里搜不到订阅地址和凭据（埋标记的端到端） |
+| 局域网节点的用户确认 | `POST /v1/main-proxy/lan-confirm` | M5-4：未确认的局域网节点不进白名单；无授权确认被拒 |
+| 【v2】切换地区（地区会变） | `PUT /v1/region` | M5-3：无授权时 403，Mac 的时区和语言、锁定的目标、Claude 进程都没变；地区不变时普通级一步完成（反例） |
+| 【v2】启用（地区会变） | `POST /v1/enable` | M5-3：同上；地区不变时普通级照常启用（反例） |
+| 【v2】往 `local_domains` 加域名、从置顶名单删域名 | `PUT /v1/rules` | M5-3：分级函数的表驱动和性质测试；无授权时 403、`rules.yaml` 和规则代数不变 |
+
+另外 M5-2 的级别矩阵测试：对路由表里的每个接口，分别用“root 对端”“控制台用户对端”“其他用户对端”“带有效凭证的控制台用户”四种调用方各调一次，期望的结果由第 3.2 节的表生成，不手写。【v2】“其他用户”（不是控制台用户、也不是 root）对每个接口的期望都是**连接被断开**，只读接口也一样；按本次调用分级的接口（启用、切换地区、改规则）按“会变/不会变”“放松/收紧”各算一种情况。
+
+## 5. 需要实测的事（验收 e；M5-1 的内容）
+
+| # | 问题 | 最小的验证办法 | 谁来做 |
+|---|---|---|---|
+| E1 | 【v2 语义见表后】abroadd（root、纯 Go、不用 cgo）能否核验应用交来的授权凭证：应用 `AuthorizationCreate` + `AuthorizationCopyRights` 拿到授权后，用 `AuthorizationMakeExternalForm` 把 32 字节外部形式随请求交给 abroadd；abroadd 用 `AuthorizationCreateFromExternalForm` + `AuthorizationCopyRights`（不带交互标志）确认这个授权确实拥有指定权限 | 写一个最小的 Swift 命令行（申请授权、打印外部形式）和一个 Go 小程序（经 `purego` 动态调用 Security.framework，或评估一个只包这两个函数的极小 cgo 文件），两边都 ad-hoc 签名。Go 一侧要以 root 运行才算数 | 主会话写程序和单测；**以 root 运行和弹出授权框的那一步交给用户**（脚本加 README），结果贴回 |
+| E2 | 未签名或 ad-hoc 签名的应用能否申请自定义权限项 `com.claude-abroad.sensitive`（`AuthorizationRightSet` 往授权数据库写规则需要管理员；写好后普通应用能否申请到）。【v2】另验证两点：①规则设成“每个授权会话各自认证”（不共享）后，应用授权成功，另一个进程用它自己的授权会话申请同一权限项仍会要求认证；②授权框上显示的申请者名字（未签名的程序显示成什么、用户能否认出） | 同 E1 的 Swift 程序加一个参数：先用 `security authorizationdb read/write` 的等价调用登记规则（只登记我们自己的权限项），再申请 | 交给用户执行（会弹授权框、写授权数据库）；restore 脚本删掉登记的规则 |
+| E3 | socket 的属组和“当前控制台用户”的取法：控制台用户用 `/dev/console` 的属主（`stat`）还是 SystemConfiguration 的 `ConsoleUser`（用 `scutil` 读动态存储里的控制台用户键，不用 cgo）；控制台用户不在 `admin` 组时 socket 属组怎么定（可能改用“目录 0755 + socket 0666 + 只靠对端 uid 判级别”） | Go 单测覆盖解析；只读地在本机取一次控制台用户（不需要 root）；以 root 建 socket、改属组那一步放进 `integration` 标签，写成脚本交用户 | 主会话（只读部分）；root 部分交用户 |
+| E4 | Swift 一侧访问 unix socket：`URLSession` 不支持 unix socket，候选是 Network.framework 的 `NWConnection(to: .unix(path:))` 加一个最小的 HTTP/1.1 客户端（含 SSE 的逐行读取） | SwiftPM 命令行小程序，对假系统模式的 abroadd（开发模式，当前用户、不需要 root）跑 `GET /v1/status` 和 `GET /v1/events` | 主会话（不需要 root，不弹窗口） |
+| E5 | 【v2：选定候选二，接口描述文件照样生成】接口描述到 Swift 类型的生成：候选一是 Go 侧生成 OpenAPI 3.1，再用 Apple 的 `swift-openapi-generator`（要拉 SwiftPM 依赖）；候选二是 Go 侧直接从路由表生成 Swift `Codable` 源文件（不依赖外部工具） | 两个候选各对三个接口（status、enable、events）跑通；比较依赖、离线可用性、生成结果的可读性。倾向候选二（少一个外部依赖，仓库里只有 Go 工具链也能重新生成） | 主会话 |
+| E6 | 这台 Mac 没装 Xcode，只有命令行工具（Swift 6.4）：能否只用 SwiftPM 编出带 `MenuBarExtra` 的 SwiftUI 应用，再手工组成 `.app` 包并 ad-hoc 签名 | 最小的 SwiftPM 可执行目标（一个菜单栏图标和一个窗口）；`swift build` 能编过就算通过。**会话里不启动它**（不在用户桌面弹窗）；启动和看效果写进走查清单交用户。编不过时“需要用户”：安装 Xcode | 主会话（编译）；运行交用户 |
+
+**【v2】授权凭证的语义**（architect 必须改 3，探查之前定清楚）：
+1. **权限项的规则不共享**：登记 `com.claude-abroad.sensitive` 时设成每个授权会话各自认证（不设 `shared`），否则用户在应用里授权一次之后的几分钟内，本机别的进程申请同一权限项可能不再弹框。E2 专门验证。
+2. **系统的授权凭证不直接当作我们的凭证用**：abroadd 核验系统凭证通过后，签发自己的短期凭证（随机、一次性、5 分钟内有效、绑定操作类型和参数摘要、只在内存里），之后的敏感请求带的是这个凭证。系统凭证本身不绑定操作，直接用它的话一次授权可以拿去做任何敏感操作。签发和校验是平台无关的纯逻辑，放在 `internal/authz`，M5-1 就做并带单测。
+3. **授权框上显示的是谁在申请**：E2 记下未签名程序显示成什么名字；显示不出可辨认的名字时，在结论里评估它对“用户知道自己在授权什么”的影响（例如授权框的提示文字能否由我们自定义）。
+
+E1、E2 都行不通时的备选（写进 M5-1 的结论，由 architect 选）：
+- 备选 A：敏感操作在应用里只发起，abroadd 以 root 身份对当前控制台用户触发管理员认证（例如通过 `launchctl asuser` 在用户会话里运行一个只做认证的小程序）；
+- 备选 B：应用里的敏感操作一律提示“请在终端执行 `sudo abroad …`”，命令行是唯一的敏感入口。
+两者都不依赖签名，但 B 的体验差、A 的实现复杂，结论里给出评估。
+
+## 6. 各任务
+
+### M5-1 探查
+
+- 文件：`scripts/m5/probe/`（Swift 小程序、Go 小程序、给用户的脚本和 README）、`internal/authz`（核验凭证的接口和解析，纯部分带单测）、`docs/m5-probe.md`（结论）。
+- 结论交 architect 判定后，回写设计 11.1 和本计划的 M5-3。
+- 验收：每项有结论和最小的可运行验证；需要 root 或弹窗的步骤是交给用户的脚本，会话里不执行。
+
+### M5-2 接口层整理
+
+- 文件：`internal/api`（路由表：路径、方法、级别、请求和应答的 Go 类型、是否任务化、是否两步确认；平台无关）、`internal/api/peer_{darwin,windows}.go`（对端身份）、`internal/api/caller.go`（`CallerVerifier`，`Disabled` 实现）、`internal/daemon`（handler 迁移到路由表；`jobs.go` 任务；`events.go` SSE）、`cmd/abroad-apigen`（从路由表生成 OpenAPI 和 Swift 类型，见 E5）。
+- 任务：`?async=1` 的启用、停用返回 202 和任务 ID；`GET /v1/jobs/{id}` 给进度和结果；任务和现有的忙标记共用，不能并发。
+- 事件：`GET /v1/events`，SSE，事件来自现有的事件记录（status 的 `events`）和状态变化；每个连接有上限，慢的客户端丢弃旧事件而不是阻塞 abroadd；事件里不含地址和凭据（沿用 `redact`）；【v2】确认码、授权凭证、任务的请求体都不进事件（测试埋标记）。
+- 测试：级别矩阵（第 4 节末）；路由表的“不能注册”清单；现有 `internal/daemon` 测试全部迁移后通过；`daemon-sim` 各模式和 `scripts/dev/exits-daemon-e2e.sh`、`vm-up.sh` 的接口调用照常；SSE 的慢客户端、断开、上限用例；`GOOS=windows` 编译和单测。
+
+### M5-3 本人授权
+
+- 文件：`internal/authz`（`Authorizer` 接口：`Verify(ctx, op, credential) error`；darwin 实现按 M5-1 的结论；windows 先接“未实现”，W 系列再做）、`internal/daemon`（敏感接口统一经授权中间件；`PUT /v1/rules` 的内容分级）、`cmd/abroad`（命令行的 sudo 路径）。
+- 凭证：【v2】按第 5 节表后的语义——abroadd 核验系统授权凭证后签发自己的短期凭证（`internal/authz` 的 `Issuer`：随机 128 位、一次性、5 分钟内有效、绑定操作类型和参数摘要），只在内存里，不进日志、status 和事件。
+- 测试：第 4 节的证明链；真机核验（以 root 运行的 abroadd 核验应用交来的凭证）写成脚本交给用户，放进 M5-11。
+
+### M5-4 主代理的管理
+
+- 文件：`internal/daemon/mainproxy_api.go`、`internal/managedproxy`（来源的增删、订阅刷新、节点列表、链式选择；已有的 store 和 import 复用）、`internal/daemon` 的虚拟机就绪回调（重启后重新下发）。
+- 存储：来源和凭据在 `secrets/`（0700，文件 0600）；应答只给名字、节点数、更新时间、检查结果。
+- 【v2】订阅的更新从哪里出去：启用状态下，abroadd 发起的抓取和别的本机流量一样进虚拟网卡、走主代理；未启用时没有主代理可走，只能从本机网络出去，这要用户显式选择（请求里带 `via_host: true`，设计 7.3 对引擎下载也是这样定的），否则拒绝并说明。订阅地址本身是敏感信息，不进日志。“刷新”只更新节点列表，不自动把变化后的节点下发给虚拟机，下发仍然走“应用主代理”（敏感）。
+- 局域网和本机节点：解析出的第一跳是私有地址或回环时，标为“待确认”，确认（敏感）之前不进虚拟机出站白名单，应用主代理被拒并说明原因（M5 待办里 architect 审 M1-5a 时提出的那条）。
+- 测试：埋标记的订阅地址和密码在任何应答、日志、status、事件里都搜不到；模拟虚拟机重启（启动标识变化）后自动重新下发，且与出口的增删不交叉（沿用 M4-8 验收 o 的并发测试写法）；未确认的局域网节点不进白名单；`abroad-dev apply-main-proxy` 的测试用路径照常。
+
+### M5-5 其余接口
+
+- `GET /v1/preflight`、`GET /v1/apps`、`GET/POST /v1/setup`、`GET /v1/engines`、`GET /v1/region`、`GET /v1/envcheck/settings`、`POST /v1/exits/{tag}/check`、`POST /v1/actions/uninstall`（骨架）。
+- 登录用户的主目录：从控制台用户（E3）取，供冲突检查读 shell 配置和环境检测 15、16 项使用（M5 待办里 architect 审 M2-9a 时提出的那条）。
+- 测试：每个接口一条端到端（假系统）；输出不含敏感字段（埋标记）。
+
+### M5-6 命令行 `abroad`
+
+- 文件：`cmd/abroad`（设计 11.3 的子命令；输出人看的文本，`--json` 输出原始 JSON）。
+- 需要 sudo 的：`restore`、`uninstall`、`main add-source/use`、`exit add/rm`、规则改成本机网络的 `app set … direct`。不带 sudo 时，命令行在本地先给出“需要 sudo”的提示；即使绕过提示直接调接口，abroadd 也会拒绝（对端不是 root、没有凭证），用例覆盖两层。
+- 测试：每个子命令对假系统的端到端；`--yes` 只跳过文字确认，不能代替 sudo；`GOOS=windows` 编译。
+
+### M5-7 到 M5-10 Mac 应用
+
+- 位置：`app/`（设计 11.2）。按 E6 的结论用 SwiftPM（或用户装好 Xcode 后用 Xcode 工程）。【v2】E6 通过后，把“会话里怎么编、怎么跑单测”的命令写在这里，后面每个界面任务的验收都用同一套。
+- M5-7：unix socket 网络层（E4）、生成的类型（E5）、菜单栏图标和菜单、首页；视图模型可注入假的网络层。
+- M5-8：安装引导（允许后台服务这一步在付费项推迟期间改为“按说明手动加载开发用的 LaunchDaemon”，【v2】界面上写明这是临时做法）、主代理页面（来源、节点、链式、应用主代理、诊断）。
+- M5-9：分流出口、应用分流、环境检测（17 项，设备体检显示“以后提供”）、地区、引擎与虚拟机、设置（含“调用方签名校验：未启用”的说明）。
+- M5-10：回国、切换地区、启用等的确认框（内容来自 409 的预览，“确认”按钮 3 秒后可点）、确认码的处理、本人授权（E1 的结论）、系统通知。
+- 测试：网络层和视图模型的单元测试（`swift test`）；对假系统模式 abroadd 的集成测试（开发模式，当前用户，不需要 root）。**会话里不启动应用、不弹窗口**；每个页面的走查写进清单。
+- 交互原型 `ui/design/index.html` 覆盖了：主窗口七页（总览、主代理、分流出口、应用分流、环境检测、地区、引擎与虚拟机）、安装引导四步、设置四页、五种状态、回国和卸载的完整流程、启用后的重启提示。没有覆盖、按设计文字做的：命令行工具的安装说明、“签名校验未启用”的提示、局域网节点的确认框。`ui/design/canvas/` 已过时，不参考。
+
+### M5-11 走查清单与真机步骤
+
+- `docs/m5-walkthrough.md`：逐页的走查清单（每一步做什么、应该看到什么）；真机步骤：以真实模式加载 abroadd（沿用 M2 到 M4 脚本的安全约定和公共库），从安装引导配好主代理到启用，所有操作都在应用里完成（设计 14 的 M5 完成标准）；E1、E2、E3 的 root 部分如果 M5-1 时没做，在这里做。
+- 需要用户执行；主会话只做语法检查、空跑和清单本身的核对。
+
+## 7. 与 Windows 的关系（验收 g）
+
+| 任务的产出 | Windows 能否直接用 | 说明 |
+|---|---|---|
+| M5-2 路由表、级别、任务、事件、接口描述 | **直接可用** | 平台无关；Windows 的传输是命名管道（W-3 定），路由表和 handler 不变 |
+| M5-2 对端身份 | 另做 | Windows 取命名管道对端的 SID（`GetNamedPipeClientProcessId` + 令牌），放在 `peer_windows.go` |
+| M5-3 授权的框架、内容分级、证明链测试 | **直接可用** | 平台无关 |
+| M5-3 凭证核验 | 另做 | Windows 用 UAC（以管理员运行命令行）或 Windows Hello（W 系列探查） |
+| M5-4 主代理管理 | **直接可用** | 存储路径按平台取（`platform` 包） |
+| M5-5 冲突检查、在联网的应用、登录用户的主目录 | 部分另做 | 接口和输出直接用；取数的系统层按平台另做（Windows 的冲突检查是 W-2 的一部分） |
+| M5-6 命令行 | **直接可用** | 主体平台无关；“需要 sudo”在 Windows 上是“需要以管理员身份运行” |
+| M5-7 到 M5-10 Mac 应用 | 不可用 | Windows 应用另做（W 系列）；生成类型的工具可以加 C# 输出 |
+| M5-11 走查清单 | 结构可复用 | 页面内容随平台改 |
+
+## 8. 本计划不做的事
+
+- 需要付费开发者账号的：调用方签名校验（只做接口和“未启用”实现）、SMAppService 注册、公证、系统扩展（Claude 启动管控）、程序完整性校验（`SecStaticCodeCheckValidity`，M6 随正式签名）。
+- 设备体检、引擎的安装升级回滚、分享链接导入、卸载的实际流程：推迟到 M6。
+- 主会话不执行任何断网操作、不用 `sudo`、不在用户桌面上启动应用或做界面自动化（验收 f）。
