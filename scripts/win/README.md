@@ -23,9 +23,9 @@
 
 - 一台 x64 的 Windows 10 或 11，**管理员权限**（在“以管理员身份运行”的 PowerShell 里执行）。
 - 两个程序放在同一个目录（例如 `C:\abroad-dev\`）：`abroad-wfp-probe.exe`、`abroad-wfp-clean.exe`。
-- （可选，验证“按账户放行”）这台电脑上另一个**普通**本地账户（不是 Administrator）。没有的话这一项会记“未执行”，不影响其他项。查它的 SID：
+- （验证“按账户放行”）探查以管理员账户运行，放行的身份填**你平时登录的那个普通账户**：探查期间你自己账户下的程序照常上网，受影响的只有别的账户和系统服务。不用 runas，不用建账户，也不用输密码。查它的 SID：
   ```powershell
-  (New-Object System.Security.Principal.NTAccount("另一个账户名")).Translate([System.Security.Principal.SecurityIdentifier]).Value
+  (New-Object System.Security.Principal.NTAccount("你的账户名")).Translate([System.Security.Principal.SecurityIdentifier]).Value
   ```
 - 预计时长：约 3 分钟，其中外网中断约 1 分钟（各项做完就结束，不等满时限）。
 
@@ -37,15 +37,19 @@ cd C:\abroad-dev
 .\abroad-wfp-probe.exe                                  # 2. 只打印计划和预测，不装任何规则
 .\abroad-wfp-probe.exe --rehearse --yes                 # 3. 演练（只装一条拦回环端口 1 的过滤器，网络不受影响）
 .\abroad-wfp-probe.exe --yes                            # 4. 正式探查（外网中断，最长 120 秒）
-# 或者带上另一个账户：
-.\abroad-wfp-probe.exe --yes --allow-sid S-1-5-21-…-1002
+# 或者带上你自己的账户（推荐）：
+.\abroad-wfp-probe.exe --yes --allow-sid S-1-5-21-…-1001
 ```
 
-带 `--allow-sid` 时，程序装好规则后会提示一条命令。**在 60 秒内**另开一个窗口，用另一个账户执行它（会要求输入那个账户的密码）：
+### 你要做的唯一一件事（带 `--allow-sid` 时）
 
-```powershell
-runas /user:另一个账户名 "C:\abroad-dev\abroad-wfp-probe.exe --child C:\abroad-dev\child-result.txt"
+在**你自己的账户**下（平时登录的桌面）先开好一个命令行窗口。程序装好规则后会提示，**在 60 秒内**在这个窗口里原样执行：
+
+```bat
+C:\abroad-dev\abroad-wfp-probe.exe --child C:\abroad-dev\child-result.txt
 ```
+
+它连一次公网，把结果写进文件，然后退出。不需要密码。
 
 ## 贴回什么
 
@@ -57,8 +61,11 @@ runas /user:另一个账户名 "C:\abroad-dev\abroad-wfp-probe.exe --child C:\ab
 
 - **先演练**：`--rehearse --yes`。流程与正式执行完全相同，但只装一条“拦回环上 TCP 端口 1”的过滤器，网络完全不受影响；各项预测都是“照常”，只有 `rehearse-hit` 一项预测“拦截”（证明过滤器生效）。演练结果通过 architect 审查后，才做正式的第一级。
 
-- **只有第一级可以远程执行**；第二、三级必须你人在电脑旁边。
-- 条件：规则保持“允许局域网”，开发机的 SSH 连接在放行范围内；开始前用离线求值器预测“从开发机到这台电脑 SSH 端口的回包”必须放行（程序带 `--keep-host <开发机地址>` 时自动检查，不满足就拒绝开始）；探查以后台方式启动，结果写文件，自带时限（实测：Windows 自带的 OpenSSH 在会话结束时会连同会话里的进程一起结束，`Start-Process` 起的也一样，所以做法是探查在 SSH 会话里前台运行、SSH 在开发机一侧后台挂着；SSH 一断探查就退出，动态过滤器随之被删除）；开始前先远程跑一次还原工具的空跑；**开始前在对话里告诉你“接下来两分钟那台电脑会断外网”，得到你的答复再做**。
+- **再演练硬时限**：`--rehearse --hang --yes --seconds 20`。装上演练过滤器后故意停住，25 秒时应以退出码 6 退出、没有残留；停住期间回环 1 号端口被拒，退出后恢复。再跑一次，在停住期间从开发机掐断 SSH：**实测（2026-11-22）进程不会随之退出**，一直停到硬时限（65 秒）才退出，退出后没有残留；子进程的标准输入也收不到结束信号。所以断线后能依靠的只有硬时限，或另开一条 SSH 连接执行 `taskkill /im abroad-wfp-probe.exe /f`。`--hang` 只能和 `--rehearse` 一起用。
+- **只有第一级可以远程执行**；第二、三级必须你人在电脑旁边。**正式的第一级也要你在电脑旁边**：按上面“你要做的唯一一件事”在自己的账户下执行一条命令。
+- **正式执行的前提**：硬时限演练通过；你在电脑旁，并在对话里明确答复“现在可以”；你知道接下来最多两分钟，除你自己账户下的程序外，这台电脑会断外网（包括代理软件和 VPN）。
+- **出了问题**：程序没退出，开发者另开一条 SSH 连接执行 `taskkill /im abroad-wfp-probe.exe /f`（掐断原来的 SSH 连接没有用）；还不行，你在本机结束 `abroad-wfp-probe.exe` 或运行 `abroad-wfp-clean.exe --delete`；第一级只有动态过滤器，重启也能恢复。
+- 条件：规则保持“允许局域网”，开发机的 SSH 连接在放行范围内；开始前用离线求值器预测“从开发机到这台电脑 SSH 端口的回包”必须放行（程序带 `--keep-host <开发机地址>` 时自动检查，不满足就拒绝开始）；探查在 SSH 会话里前台运行（SSH 在开发机一侧后台挂着），结果写文件，时限 120 秒（实测：会话正常结束时，Windows 自带的 OpenSSH 会把会话里的进程一起结束，`Start-Process` 起的也一样，所以不能“后台启动”；但开发机一侧掐断连接时，进程并不会退出，要等硬时限）；开始前先远程跑一次还原工具的空跑；**开始前在对话里告诉你“接下来两分钟那台电脑会断外网”，得到你的答复再做**。结束后取回结果文件、再枚举一次确认没有残留、做与演练相同的网络前后对照、删除拷过去的程序。
 - 不在这台电脑上留下多余的东西：程序只放在 `C:\abroad-dev\`，结束后删除；不改系统设置；不动代理软件和 VPN。
 
 ## 程序做了什么

@@ -30,6 +30,9 @@ func TestParseArgs(t *testing.T) {
 	if err != nil || o.Yes || o.Duration != DefaultDuration {
 		t.Fatalf("默认：%+v %v", o, err)
 	}
+	if o, err := parseArgs([]string{"--rehearse", "--hang", "--yes", "--seconds", "20"}); err != nil || !o.Hang || !o.Rehearse {
+		t.Fatalf("演练停住：%+v %v", o, err)
+	}
 	if o, err := parseArgs([]string{"--rehearse", "--yes"}); err != nil || !o.Rehearse || !o.Yes {
 		t.Fatalf("演练：%+v %v", o, err)
 	}
@@ -39,7 +42,7 @@ func TestParseArgs(t *testing.T) {
 	}
 	for _, bad := range [][]string{
 		{"--seconds"}, {"--seconds", "10"}, {"--seconds", "301"}, {"--seconds", "abc"}, {"--yess"}, {"-y"},
-		{"--keep-host", "fe80::1"}, {"--keep-host", "host"}, {"--child", "f", "--yes"}, {"--child", "f", "--allow-sid", otherSID}, {"--child", "f", "--rehearse"},
+		{"--keep-host", "fe80::1"}, {"--keep-host", "host"}, {"--child", "f", "--yes"}, {"--child", "f", "--allow-sid", otherSID}, {"--child", "f", "--rehearse"}, {"--hang"}, {"--hang", "--yes"}, {"--child", "f", "--hang"},
 	} {
 		if _, err := parseArgs(bad); err == nil {
 			t.Errorf("%v：应报错", bad)
@@ -359,5 +362,22 @@ func TestClassifyWSL(t *testing.T) {
 	s := WSLProbeScript("1.1.1.1", "443")
 	if !strings.Contains(s, "/dev/tcp/1.1.1.1/443") || !strings.Contains(s, WSLMarkerOK) || !strings.Contains(s, WSLMarkerFail) {
 		t.Fatal(s)
+	}
+}
+
+// a. “停住”开关只在演练模式下允许；硬时限 = 时限 + 5 秒，退出码 6。
+func TestHang(t *testing.T) {
+	p := plan()
+	p.Hang = true
+	if err := p.Validate(); err == nil {
+		t.Fatal("正式模式下“停住”应被拒")
+	}
+	p.Rehearse = true
+	if err := p.Validate(); err != nil {
+		t.Fatalf("演练模式下允许：%v", err)
+	}
+	p.Duration = MinDuration
+	if p.HardDeadline() != 25*time.Second || ExitHardTimeout != 6 {
+		t.Fatalf("硬时限 %v，退出码 %d", p.HardDeadline(), ExitHardTimeout)
 	}
 }

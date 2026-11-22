@@ -17,6 +17,7 @@ WR1 第一级探查：在 Windows 防火墙（WFP）里装一组“动态”过�
 
   --yes               确认开始（不带时只打印计划和预测，不装任何过滤器）
   --rehearse          演练：流程完全相同，但只装一条“拦回环上 TCP 端口 1”的过滤器，网络不受影响
+  --hang              （只能和 --rehearse 一起用）装上过滤器后故意停住，验证硬时限：到点进程以退出码 6 退出
   --seconds N         时限，默认 120，范围 20–300
   --allow-sid SID     另一个本地账户的 SID（按 README 用这个账户执行一条命令，验证按账户放行）
   --keep-host IP      远程执行时开发机的地址（必须在局域网内；用来预测远程连接不会断）
@@ -29,6 +30,7 @@ WR1 第一级探查：在 Windows 防火墙（WFP）里装一组“动态”过�
 type options struct {
 	Yes      bool
 	Rehearse bool
+	Hang     bool
 	Duration time.Duration
 	AllowSID string
 	Keep     netip.Addr
@@ -52,6 +54,8 @@ func parseArgs(args []string) (options, error) {
 			o.Yes = true
 		case "--rehearse":
 			o.Rehearse = true
+		case "--hang":
+			o.Hang = true
 		case "-h", "--help", "/?":
 			o.Help = true
 		case "--seconds", "--allow-sid", "--keep-host", "--out", "--child":
@@ -85,7 +89,10 @@ func parseArgs(args []string) (options, error) {
 			return o, fmt.Errorf("不认识的参数 %q", a)
 		}
 	}
-	if o.Child != "" && (o.Yes || o.Rehearse || o.AllowSID != "" || o.Keep.IsValid()) {
+	if o.Hang && !o.Rehearse {
+		return o, errors.New("--hang 只能和 --rehearse 一起用（正式模式下不允许故意停住）")
+	}
+	if o.Child != "" && (o.Yes || o.Rehearse || o.Hang || o.AllowSID != "" || o.Keep.IsValid()) {
 		return o, errors.New("--child 不能和别的选项一起用")
 	}
 	return o, nil

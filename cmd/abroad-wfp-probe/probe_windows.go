@@ -47,7 +47,7 @@ func run(o options, stdout, stderr io.Writer) int {
 	}
 	lan, gw := localNet()
 	p := Plan{Duration: o.Duration, AllowSID: o.AllowSID, SelfSID: selfSID, LAN: lan, Gateway: gw,
-		Public4: public4, PublicDNS: publicDNS, Public6: public6, Keep: o.Keep, KeepPort: 22, Rehearse: o.Rehearse}
+		Public4: public4, PublicDNS: publicDNS, Public6: public6, Keep: o.Keep, KeepPort: 22, Rehearse: o.Rehearse, Hang: o.Hang}
 	if err := p.Validate(); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -104,16 +104,16 @@ func run(o options, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "- [%s] %s：预测 %s（%s）\n", r.Step.ID, r.Step.Title, r.Predicted, r.Why)
 		}
 		if o.AllowSID != "" {
-			fmt.Fprintf(stdout, "\n探查期间请用另一个账户执行：\n  runas /user:<另一个账户> \"%s --child %s\"\n", exe, filepath.Join(dir, "child-result.txt"))
+			fmt.Fprintf(stdout, "\n探查期间请在 --allow-sid 那个账户（你平时登录的账户）的命令行窗口里执行（不需要密码）：\n  %s --child %s\n", exe, filepath.Join(dir, "child-result.txt"))
 		}
 		return 0
 	}
 
 	// 硬时限：无论哪一步卡住，到点进程退出，动态过滤器随之被系统删除。
 	go func() {
-		time.Sleep(p.Duration + 5*time.Second)
+		time.Sleep(p.HardDeadline())
 		fmt.Fprintln(stderr, "到达时限，强制退出（动态过滤器随进程退出被系统删除）")
-		os.Exit(6)
+		os.Exit(ExitHardTimeout)
 	}()
 	deadline := time.Now().Add(p.Duration)
 	ctx, cancel := context.WithDeadline(context.Background(), deadline)
@@ -137,8 +137,12 @@ func run(o options, stdout, stderr io.Writer) int {
 		return 4
 	}
 	fmt.Fprintf(stdout, "过滤器已装上（%s，%d 条，最长 %v）。\n", p.ModeName(), len(specs), p.Duration)
+	if p.Hang {
+		fmt.Fprintf(stdout, "演练硬时限：故意停住，%v 后应以退出码 %d 退出。\n", p.HardDeadline(), ExitHardTimeout)
+		select {} // 只有硬时限（或结束进程、断开 SSH）能让它退出
+	}
 	if o.AllowSID != "" {
-		fmt.Fprintf(stdout, "现在请用另一个账户执行：runas /user:<另一个账户> \"%s --child %s\"\n", exe, childFile)
+		fmt.Fprintf(stdout, "现在请在你自己账户的命令行窗口里执行（60 秒内）：\n  %s --child %s\n", exe, childFile)
 	}
 
 	for i := range preds {

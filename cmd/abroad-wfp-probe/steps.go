@@ -87,7 +87,16 @@ type Plan struct {
 	Keep      netip.Addr     // 远程执行时开发机的地址（SSH 回包的预测）；无效时不做那一项预测
 	KeepPort  uint16         // 本机 SSH 端口
 	Rehearse  bool           // 演练模式：只装回环端口 1 那一条过滤器
+	Hang      bool           // 演练硬时限：装上过滤器后故意停住，等硬时限结束进程（只在演练模式下允许）
 }
+
+// 退出码（README 和远程规程依赖它们）。
+const (
+	ExitHardTimeout = 6 // 到达硬时限，强制退出
+)
+
+// HardDeadline 是硬时限：时限之后再多 5 秒，无论哪一步卡住，进程都退出。
+func (p Plan) HardDeadline() time.Duration { return p.Duration + 5*time.Second }
 
 // RehearsalPort 是演练过滤器拦截的回环 TCP 端口：端口 1（tcpmux）在 Windows 上没有程序使用。
 const RehearsalPort = 1
@@ -140,6 +149,9 @@ func (p Plan) Config() wfprules.Config {
 func (p Plan) Validate() error {
 	if p.Duration < MinDuration || p.Duration > MaxDuration {
 		return fmt.Errorf("时限要在 %v 到 %v 之间", MinDuration, MaxDuration)
+	}
+	if p.Hang && !p.Rehearse {
+		return errors.New("“停住”只在演练模式下允许：正式模式下故意停住会让断网持续到硬时限")
 	}
 	if p.AllowSID != "" && !wfprules.ValidSID(p.AllowSID) {
 		return errors.New("--allow-sid 不是允许的账户 SID（只收本机普通账户 S-1-5-21-…-RID（RID ≥ 1000）或服务虚拟账户）")
