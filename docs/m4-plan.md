@@ -1,6 +1,6 @@
 # M4 实施计划：分流出口、出口检查与环境检测
 
-> 状态：v2.13（2026-11-22：architect 判 W-2a-3 时给出 M4-9 的 6 条补充决定和验收 a–k，见 M4-9 一节末尾）。v2.12（2026-11-21：M4-8 开工时的 4 个问题，architect 的结论和追加验收 l–o，见 M4-8 一节末尾）。v2.11（2026-11-21：W-1 验收通过；M4-8 的 8 条补充决定和验收 a–k，见 M4-8 一节末尾，同时作为 M4-8 的实施计划）。v2.10（2026-11-21：architect 判 M4-7 时的 1 条必须改——订阅出口的域名解析，验收 a–d 见 M4-7 一节末尾）。v2.9（2026-11-21：M4-7 端到端发现两处问题，architect 给出 4 条补充决定和验收 l–o，见 M4-7 一节末尾）。v2.8（2026-11-20：M4-6 验收通过，W-0 验收通过；M4-7 的 8 条补充决定和验收 a–k，见 M4-7 一节末尾）。v2.7（2026-11-20：M4-6a 验收通过；M4-6b 的 12 条决定和验收 a–m，见 M4-6 一节末尾）。v2.6（2026-11-20：M4-5 验收通过；M4-6 拆成 6a、6b，6a 的 8 条决定和验收 a–j，见 M4-6 一节末尾）。v2.5（2026-11-20：M4-5 复审的 1 条必须改、2 条建议改，见 M4-5 一节末尾）。v2.4（2026-11-20：M4-4 验收通过；M4-5 的 8 条补充决定和验收 a–k，见 M4-5 一节末尾，同时作为 M4-5 的实施计划）。v2.3（2026-11-20：M4-3 验收通过；M4-4 的 8 条补充决定和验收 a–l，见 M4-4 一节末尾，同时作为 M4-4 的实施计划）。v2.2（2026-11-19：M4-2 验收通过；M4-3 的 8 条补充决定和验收 a–l，见 M4-3 一节末尾，同时作为 M4-3 的实施计划）。v2.1（2026-11-19：M4-1 验收通过；M4-2 的 6 条补充决定和验收 a–k、内核模块软依赖和包存档的两条决定，见 M4-2、M4-7 两节末尾）。v2（2026-11-19：按 architect 审 v1 的 3 条必须改、6 条建议改和 6 处拍板修订，改动的段落标了【v2】）。v1（2026-11-19）。
+> 状态：v2.15（2026-11-22：M4-9 验收通过，无必须改；2 条建议改已做——撤销系统代理时清空服务器并读回核对（T3r），README 写明第 12 项在用户平时经本机代理使用 Claude 时的看法；M4 开发完成）。v2.14（2026-11-22：architect 审 M4-9 实施计划：Q1 选方案 B，3 处必须改、4 处建议改，计划定稿，追加验收 l–p，见 M4-9 一节末尾）。v2.13（2026-11-22：architect 判 W-2a-3 时给出 M4-9 的 6 条补充决定和验收 a–k，见 M4-9 一节末尾）。v2.12（2026-11-21：M4-8 开工时的 4 个问题，architect 的结论和追加验收 l–o，见 M4-8 一节末尾）。v2.11（2026-11-21：W-1 验收通过；M4-8 的 8 条补充决定和验收 a–k，见 M4-8 一节末尾，同时作为 M4-8 的实施计划）。v2.10（2026-11-21：architect 判 M4-7 时的 1 条必须改——订阅出口的域名解析，验收 a–d 见 M4-7 一节末尾）。v2.9（2026-11-21：M4-7 端到端发现两处问题，architect 给出 4 条补充决定和验收 l–o，见 M4-7 一节末尾）。v2.8（2026-11-20：M4-6 验收通过，W-0 验收通过；M4-7 的 8 条补充决定和验收 a–k，见 M4-7 一节末尾）。v2.7（2026-11-20：M4-6a 验收通过；M4-6b 的 12 条决定和验收 a–m，见 M4-6 一节末尾）。v2.6（2026-11-20：M4-5 验收通过；M4-6 拆成 6a、6b，6a 的 8 条决定和验收 a–j，见 M4-6 一节末尾）。v2.5（2026-11-20：M4-5 复审的 1 条必须改、2 条建议改，见 M4-5 一节末尾）。v2.4（2026-11-20：M4-4 验收通过；M4-5 的 8 条补充决定和验收 a–k，见 M4-5 一节末尾，同时作为 M4-5 的实施计划）。v2.3（2026-11-20：M4-3 验收通过；M4-4 的 8 条补充决定和验收 a–l，见 M4-4 一节末尾，同时作为 M4-4 的实施计划）。v2.2（2026-11-19：M4-2 验收通过；M4-3 的 8 条补充决定和验收 a–l，见 M4-3 一节末尾，同时作为 M4-3 的实施计划）。v2.1（2026-11-19：M4-1 验收通过；M4-2 的 6 条补充决定和验收 a–k、内核模块软依赖和包存档的两条决定，见 M4-2、M4-7 两节末尾）。v2（2026-11-19：按 architect 审 v1 的 3 条必须改、6 条建议改和 6 处拍板修订，改动的段落标了【v2】）。v1（2026-11-19）。
 > 依据：设计文档 v0.7 第 7.3、7.4、8、8.1、9、10、10.1、13、15 节；architect 2026-11-19 判 M3-8 时给出的 M4 开工 7 条决定和 M4 待办清单（M4-0 到 M4-9）。
 
 ## 0. 总原则
@@ -650,6 +650,40 @@ type NSManager interface {
 - j. “带进 M4-9”逐条有步骤或“做不了”的说明，交验收时给对照表。
 - k. go build、go vet、linux/arm64、windows/amd64 build 和 vet、全量 -race 全过；隐私检查零命中。会话里不用 sudo，不执行真实 run.sh、restore.sh，不改宿主机网络、时区、语言，不向任何进程发信号。
 
+**M4-9 实施计划（2026-11-22 草案；定稿的改动见紧接着的 v2.14 一段，以那里为准）**
+
+*要先拍板的问题 Q1（决定 1“默认不改语言”做不到）*：abroadd 的手动目标 `region.Manual(tz, lang)` 把地区格式定为 `LocaleOf(lang)`，第 05 项要求“首选语言 = 目标语言、地区格式 = 目标地区格式”。这台 Mac 的实测值是 AppleLanguages `(zh-Hans-CN, en-US)`、AppleLocale `zh_CN`，而 `LocaleOf("zh-Hans-CN")` = `zh-Hans_CN`。所以即使脚本把语言填成当前值，abroadd 仍会把地区格式从 `zh_CN` 改成 `zh-Hans_CN`。提议（方案 B）：`PUT /v1/region` 的手动模式加一个可选字段 `locale`（用 ValidLocale 校验；不给时仍是 LocaleOf(lang)），脚本默认传当前的首选语言和当前的 AppleLocale，这样默认运行只改时区和自动时区。这是产品代码的小改动：daemon、region 加单测，design 9.x 和第 16 节记一笔。备选（方案 A）：不改产品代码，默认运行也会改地区格式，README 写明、restore 还原。
+
+*文件*：`scripts/m4/{lib.sh, run.sh, restore.sh, judge.sh, region.sh, commands.txt, check-commands.sh, selftest.sh, launchd.plist.tmpl, README.md}`。region.sh 放地区快照、还原、读回核对，读写命令可以替换（自测用假命令）。`cmd/abroad-dev` 加只读子命令 `claude-facts`（R17：打印假定的 Team ID、判断给定路径是否命中安装位置特征，复用 claudeproc）。方案 B 时改 `internal/daemon/region_api.go`、`internal/region/target.go`。公共库 `scripts/lib/common.sh` 只加不改：`ab_proxy_*`，记录、设置、撤销某个网络服务的 HTTPS 代理。
+
+*run.sh 的顺序*：
+1. 前提检查：同 M3，另加：`M4_M3_PASSED=1`；`M4_WG_CONF`、`M4_OVPN_CONF`、`M4_SUB`（订阅 YAML 和节点名）没给的步骤记“跳过”；显示将要改成的时区（`M4_TZ`，默认 America/Los_Angeles）、语言是否会改、`/v1/restore` 预览会结束的 Claude 进程数（没起 abroadd 之前用 `abroad-dev claude-facts --count` 只读估算）。然后按回车确认；空跑和 `--check-only` 不需要确认。
+2. 建状态目录 → 死人开关（核对存活）→ 还原 trap → 快照。网络快照同 M3；地区快照记时区、自动时区、用户 AppleLanguages 和 AppleLocale、系统 AppleLanguages（键不存在时记“无”）。两份都另存持久副本。
+3. 安装、建用户、起开发版虚拟机。不再起两个开发上游，出口用真实服务商。launchd plist 不带 `--dev-skip-region`；`M4_REAL_KILL=1` 时也不带 `--dev-skip-claude-kill`。
+4. 在本机网络还正常时，用户身份 `curl https://api.ipify.org` 测一次本机真实公网 IP。只放在 root 才能读的 600 文件里，T6 用完就删，restore 也删。
+5. T1（R4）：启用前 `PUT /v1/region` 手动目标：默认是 `M4_TZ` 加当前语言和当前地区格式（方案 B）；`M4_CHANGE_LANGUAGE=1` 时是 `M4_LANG`（默认 en-US）。接着应用主代理、两步启用，读回时区、自动时区、两处语言、地区格式，记 `sw_vers`。
+6. T2：`POST /v1/envcheck/run`，记 17 项结果。硬性项除“环境原因无法判断”外都要通过。
+7. T3：三种人为泄漏，每种都是 制造 → 跑检测 → 应检出、闸门关 → 撤销 → 跑检测 → 应通过、闸门开：
+   - 系统代理：`networksetup -setsecurewebproxy <主服务> 127.0.0.1 9` 加 `-setsecurewebproxystate on`；撤销是 `-setsecurewebproxystate off`，并按记录还原原来的服务器设置。
+   - 代理环境变量：脚本起一个只绑 127.0.0.1 的监听器（python，PID 文件），以用户身份 `env HTTPS_PROXY=http://127.0.0.1:<端口> claude -p ping` 后台启动。监听器接受连接但不回应，Claude Code 一直等着。撤销是脚本结束自己的监听器，Claude Code 因连接断开自己退出，脚本不向 Claude 进程发任何信号。没装 claude 时记“跳过”。
+   - IPv6：`networksetup -setv6automatic <主服务>`，撤销是 `networksetup -setv6off <主服务>`（abroadd 启用时关掉的状态），restore 按快照兜底。
+8. T4（R5）：每个给了配置的出口 `PUT /v1/exits/<tag>`，规则里让 `/usr/bin/curl` 走它；用户身份 curl 一个回显出口 IP 的地址（ipify），判定“出口 IP ≠ 主代理出口 IP ≠ 本机真实 IP”（只比相等，不写出地址）。断开后不泄漏：把出口配置换成端点端口不通的同一份配置（模拟隧道断开），curl 应失败，物理网卡上抓不到发往目标的包（只读 tcpdump 计数）。OpenVPN 推送项：从 abroad-vm 日志和事件里收“被忽略的推送项”，记名字。
+9. T4b（订阅出口、UDP 域名目标）：用户身份 `dig +time=5 @dns.google example.com`，走订阅出口；判定有应答，且物理网卡上没有发往 53 的包。
+10. T5：按出口检查，`GET /v1/exits/<tag>` 的检查结果；端点不通时规则命中它的连接按 M4-8 的设计回退到主代理，记录实际行为。
+11. T6：第 10 项结果；搜状态目录、abroadd 和 abroad-vm 日志、status 输出里真实 IP 出现的次数，必须是 0。
+12. T7（R10，只读）：有 `~/Library/Application Support/Claude/config.json` 时读顶层 `locale`，记它在不在、格式，与第 15 项对照。
+13. T8（R17，只读）：`codesign -dv /Applications/Claude.app` 的 TeamIdentifier 与 `claude-facts` 的假定值比对；几种安装位置（`~/.local/bin/claude`、Homebrew、npm 全局、VS Code 和 Cursor 扩展、JetBrains）存在的逐个过 `claude-facts --path`。
+14. T9：`POST /v1/restore` 第一步拿预览（进程列表，命令行截断、替换主目录），写进结果文件。默认不确认，即跳过参数路径；`M4_REAL_KILL=1` 时到最后恢复那一步才带确认码。
+15. T10：切换地区（换一个时区）→ 两步确认 → 读回；再 `PUT /v1/region` 切回。
+16. T11（R7）：停用后 3 分钟内只读 `log show --predicate 'process == "apsd" OR process == "timed"'` 的行数和关键字计数，只记现象。T12（R16）默认跳过（`M4_CAPTIVE=1` 时提示人工操作）。
+17. 恢复（两步）→ 网络、地区读回与快照逐项比对 → restore.sh。
+
+*restore.sh 的顺序*：卸载 LaunchDaemon、按 PID 文件停虚拟机、监听器、抓包 → 撤销人为泄漏（系统代理按记录、Claude Code 由监听器关闭后自行退出，脚本不发信号）→ 清网络（路由、DNS 键、IPv6 按快照）→ 还原地区（region.sh，按脚本自己的快照：systemsetup -settimezone、写或删自动时区、`launchctl asuser <uid> sudo -u <用户> defaults write/delete -g AppleLanguages/AppleLocale`、系统 AppleLanguages，逐项读回）→ 清 pf → 备份 abroadd 状态目录 → 删真实 IP 临时文件 → 删用户 → 取消死人开关 → 地区全部读回一致时才删持久快照。
+
+*judge.sh*：每步一个判定函数，0/1/2 分别是通过、不通过、跳过。selftest 喂样本：每步三种结果各一例、三种泄漏的检出与恢复、真实 IP 命中的反例。
+
+*自测和核对*：selftest 用临时目录、不用 root，覆盖 run、restore 的顺序，以及 region.sh 的四种情况（原来没有语言键、自动时区原来开着、读回不一致、快照缺失）。check-commands 按 c 的禁止项另加四条规则，各带反例。默认、`M4_CHANGE_LANGUAGE=1`、`M4_REAL_KILL=1` 三份空跑做差异比对。
+
 ## 3. 四条底线由谁证明
 
 | 底线 | 离线证明（会话里） | 真机证明（M4-9） |
@@ -710,3 +744,12 @@ type NSManager interface {
 | musl 语言环境 | `musl-locales` 能否装进镜像、`LANG` 对引擎有无影响 | M4-1：装进镜像后在虚拟机里 `locale -a` | 会话 |
 | 虚拟机能否在本机现状下起来 | 本机拒绝绑物理网卡时，虚拟机的出站会失败，但 netns-probe 不出虚拟机 | M4-1 先试：虚拟机能起、health 通即可跑 netns-probe | 会话 |
 | codesign 的 Team ID | Claude 桌面版和 `claude` 可执行文件的 Team ID（R17） | 会话里对本机已装的 Claude 只读执行 `codesign -dv`（不启动、不结束） | 会话（只读） |
+
+**【v2.14】M4-9 实施计划的审查结论**（architect 2026-11-22；上面的草案按这里改，改完直接实现）：
+
+- **Q1 选方案 B**：`PUT /v1/region` 手动模式的可选字段 `locale`（`region.ManualLocale`），ValidLocale 校验，跟随出口时不能带，进入确认码摘要（`targetDigest` 本来就含 Locale）。design v0.19 的 9.1、R4、16 已记。T1 把读回的地区格式写法如实记下，由 architect 决定要不要调整推导。
+- **必须改 1（T4 断开后的判定）**：不判“curl 应失败”。三条同时成立才算通过：① 请求失败，或测得的出口 IP 等于主代理的出口 IP；② 绝不等于本机真实 IP，也不等于该分流出口原来的出口 IP；③ 物理网卡上抓不到发往目标的包。旁证：status 里该出口不可用、主代理出口计数增长。README 写明“隧道用到一半断掉”在真实服务商那边没法制造，没有覆盖，虚拟机里的同机测试覆盖过。
+- **必须改 2（代理环境变量泄漏用假的 Claude 进程）**：把系统自带的 `/bin/sleep` 复制到状态目录下带 Claude Code 安装位置特征的路径（`…/m4fake/.local/bin/claude`，用户可读可执行），以用户身份带 `HTTPS_PROXY` 启动；只读识别子命令 `abroad-dev claude-facts --path` 应认它为 Claude Code（依据路径特征）。它是脚本自己启动的，按 PID 文件并核对命令行里的临时目录路径后由脚本结束。默认的空跑里没有任何启动真实 `claude` 的命令。打开 `M4_REAL_KILL=1` 时它也会出现在预览里并被 abroadd 结束，属于预期，README 说明。
+- **必须改 3（默认时区跟随出口）**：先“应用主代理”（未启用时只锁定按出口算出的目标，不改 Mac），从返回的 `region.timezone` 取时区；再 `PUT /v1/region` 手动目标 = 这个时区 + 当前首选语言 + 当前 AppleLocale。`M4_TZ` 只作显式覆盖。**第 03 项对手动目标的比较方式（已核对代码）**：`region.ManualLocale` 生成的目标不带国家，`ExitRegion` 在目标国家为空时只判“出口不在大陆”，所以默认运行下 03 不会因手动目标不通过。T10 换的时区要与出口同一个国家（脚本内置少量国家的第二时区表），找不到就跳过并记原因。
+- **建议改（采纳）**：真实 IP 文件放在状态目录下 0700 子目录，结果和日志只写“已测得/没测到”，比较只输出相等与否；T4 三个出口 IP 只输出相等与否，两个相等时如实记原因；T11 只统计行数和关键字次数；默认用正式构建的 abroad-vm（不带开发标记，不起开发上游和开发出口）。
+- **追加验收（M4-9，v2.14）**：l 可选地区格式的四条单测，摘要含它、换值后旧确认码失效；m T4 断开后判定按三条写，离线自测覆盖回退主代理且通过、请求失败且通过、等于本机真实 IP 不通过、抓到包不通过；n 假 Claude 进程：路径带特征、识别子命令认它、按 PID 文件核对路径结束、命令核对有规则和反例、默认空跑没有启动真实 claude 的命令；o 默认时区来自出口：空跑里看得到“取预览里的时区”这一步，显式覆盖时用覆盖值；p 默认用正式构建的 abroad-vm，例外有说明。

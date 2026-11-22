@@ -298,3 +298,20 @@ func DisplayCmd(p procinfo.Proc) string {
 	}
 	return c
 }
+
+// PathVerdict 是 ClassifyPath 的结果（M4-9 的只读核对：R17 的安装位置特征、假 Claude 进程的路径）。
+type PathVerdict struct {
+	Match      bool   `json:"match"`                // 算作 Claude（会被列进清单）
+	App        string `json:"app,omitempty"`        // Claude 桌面版 / Claude Code
+	Reason     string `json:"reason,omitempty"`     // 依据：安装位置、签名、Bundle ID 和签名、包名
+	Unverified string `json:"unverified,omitempty"` // 看起来像但没能确认的原因
+}
+
+// ClassifyPath 按扫描时同样的规则判断一个可执行文件路径（不带参数的进程）。只读：可能查一次代码签名。
+func (s *Scanner) ClassifyPath(p string, args ...string) PathVerdict {
+	v := s.classify(procinfo.Proc{Path: p, Name: path.Base(p), Args: append([]string{p}, args...)}, map[string]teamResult{})
+	return PathVerdict{Match: v.match, App: v.app, Reason: v.reason, Unverified: v.unverified}
+}
+
+// InstallMarkers 返回 Claude Code 的安装位置特征（只读副本）。
+func InstallMarkers() []string { return append([]string(nil), installMarkers...) }

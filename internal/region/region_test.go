@@ -286,3 +286,23 @@ func TestParseSamples(t *testing.T) {
 func TestNoExecInRegion(t *testing.T) {
 	srccheck.NoExec(t, ".")
 }
+
+// m4-plan v2.14 Q1：手动目标的可选地区格式。
+func TestManualLocale(t *testing.T) {
+	got, err := ManualLocale("Asia/Shanghai", "zh-Hans-CN", "")
+	if err != nil || got.Locale != LocaleOf("zh-Hans-CN") || got.Locale != "zh-Hans_CN" {
+		t.Fatalf("不给时按语言推导：%+v %v", got, err)
+	}
+	got, err = ManualLocale("America/Los_Angeles", "zh-Hans-CN", "zh_CN")
+	if err != nil || got.Locale != "zh_CN" || got.Lang != "zh-Hans-CN" || got.Timezone != "America/Los_Angeles" || got.Source != SourceManual {
+		t.Fatalf("给了就原样用：%+v %v", got, err)
+	}
+	if err := got.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"zh CN", "../x", "zh_CN;rm", strings.Repeat("a", 80)} {
+		if _, err := ManualLocale("Asia/Tokyo", "ja-JP", bad); !errors.Is(err, ErrLang) {
+			t.Errorf("%q：应拒绝（%v）", bad, err)
+		}
+	}
+}

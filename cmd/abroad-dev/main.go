@@ -104,9 +104,11 @@ func main() {
 			os.Exit(directProbe(context.Background(), os.Args[2:], os.Stdout, os.Stderr))
 		case "ident-sample":
 			os.Exit(identSample(os.Args[2:], os.Stdout, os.Stderr))
+		case "claude-facts":
+			os.Exit(claudeFacts(os.Args[2:], os.Stdout, os.Stderr))
 		}
 	}
-	fmt.Fprintln(os.Stderr, "用法：abroad-dev probe|exit-flows|socks|upstream|apply-main-proxy|tunsim|daemon-sim|pf-render|r3|direct-probe|ident-sample …（见源码头注释）")
+	fmt.Fprintln(os.Stderr, "用法：abroad-dev probe|exit-flows|socks|upstream|apply-main-proxy|tunsim|daemon-sim|pf-render|r3|direct-probe|ident-sample|claude-facts …（见源码头注释）")
 	os.Exit(2)
 }
 

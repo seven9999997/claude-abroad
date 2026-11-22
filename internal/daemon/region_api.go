@@ -404,6 +404,7 @@ type RegionRequest struct {
 	Mode     string `json:"mode"`
 	Timezone string `json:"timezone,omitempty"`
 	Lang     string `json:"lang,omitempty"`
+	Locale   string `json:"locale,omitempty"` // 可选：手动模式下显式指定地区格式（不给时按语言推导）
 	Confirm  string `json:"confirm,omitempty"`
 }
 
@@ -422,8 +423,12 @@ func (d *Daemon) handleSwitchRegion(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch req.Mode {
 	case region.SourceManual:
-		t, err = region.Manual(req.Timezone, req.Lang)
+		t, err = region.ManualLocale(req.Timezone, req.Lang, req.Locale)
 	case region.SourceExit:
+		if req.Locale != "" {
+			err = errors.New("跟随出口时不能指定地区格式（locale 只用于手动模式）")
+			break
+		}
 		var ok bool
 		t, ok, err = d.regions.FromBaseline()
 		if err == nil && !ok {

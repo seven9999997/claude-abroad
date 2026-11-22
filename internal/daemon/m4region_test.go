@@ -485,3 +485,55 @@ func TestRegionSkipNoCommands(t *testing.T) {
 		t.Fatal("系统应还原干净，status 没有地区")
 	}
 }
+
+// m4-plan v2.14 验收 l：手动地区的可选地区格式。给了字段（原样使用）、没给（按语言推导）、非法值（拒绝、不改动）、
+// 与当前值相同（不会变，一步完成）；地区格式进入确认码绑定的参数摘要，换了值旧确认码失效。
+func TestRegionManualLocale(t *testing.T) {
+	e, _, o := confirmEnv(t)
+	d := e.start(o)
+	// 非法值：拒绝，什么都没改。
+	snap := e.sys.Net.Snapshot()
+	if code, b := putRegion(t, d, `{"mode":"manual","timezone":"Asia/Tokyo","lang":"zh-Hans-CN","locale":"zh CN"}`); code != http.StatusUnprocessableEntity {
+		t.Fatalf("非法地区格式应拒绝：%d %s", code, b)
+	}
+	if code, _ := putRegion(t, d, `{"mode":"exit","locale":"zh_CN"}`); code != http.StatusUnprocessableEntity {
+		t.Fatalf("跟随出口时不能带地区格式：%d", code)
+	}
+	if !e.sys.Net.Snapshot().Equal(snap) {
+		t.Fatal("被拒时不能有改动")
+	}
+	// 给了字段：锁定的目标用给的值。
+	if code, b := putRegion(t, d, `{"mode":"manual","timezone":"Asia/Tokyo","lang":"zh-Hans-CN","locale":"zh_CN"}`); code != 200 {
+		t.Fatalf("%d %s", code, b)
+	}
+	if st := status(t, d); st.Region.Target.Locale != "zh_CN" || st.Region.Target.Lang != "zh-Hans-CN" {
+		t.Fatalf("应原样用给的地区格式：%+v", st.Region.Target)
+	}
+	post(t, d, "/v1/enable", 200)
+	want := region.Target{Timezone: "Asia/Tokyo", Lang: "zh-Hans-CN", Locale: "zh_CN", Source: region.SourceManual}
+	if !e.locale().Equal(desired(e, want)) {
+		t.Fatalf("Mac 应按给的地区格式写：%+v", e.locale())
+	}
+	// 与当前值相同：不会变，启用状态下也不要确认码。
+	if code, b := putRegion(t, d, `{"mode":"manual","timezone":"Asia/Tokyo","lang":"zh-Hans-CN","locale":"zh_CN"}`); code != 200 {
+		t.Fatalf("与当前相同应一步完成：%d %s", code, b)
+	}
+	// 没给字段：按语言推导成 zh-Hans_CN，和当前的 zh_CN 不同 → 地区会变，要确认。
+	code, b := putRegion(t, d, `{"mode":"manual","timezone":"Asia/Tokyo","lang":"zh-Hans-CN"}`)
+	if code != http.StatusConflict {
+		t.Fatalf("不给字段时按推导，会变应要确认：%d %s", code, b)
+	}
+	cn := confirmOf(t, b)
+	// 确认码绑定地区格式：拿“推导值”的码去提交另一个地区格式被拒。
+	if code, _ := withBody(t, "PUT", d, "/v1/region", RegionRequest{Mode: "manual", Timezone: "Asia/Tokyo", Lang: "zh-Hans-CN", Locale: "zh_TW", Confirm: cn.Confirm}); code != http.StatusForbidden {
+		t.Fatalf("换了地区格式，旧确认码应失效：%d", code)
+	}
+	_, b = putRegion(t, d, `{"mode":"manual","timezone":"Asia/Tokyo","lang":"zh-Hans-CN"}`)
+	cn = confirmOf(t, b)
+	if code, b := withBody(t, "PUT", d, "/v1/region", RegionRequest{Mode: "manual", Timezone: "Asia/Tokyo", Lang: "zh-Hans-CN", Confirm: cn.Confirm}); code != 200 {
+		t.Fatalf("%d %s", code, b)
+	}
+	if st := status(t, d); st.Region.Target.Locale != "zh-Hans_CN" {
+		t.Fatalf("不给字段时应按语言推导：%+v", st.Region.Target)
+	}
+}

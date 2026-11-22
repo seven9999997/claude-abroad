@@ -1,0 +1,50 @@
+# scripts/m4/run.sh、restore.sh 会执行的全部改动类命令（扩展正则，每行一条）。README 的“改动类命令清单”与这里一致；
+# check-commands.sh 用它核对 DRY_RUN=1 空跑的输出。abroadd 自己执行的命令见 internal/daemon/testdata/commands.golden。
+^死人开关 [0-9]+ 秒后执行 .*/scripts/m4/restore\.sh$
+^mkdir -p /var/run/claude-abroad-m4(/snap|/secret|/vm)?$
+^chmod (755|700) /var/run/claude-abroad-m4(/secret|/vm)?$
+^chown _abroadm4 /var/run/claude-abroad-m4/vm$
+^mkdir -p /Library/Application Support/claude-abroad-m4/bin /Library/Application Support/claude-abroad-m4/image$
+^cp .*/scripts/dev/out/bin/(abroad-vm|abroadd|abroad-dev) /Library/Application Support/claude-abroad-m4/bin/(abroad-vm|abroadd|abroad-dev)$
+^cp -R guest/out/\. /Library/Application Support/claude-abroad-m4/image/$
+^chown -R root:wheel /Library/Application Support/claude-abroad-m4$
+^chmod -R go-w /Library/Application Support/claude-abroad-m4$
+^dscl \. -(create|delete) /(Users|Groups)/_abroadm4( .*)?$
+^dscacheutil -flushcache$
+^/Library/Application Support/claude-abroad-m4/bin/abroad-dev apply-main-proxy --nodes .+ --selected .+ --(save-store /var/run/claude-abroad-m4/store|ctl-sock /var/run/claude-abroad-m4/vm/ctl\.sock)$
+^chmod -R go-rwx /var/run/claude-abroad-m4/store$
+^sudo -u _abroadm4 /Library/Application Support/claude-abroad-m4/bin/abroad-vm run --image-dir /Library/Application Support/claude-abroad-m4/image --state-dir /var/run/claude-abroad-m4/vm --direct-sock /var/run/claude-abroad-m4/vm/direct\.sock --direct-peer-uid 0( --(allow-outbound|first-hop) [^ ]+)*$
+^cp /var/run/claude-abroad-m4/com\.claude-abroad\.m4\.abroadd\.plist /Library/LaunchDaemons/com\.claude-abroad\.m4\.abroadd\.plist$
+^chown root:wheel /Library/LaunchDaemons/com\.claude-abroad\.m4\.abroadd\.plist$
+^chmod 644 /Library/LaunchDaemons/com\.claude-abroad\.m4\.abroadd\.plist$
+^launchctl (bootstrap|bootout) system /Library/LaunchDaemons/com\.claude-abroad\.m4\.abroadd\.plist$
+^rm -f /Library/LaunchDaemons/com\.claude-abroad\.m4\.abroadd\.plist$
+^networksetup -setsecurewebproxy [^ ].* (127\.0\.0\.1 9|[^ ]+ [0-9]+| 0)$
+^networksetup -setsecurewebproxystate [^ ].* (on|off)$
+^networksetup -setv6(automatic|off|LinkLocal) .+$
+^mkdir -p /var/run/claude-abroad-m4/m4fake/\.local/share/claude/versions/0\.0\.0-m4fake$
+^chmod -R 755 /var/run/claude-abroad-m4/m4fake$
+^cp /bin/sleep /var/run/claude-abroad-m4/m4fake/\.local/share/claude/versions/0\.0\.0-m4fake/claude$
+^chmod 755 /var/run/claude-abroad-m4/m4fake/\.local/share/claude/versions/0\.0\.0-m4fake/claude$
+^sudo -u [a-z_][a-z0-9_.-]* env HTTPS_PROXY=http://127\.0\.0\.1:9 /var/run/claude-abroad-m4/m4fake/\.local/share/claude/versions/0\.0\.0-m4fake/claude 900$
+^/usr/sbin/tcpdump -i [a-z0-9]+ -n -l -q (port 53|dst host [0-9.<>a-z ]+( or dst host [0-9.]+)*)$
+^kill( -TERM| -KILL)? <(abroad-vm|tcpdump-(down-(wg|ovpn|sub)|dns53)|fake)\.pid 里的 PID>$
+^kill <死人开关的 PID>$
+^rm -f /var/run/claude-abroad-m4/(deadman_pid|user|leaks|(abroad-vm|tcpdump-(down-(wg|ovpn|sub)|dns53)|fake)\.pid|cap-(down-(wg|ovpn|sub)|dns53)\.txt)$
+^rm -f /var/run/claude-abroad-m4/vm/abroad-vm\.pid$
+^rm -f /var/run/claude-abroad-m4/secret/broken-(wg|ovpn|sub)$
+^rm -rf /var/run/claude-abroad-m4/(m4fake|secret)$
+^route -n delete -net (0\.0\.0\.0/1|128\.0\.0\.0/1)$
+^scutil <<remove State:/Network/Service/claude-abroad/DNS$
+^/usr/sbin/systemsetup -settimezone .+$
+^/usr/bin/defaults (write|delete) /Library/Preferences/com\.apple\.timezone\.auto Active( .*)?$
+^/usr/bin/defaults (write|delete) /Library/Preferences/\.GlobalPreferences AppleLanguages( .*)?$
+^/bin/launchctl asuser [^ ]+ /usr/bin/sudo -u [^ ]+ /usr/bin/defaults (write|delete) -g (AppleLanguages|AppleLocale)( .*)?$
+^/sbin/pfctl -a com\.apple/250\.abroad -F all$
+^/sbin/pfctl -X (<token[12]?>|[0-9]+)$
+^mv /var/run/claude-abroad-m4/abroadd /var/run/claude-abroad-m4/abroadd\.bak-[0-9-]+$
+^rm -rf /Library/Application Support/claude-abroad-m4$
+^mkdir -p /Library/Application Support/claude-abroad-m4-snap$
+^chmod 700 /Library/Application Support/claude-abroad-m4-snap$
+^cp -R /var/run/claude-abroad-m4/snap/\. /Library/Application Support/claude-abroad-m4-snap/$
+^rm -rf /Library/Application Support/claude-abroad-m4-snap$

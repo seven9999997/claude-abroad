@@ -143,6 +143,21 @@ func Manual(tz, lang string) (Target, error) {
 	return Target{Timezone: tz, Lang: lang, Locale: LocaleOf(lang), Source: SourceManual}, nil
 }
 
+// ManualLocale 是带显式地区格式的手动目标（m4-plan v2.14 Q1）：locale 为空时同 Manual（按语言推导）；
+// 给了就用 ValidLocale 校验后原样使用。用途：“语言和地区格式保持我现在的，只换时区”——按语言推导出的写法
+// （例如 zh-Hans-CN → zh-Hans_CN）未必是系统实际用的写法（zh_CN）。
+func ManualLocale(tz, lang, locale string) (Target, error) {
+	t, err := Manual(tz, lang)
+	if err != nil || locale == "" {
+		return t, err
+	}
+	if err := ValidLocale(locale); err != nil {
+		return Target{}, err
+	}
+	t.Locale = locale
+	return t, nil
+}
+
 // Validate 校验一个目标（读回来的、要下发的都过一遍）。
 func (t Target) Validate() error {
 	if t.Source != SourceExit && t.Source != SourceManual {
