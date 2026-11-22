@@ -63,8 +63,16 @@ public struct MenuAvailability: Sendable, Equatable {
     public var disable: Bool
     public var restore: Bool
 
-    public static func from(_ phase: Phase, reachable: Bool, busy: Bool) -> MenuAvailability {
-        if !reachable || busy || phase == .checking { return MenuAvailability(enable: false, disable: false, restore: false) }
+    /// stalled：状态停在 ENABLING 或 RESTORING、而没有操作在进行（上一次操作没有做完）时给出那个状态。
+    /// 后台的设计是“再点一次启用或恢复就能接着做”，所以这时启用中给启用和回国、恢复中给回国。
+    public static func from(_ phase: Phase, reachable: Bool, busy: Bool, stalled: String? = nil) -> MenuAvailability {
+        if !reachable || busy { return MenuAvailability(enable: false, disable: false, restore: false) }
+        switch stalled {
+        case "ENABLING": return MenuAvailability(enable: true, disable: false, restore: true)
+        case "RESTORING": return MenuAvailability(enable: false, disable: false, restore: true)
+        default: break
+        }
+        if phase == .checking { return MenuAvailability(enable: false, disable: false, restore: false) }
         switch phase {
         case .abroad: return MenuAvailability(enable: false, disable: true, restore: true)
         case .offline: return MenuAvailability(enable: true, disable: true, restore: true)
@@ -122,7 +130,20 @@ public final class StatusModel: ObservableObject {
         self.sleeper = sleeper
     }
 
-    public var menu: MenuAvailability { MenuAvailability.from(phase, reachable: reachable, busy: busy) }
+    public var menu: MenuAvailability { MenuAvailability.from(phase, reachable: reachable, busy: busy || daemonBusy, stalled: stalledState) }
+
+    /// 后台回过“忙”（有别的操作在进行）时的状态；状态变了就清掉。
+    @Published public private(set) var daemonBusy = false
+    private var busyAtState: String?
+
+    /// 状态停在 ENABLING 或 RESTORING、本应用没有操作在进行、后台也没说忙：上一次操作没有做完。
+    public var stalledState: String? {
+        guard reachable, !busy, !daemonBusy, let s = status?.state, s == "ENABLING" || s == "RESTORING" else { return nil }
+        return s
+    }
+
+    /// 停在中间状态时的说明。
+    public var stalledNote: String? { stalledState == nil ? nil : L10n.interrupted }
 
     /// 签名校验未启用的说明（status 的 security）；启用了校验时为空。
     public var securityNote: String? {
@@ -212,6 +233,7 @@ public final class StatusModel: ObservableObject {
     }
 
     func apply(_ st: DaemonStatus) {
+        if daemonBusy && st.state != busyAtState { daemonBusy = false; busyAtState = nil }
         status = st
         reachable = true
         connection = nil
@@ -267,6 +289,8 @@ public final class StatusModel: ObservableObject {
             }
         case .busy(let t):
             phase = before
+            daemonBusy = true
+            busyAtState = status?.state
             notice = Notice(kind: .error, text: t.raw.isEmpty ? ErrorText(raw: L10n.busy) : t)
         case let .invalid(t), let .failed(_, t):
             phase = before

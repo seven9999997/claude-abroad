@@ -195,3 +195,35 @@ func fakeBackend(state: Box<String>, enable: @escaping @Sendable (HTTPRequest) -
     await m2.refresh()
     #expect(m2.phase == .offline && m2.protectionNote == nil)
 }
+
+/// 停在中间状态、没有操作在进行：给出说明和入口；确实有操作在进行（本应用的，或后台回了“忙”）时仍然不可点。
+@MainActor
+@Test func stalledStates() async {
+    let state = Box("ENABLING")
+    let busyResp = Box(false)
+    let t = FakeTransport { req in
+        switch req.path {
+        case "/v1/status": return json(200, statusJSON(state: state.v, gate: false))
+        case "/v1/main-proxy/exit": return json(200, "{\"available\":false}")
+        default: return busyResp.v ? json(409, "{\"error\":\"有别的操作在进行\"}") : json(200, statusJSON(state: "ENABLED", gate: true))
+        }
+    }
+    let m = StatusModel(client: APIClient(transport: t), sleeper: NoSleep())
+    await m.refresh()
+    #expect(m.phase == .checking && m.stalledNote == L10n.interrupted)
+    #expect(m.menu == MenuAvailability(enable: true, disable: false, restore: true))
+    state.v = "RESTORING"
+    await m.refresh()
+    #expect(m.menu == MenuAvailability(enable: false, disable: false, restore: true) && m.stalledNote != nil)
+    // 后台说忙（别的客户端的操作正在进行）：不可点，状态变了才恢复。
+    busyResp.v = true
+    await m.restore()
+    #expect(m.daemonBusy && m.stalledNote == nil && m.menu == MenuAvailability(enable: false, disable: false, restore: false))
+    #expect(m.notice?.text.raw == "有别的操作在进行")
+    state.v = "RESTORED"
+    await m.refresh()
+    #expect((m.daemonBusy && m.phase == .home && m.menu.enable) == false)
+    // 本应用自己的操作正在进行：不可点。
+    #expect(MenuAvailability.from(.checking, reachable: true, busy: true, stalled: nil) == MenuAvailability(enable: false, disable: false, restore: false))
+    #expect(MenuAvailability.from(.checking, reachable: true, busy: true, stalled: "ENABLING") == MenuAvailability(enable: false, disable: false, restore: false))
+}

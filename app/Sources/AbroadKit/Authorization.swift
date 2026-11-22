@@ -9,6 +9,12 @@ public enum SensitiveOperation: Sendable, Equatable {
     case mainApply
     case regionSet(timezone: String, lang: String)
     case regionAuto
+    case addSourceFile(path: String, name: String) // 本地配置文件，或存了内容的临时文件
+    case addSourceURLFile(path: String, name: String, viaHost: Bool) // 存了订阅地址的临时文件
+    case addNodeFile(path: String, name: String) // 存了单个节点的临时文件
+    case removeSource(id: String)
+    case mainUse(node: String, via: [String]) // 节点 ID
+    case lanConfirm(node: String)
 
     /// 在终端里执行的完整命令（不带 --yes：终端里照样打印预览、让用户确认）。
     public var terminalCommand: String {
@@ -18,6 +24,13 @@ public enum SensitiveOperation: Sendable, Equatable {
         case .mainApply: return "sudo abroad main apply"
         case let .regionSet(tz, lang): return "sudo abroad region set \(Self.quote(tz)) \(Self.quote(lang))"
         case .regionAuto: return "sudo abroad region auto"
+        case let .addSourceFile(path, name): return "sudo abroad main add-source --file \(Self.quote(path)) --name \(Self.quote(name))"
+        case let .addSourceURLFile(path, name, viaHost):
+            return "sudo abroad main add-source --url-file \(Self.quote(path)) --name \(Self.quote(name))" + (viaHost ? " --via-host" : "")
+        case let .addNodeFile(path, name): return "sudo abroad main add-node --file \(Self.quote(path)) --name \(Self.quote(name))"
+        case let .removeSource(id): return "sudo abroad main rm-source \(Self.quote(id))"
+        case let .mainUse(node, via): return (["sudo abroad main use", Self.quote(node)] + via.map { "--via " + Self.quote($0) }).joined(separator: " ")
+        case let .lanConfirm(node): return "sudo abroad main confirm-lan \(Self.quote(node))"
         }
     }
 
@@ -44,5 +57,16 @@ public struct TerminalAuthorizer: Authorizer {
     public init() {}
     public func authorize(_ op: SensitiveOperation, reason: ErrorText) async -> AuthorizationResult {
         .runInTerminal(command: op.terminalCommand)
+    }
+}
+
+/// 终端退路给用户看的内容：一条或几条命令；用到临时文件时附上路径（命令执行后或取消时删除）。
+public struct TerminalPrompt: Sendable, Equatable {
+    public var commands: [String]
+    public var tempFile: URL?
+
+    public init(commands: [String], tempFile: URL? = nil) {
+        self.commands = commands
+        self.tempFile = tempFile
     }
 }

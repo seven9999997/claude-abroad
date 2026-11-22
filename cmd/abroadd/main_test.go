@@ -111,3 +111,44 @@ func TestRegionVMSkip(t *testing.T) {
 		t.Fatal("不带参数时应接虚拟机一侧")
 	}
 }
+
+// M5-8：--fake-main-proxy 接上假的出口检查和假虚拟机：应用主代理后引导的“主代理”一步完成；
+// 不和 --fake-system 一起用时拒绝。
+func TestFakeMainProxyRun(t *testing.T) {
+	var stderr bytes.Buffer
+	if rc := run([]string{"--fake-main-proxy", "--state-dir", filepath.Join(t.TempDir(), "x")}, &stderr, nil); rc != 2 || !strings.Contains(stderr.String(), "--fake-system") {
+		t.Fatalf("单独用应拒绝：%d %s", rc, stderr.String())
+	}
+	dir := filepath.Join(t.TempDir(), "st")
+	rc := run([]string{"--fake-system", "--fake-main-proxy", "--state-dir", dir}, &stderr, func(s string, stop func()) {
+		defer stop()
+		c := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", s)
+		}}}
+		do := func(method, path string) (int, string) {
+			req, _ := http.NewRequest(method, "http://abroadd"+path, nil)
+			resp, err := c.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			b, _ := io.ReadAll(resp.Body)
+			return resp.StatusCode, string(b)
+		}
+		if _, b := do("GET", "/v1/setup"); !strings.Contains(b, `{"id":"main_proxy","done":false}`) {
+			t.Errorf("应用主代理之前：%s", b)
+		}
+		if code, b := do("POST", "/v1/main-proxy/apply"); code != 200 {
+			t.Errorf("应用主代理：%d %s", code, b)
+		}
+		if _, b := do("GET", "/v1/setup"); !strings.Contains(b, `{"id":"main_proxy","done":true}`) {
+			t.Errorf("应用主代理之后：%s", b)
+		}
+		if code, b := do("POST", "/v1/enable"); code != 200 && code != 409 {
+			t.Errorf("启用：%d %s", code, b)
+		}
+	})
+	if rc != 0 {
+		t.Fatalf("退出码 %d：%s", rc, stderr.String())
+	}
+}

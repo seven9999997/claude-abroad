@@ -28,26 +28,31 @@ cleanup() {
 trap cleanup EXIT
 
 go build -o "${TMP}/abroadd" ./cmd/abroadd
-"${TMP}/abroadd" --fake-system --state-dir "${ST}" 2>"${TMP}/abroadd.log" &
+"${TMP}/abroadd" --fake-system --fake-main-proxy --state-dir "${ST}" 2>"${TMP}/abroadd.log" &
 PID=$!
 SOCK="${ST}/api.sock"
 for _ in $(seq 1 100); do [[ -S "${SOCK}" ]] && break; sleep 0.1; done
 [[ -S "${SOCK}" ]] || { echo "abroadd 没有起来：" >&2; cat "${TMP}/abroadd.log" >&2; exit 1; }
-echo "abroadd 已启动（pid ${PID}，--fake-system）"
+echo "abroadd 已启动（pid ${PID}，--fake-system --fake-main-proxy）"
 
 cd app
 swift build
 # Command Line Tools 里的 swift-build 偶尔编测试时找不到 swift-testing 的宏插件（“plugin for module 'TestingMacros'
-# not found”，同样的源码重跑就过）。只对这一种错误重跑，最多 3 次，并打印出来；其他失败照常失败。
-for try in 1 2 3; do
+# not found”，同样的源码重跑就过）。只对这一种错误重跑，最多 5 次，并在最后打印一共重跑了几次（看它是不是在变严重）；
+# 其他失败照常失败。
+MAX=5
+retries=0
+for try in $(seq 1 ${MAX}); do
   set +e
   ABROAD_SOCKET="${SOCK}" swift test >"${TMP}/swift-test.txt" 2>&1
   rc=$?
   set -e
-  if [[ ${rc} -ne 0 ]] && grep -q "plugin for module 'TestingMacros' not found" "${TMP}/swift-test.txt" && [[ ${try} -lt 3 ]]; then
+  if [[ ${rc} -ne 0 ]] && grep -q "plugin for module 'TestingMacros' not found" "${TMP}/swift-test.txt" && [[ ${try} -lt ${MAX} ]]; then
+    retries=$((retries + 1))
     echo "（第 ${try} 次：编测试时没找到 swift-testing 的宏插件，重跑）"
     continue
   fi
   cat "${TMP}/swift-test.txt"
+  echo "测试宏插件的偶发错误：重跑了 ${retries} 次（上限 $((MAX - 1)) 次）"
   exit ${rc}
 done

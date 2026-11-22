@@ -16,12 +16,77 @@ struct IntegrationTests {
         #expect(["RESTORED", "DISABLED", "ENABLED"].contains(st.state))
         #expect(st.security?.callerVerification == "disabled")
         guard case .ok(let e) = await client.mainExit() else { Issue.record("读出口信息失败"); return }
-        // 假系统没有出口基准：如实说明。
-        #expect(e.available == false && !(e.note ?? "").isEmpty)
+        // 应用主代理之前没有基准（如实说明）；之后是假检查给的文档地址。
+        if e.available {
+            #expect(e.ip == "203.0.113.7" && e.country == "US")
+        } else {
+            let note = e.note ?? ""
+            #expect(note.isEmpty == false)
+        }
+    }
+
+    /// M5-8 验收 f：走和界面相同的视图模型（不经过任何视图）：引导的进度 → 添加本地配置文件形式的来源并列出 →
+    /// 选择节点 → 应用主代理（开发模式下属主就是完全信任的调用方）→ 完成引导 → 启用。
+    /// 假系统里没有的环节如实跳过：订阅的真实抓取（假系统不抓取，不在这里测）。
+    @MainActor
+    @Test func setupFlowThroughModels() async throws {
+        let setup = SetupModel(client: client, sleeper: TaskSleeper())
+        await setup.refresh()
+        #expect(setup.reachable)
+        if setup.completed { return } // 同一个 abroadd 上已经走过（测试顺序不保证）
+        await setup.next()
+        #expect(setup.step == .mainProxy)
+        let mainDone = setup.progress?.steps?.first(where: { $0.id == "main_proxy" })?.done ?? false
+        let main = MainProxyModel(client: client)
+        if mainDone == false {
+            try await IntegrationTests.applyMainProxy(main)
+        }
+        await setup.recheck()
+        #expect(setup.canAdvance, "应用主代理之后后台说第三步完成")
+        await setup.next()
+        #expect(setup.step == .done && setup.completed && setup.shouldShow == false)
+        // 启用。
+        let st = StatusModel(client: client, sleeper: TaskSleeper())
+        await st.refresh()
+        if st.phase != .abroad {
+            await st.enable()
+            if st.pendingConfirm != nil { await st.answerConfirm(true) }
+        }
+        #expect(st.phase == .abroad, "启用后应是已出国：\(String(describing: st.notice))")
+        await st.disable()
+    }
+
+    /// 添加一个本地配置文件形式的来源、选节点、应用主代理（有基准之后其他测试才能启用）。
+    @MainActor
+    static func applyMainProxy(_ main: MainProxyModel) async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("abroad-it-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("nodes.yaml")
+        try "proxies:\n  - {name: it-exit, type: ss, server: 8.8.4.20, port: 8388, cipher: aes-128-gcm, password: itpass}\n".write(to: file, atomically: true, encoding: .utf8)
+        await main.refresh()
+        main.addKind = .localFile
+        main.formFile = file
+        main.formName = "集成测试"
+        await main.submitAdd()
+        #expect(main.notice == nil, "添加来源：\(String(describing: main.notice))")
+        #expect(main.sources.contains { $0.name == "集成测试" && $0.nodeCount == 1 })
+        let node = try #require(main.nodes.first { $0.name == "it-exit" })
+        main.selectedExit = node.id
+        await main.apply()
+        if main.pendingConfirm != nil { await main.answerConfirm(true) }
+        guard case .succeeded(let country, _) = main.applyState else {
+            Issue.record("应用主代理：\(main.applyState)"); return
+        }
+        #expect(country == "US")
     }
 
     @MainActor
     @Test func enableDisableWithEvents() async throws {
+        // 启用要有出口基准：还没应用过主代理时先应用（测试顺序不保证）。
+        if case .ok(let sv) = await client.setup(), sv.steps?.first(where: { $0.id == "main_proxy" })?.done != true {
+            try await IntegrationTests.applyMainProxy(MainProxyModel(client: client))
+        }
         let m = StatusModel(client: client, sleeper: TaskSleeper())
         m.start()
         defer { m.stop() }
@@ -47,6 +112,9 @@ struct IntegrationTests {
         let got = Got()
         let task = Task {
             try await t.events(path: "/v1/events") { _ in got.lock.lock(); got.n += 1; got.lock.unlock() }
+        }
+        if case .ok(let sv) = await client.setup(), sv.steps?.first(where: { $0.id == "main_proxy" })?.done != true {
+            try await IntegrationTests.applyMainProxy(MainProxyModel(client: client))
         }
         try await Task.sleep(nanoseconds: 300_000_000)
         var out: Outcome<DaemonStatus> = await client.enable()

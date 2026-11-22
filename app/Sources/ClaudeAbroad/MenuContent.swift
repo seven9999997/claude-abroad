@@ -7,16 +7,19 @@ struct MenuContent: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Text(L10n.appName + "：" + model.phase.title)
+        Text(L10n.titleLine(model.phase.title))
         if let c = model.connectionText {
             Text(c)
         }
         if let e = model.exitInfo, model.reachable {
             if e.available {
-                Text(L10n.mainExit + "：" + e.ip + "（" + e.place + "）")
+                Text(L10n.exitLine(e.ip, e.place))
             } else {
-                Text(L10n.mainExit + "：" + e.note)
+                Text(L10n.exitNoteLine(e.note))
             }
+        }
+        if let s = model.stalledNote {
+            Text(s)
         }
         if let p = model.protectionNote {
             Text(p)

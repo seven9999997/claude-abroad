@@ -38,6 +38,7 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 	fs.SetOutput(stderr)
 	stateDir := fs.String("state-dir", "", "状态目录（0700；开发模式用当前用户）")
 	fake := fs.Bool("fake-system", false, "开发用：整套系统用内存里的假实现，不碰本机")
+	fakeMain := fs.Bool("fake-main-proxy", false, "开发用（只和 --fake-system 一起）：接上假的出口检查和假虚拟机，可以走完应用主代理、完成引导、启用（应用的集成测试用）")
 	vmDir := fs.String("vm-dir", "", "真实模式：abroad-vm 的状态目录（ctl.sock、host.sock、data.sock；M2 阶段虚拟机由外部启动）")
 	pfUser := fs.String("pf-user", daemon.DefaultAllowUser, "真实模式：pf 放行的用户（abroad-vm 以它运行）")
 	mainStore := fs.String("main-proxy-store", "", "真实模式：主代理存储（managedproxy 的 profile 目录）")
@@ -50,6 +51,10 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 	}
 	if fs.NArg() != 0 {
 		fmt.Fprintln(stderr, "多余的参数")
+		return 2
+	}
+	if *fakeMain && !*fake {
+		fmt.Fprintln(stderr, "abroadd：--fake-main-proxy 只能和 --fake-system 一起用")
 		return 2
 	}
 	if !*fake {
@@ -69,8 +74,11 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 		return 1
 	}
 	logger := log.New(&redact.Writer{W: stderr}, "abroadd ", log.LstdFlags)
-	sys := daemon.NewFakeSystem()
-	d, err := daemon.Start(context.Background(), daemon.Options{StateDir: *stateDir, Sys: sys.System(), Log: logger})
+	sys := daemon.NewFakeSystem().System()
+	if *fakeMain {
+		sys = daemon.WithFakeMainProxy(sys, *stateDir)
+	}
+	d, err := daemon.Start(context.Background(), daemon.Options{StateDir: *stateDir, Sys: sys, Log: logger})
 	if err != nil {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)
 		return 1

@@ -55,7 +55,7 @@ import Testing
     guard case .needsConfirm(let p) = await c.call(HTTPRequest(method: "PUT", path: "/v1/region", body: Data("{\"mode\":\"exit\"}".utf8))) as Outcome<DaemonStatus> else {
         Issue.record("应要确认"); return
     }
-    #expect(!p.isUsed)
+    #expect((p.isUsed) == false)
     guard case .ok = await c.confirm(p, as: DaemonStatus.self) else { Issue.record("确认应成功"); return }
     #expect(p.isUsed)
     let sent = try #require(t.requests.last)

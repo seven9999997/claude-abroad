@@ -36,22 +36,31 @@ struct ConfirmSheet: View {
 }
 
 struct TerminalSheet: View {
-    let command: String
+    let prompt: TerminalPrompt
     let close: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.terminalTitle).font(.headline)
-            Text(L10n.terminalDetail)
-            Text(command).font(.body.monospaced()).textSelection(.enabled)
-                .padding(8).background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.12)))
+            if let f = prompt.tempFile {
+                Text(L10n.terminalStepWrite).bold()
+                Text(L10n.terminalTempFile)
+                Text(f.path).font(.callout.monospaced()).textSelection(.enabled)
+                Text(L10n.terminalStepRun).bold()
+            } else {
+                Text(L10n.terminalDetail)
+            }
+            ForEach(prompt.commands, id: \.self) { c in
+                Text(c).font(.body.monospaced()).textSelection(.enabled)
+                    .padding(8).background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.12)))
+            }
             HStack {
                 Spacer()
                 Button(L10n.copyCommand) {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(command, forType: .string)
+                    NSPasteboard.general.setString(prompt.commands.joined(separator: "\n"), forType: .string)
                 }
-                Button(L10n.close) { close() }.keyboardShortcut(.defaultAction)
+                Button(L10n.terminalDone) { close() }.keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)

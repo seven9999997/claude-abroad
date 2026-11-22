@@ -13,6 +13,9 @@ struct HomeView: View {
             if let c = model.connectionText {
                 Banner(title: c, detail: L10n.backendDownDetail, symbol: "bolt.horizontal.circle")
             }
+            if let s = model.stalledNote {
+                Banner(title: model.phase.title, detail: s, symbol: "pause.circle")
+            }
             if let p = model.protectionNote {
                 Banner(title: L10n.phaseError, detail: p, symbol: "exclamationmark.shield")
             }
@@ -37,7 +40,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: terminalShown) {
             if let cmd = model.terminalCommand {
-                TerminalSheet(command: cmd) { model.dismissTerminal() }
+                TerminalSheet(prompt: TerminalPrompt(commands: [cmd])) { model.dismissTerminal() }
             }
         }
     }
@@ -67,7 +70,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 4) {
                 if let e = model.exitInfo, e.available {
                     Text(e.ip).font(.title3.monospaced())
-                    Text(e.place + (e.timezone.isEmpty ? "" : "，" + e.timezone)).foregroundStyle(.secondary)
+                    Text(L10n.placeLine(e.place, e.timezone)).foregroundStyle(.secondary)
                 } else {
                     Text(model.exitInfo?.note ?? L10n.mainExitNone).foregroundStyle(.secondary)
                 }
@@ -80,10 +83,10 @@ struct HomeView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 4) {
                 if let reasons = st.gate.reasons, !reasons.isEmpty, model.phase != .abroad {
-                    Text(L10n.gateReasons + "：" + reasons.joined(separator: "、"))
+                    Text(L10n.gateReasonsLine(reasons))
                 }
                 if let t = st.region?.target {
-                    Text(L10n.region + "：" + t.timezone + "，" + t.lang)
+                    Text(L10n.regionLine(t.timezone, t.lang))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
