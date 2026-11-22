@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"net/netip"
 	"os"
 	"sync"
@@ -76,11 +75,16 @@ func startDirect(o directOpts, dialer directdial.BoundDialer, logf func(string, 
 	if dns := o.dns; len(dns) > 0 {
 		srv.DNSServers = func() []netip.Addr { return dns }
 	}
+	pl, ok := ln.(*vmhost.PrivateListener)
+	if !ok {
+		ln.Close()
+		return nil, nil, errors.New("直连拨号模块的监听不是 unix socket")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_ = srv.Serve(ctx, ln.(*net.UnixListener))
+		_ = srv.Serve(ctx, pl.UnixListener)
 	}()
 	logf("直连拨号模块已启动（socket %s，本机 DNS %d 个，允许的对端 uid %d）", o.sock, len(o.dns), want)
 	var once sync.Once

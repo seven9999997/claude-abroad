@@ -556,6 +556,7 @@ func daemonSimCmd(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	timeout := fs.Duration("timeout", 15*time.Second, "单步时限")
 	multi := fs.Bool("multi", false, "M3-7：多出口多应用的阶段（需要 abroad-vm 带 --direct-sock、开发出口 wg-a、clash-b）")
 	directSock := fs.String("direct-sock", "", "--multi：abroad-vm 的直连拨号模块 socket")
+	directTarget := fs.String("direct-target", "", "--multi：直连应用连的 IPv4:端口（默认 1.1.1.1:443；本机不能经物理网卡到公网时用局域网目标，端口不能是 443）")
 	exitsFile := fs.String("exits", "", "M4-8：分流出口的阶段，参数是 agent /v1/dev/exit-peer?action=up 的应答文件（含测试密钥，0600）")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -567,6 +568,15 @@ func daemonSimCmd(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if err := daemonsim.EnsureFresh(*stateDir); err != nil {
 		fmt.Fprintln(stderr, "abroad-dev daemon-sim:", err)
 		return 2
+	}
+	var dtarget netip.AddrPort
+	if *directTarget != "" {
+		t, err := netip.ParseAddrPort(*directTarget)
+		if err != nil || !t.Addr().Is4() || t.Port() == 0 {
+			fmt.Fprintln(stderr, "abroad-dev daemon-sim: --direct-target 要是 IPv4:端口")
+			return 2
+		}
+		dtarget = t
 	}
 	var target netip.AddrPort
 	if *udpTarget != "" {
@@ -598,7 +608,7 @@ func daemonSimCmd(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return 0
 	}
 	if *multi {
-		mrep := daemonsim.RunMulti(ctx, daemonsim.MultiConfig{Config: base, DirectSock: *directSock})
+		mrep := daemonsim.RunMulti(ctx, daemonsim.MultiConfig{Config: base, DirectSock: *directSock, DirectTarget: dtarget})
 		b, _ := json.Marshal(mrep)
 		fmt.Fprintln(stdout, string(b))
 		if !mrep.OK {

@@ -52,7 +52,7 @@ stop_vm() {
   if kill -0 "${VM_PID}" 2>/dev/null; then
     local name
     name="$(ps -p "${VM_PID}" -o comm= 2>/dev/null || true)"
-    if [[ "${name}" == *abroad-vm ]]; then
+    if [[ "${name}" == *abroad-vm || "${name}" == *abroad-vm-dev ]]; then
       kill -TERM "${VM_PID}" 2>/dev/null || true
       for _ in $(seq 1 15); do
         kill -0 "${VM_PID}" 2>/dev/null || break
@@ -128,26 +128,48 @@ env_snap() {
 }
 ENV0="$(env_snap)"
 
-# 前置检查（architect 审 M3-4）：本机若拒绝“绑物理网卡”的连接（例如别的代理软件开了“所有流量走隧道”），
-# 虚拟机出站和直连都会以难懂的方式失败。先用系统自带的 nc 绑定物理网卡试连一次（只是一次连接尝试，不改设置）。
-bound_iface_check() {
+# 前置检查（architect 审 M3-4；2026-11-22 判 W-2a 后改成局域网目标）：本机若拒绝“绑物理网卡”的连接，
+# 虚拟机出站和直连都会以难懂的方式失败。用系统自带的 nc 绑定物理网卡试连（只是连接尝试，不改设置）：
+#   - 局域网目标（必须通过）：VMUP_LAN_TARGET=<IPv4>:<端口>，不给时用默认网关上第一个能连上的 TCP 端口（不用 443）；
+#   - 公网 1.1.1.1:443（只记录）：连不上时 PUBLIC_OK=0，后面要经物理网卡到公网的几项按“被本机环境挡住”记录，不算失败。
+# 证据里不写局域网目标的地址，只写它是怎么选出来的。
+phys_iface() {
   local ifc
   ifc="$(route -n get default 2>/dev/null | awk '/interface:/ {print $2}')"
-  case "${ifc}" in utun*|"") ifc="$(networksetup -listallhardwareports 2>/dev/null | awk '/Device: en/ {print $2; exit}')" ;; esac
-  if nc -z -G 3 -b "${ifc}" 1.1.1.1 443 >/dev/null 2>&1; then
-    echo "ok ${ifc}"
-  else
-    echo "blocked ${ifc}"
-  fi
+  case "${ifc}" in utun*|"") ifc="$(for i in en0 en1 en2 en3; do ipconfig getifaddr "$i" >/dev/null 2>&1 && { echo "$i"; break; }; done)" ;; esac
+  echo "${ifc}"
+}
+bound_ok() { nc -z -G 3 -b "$1" "$2" "$3" >/dev/null 2>&1; } # bound_ok <网卡> <地址> <端口>
+lan_target() { # 输出 “地址:端口 来源”；找不到时输出空
+  local ifc=$1 gw p
+  if [[ -n "${VMUP_LAN_TARGET:-}" ]]; then echo "${VMUP_LAN_TARGET} 环境变量 VMUP_LAN_TARGET"; return; fi
+  gw="$(route -n get -ifscope "${ifc}" default 2>/dev/null | awk '/gateway:/ {print $2}')"
+  [[ "${gw}" =~ ^(10|172|192)\. ]] || return 0
+  for p in 80 53 22 8080 8000 8443 23 5000; do
+    if bound_ok "${ifc}" "${gw}" "${p}"; then echo "${gw}:${p} 默认网关的 TCP ${p} 端口"; return; fi
+  done
 }
 section "前置检查：绑物理网卡的连接"
-BIC="$(bound_iface_check)"
-if [[ "${BIC}" == blocked* ]]; then
-  log "本机环境拒绝绑物理网卡（${BIC#blocked }）的连接，可能是别的代理软件（例如 Clash 的 TUN 或“所有流量走隧道”）的设置。"
-  log "虚拟机出站和直连都要绑物理网卡，后面的阶段会失败。请先关掉那个设置再跑。（只读检查，没有做任何改动）"
-  [[ "${VMUP_IGNORE_BOUND_CHECK:-}" == 1 ]] || fail "前置检查：本机环境拒绝绑物理网卡的连接"
+IFC="$(phys_iface)"
+LT="$(lan_target "${IFC}")"
+LAN_TARGET="${LT%% *}"
+if [[ -z "${LAN_TARGET}" ]]; then
+  log "找不到可用的局域网目标：默认网关上 80、53、22、8080、8000、8443、23、5000 都连不上。请用 VMUP_LAN_TARGET=<局域网 IPv4>:<端口（不是 443）> 指定一个能连上的。"
+  fail "前置检查：没有局域网目标"
+fi
+[[ "${LAN_TARGET##*:}" != 443 ]] || fail "前置检查：局域网目标的端口不能是 443（9c 的直连要先发非 TLS 的字节）"
+if bound_ok "${IFC}" "${LAN_TARGET%:*}" "${LAN_TARGET##*:}"; then
+  ok "绑物理网卡（${IFC}）连局域网目标正常（目标：${LT#* }）"
 else
-  ok "绑物理网卡（${BIC#ok }）的连接正常"
+  log "本机环境拒绝绑物理网卡（${IFC}）连局域网目标（${LT#* }）。（只读检查，没有做任何改动）"
+  [[ "${VMUP_IGNORE_BOUND_CHECK:-}" == 1 ]] || fail "前置检查：本机环境拒绝绑物理网卡的连接"
+fi
+if bound_ok "${IFC}" 1.1.1.1 443; then
+  PUBLIC_OK=1
+  ok "绑物理网卡（${IFC}）连公网正常"
+else
+  PUBLIC_OK=0
+  log "注意：本机环境拒绝绑物理网卡连公网（可能是 VPN 或代理软件的“所有流量走隧道”）。经物理网卡到公网的几项（g、4g-i、4g-iii-a、4g-iii-c）按“被本机环境挡住”记录，只核对策略放行、没有向外拨号成功；不改任何设置。"
 fi
 [[ "${1:-}" == "--precheck-only" ]] && exit 0
 
@@ -418,16 +440,24 @@ viaNode() {
   if ((wantDeny < 0)); then :
   elif ((wantDeny == 0)); then ((dd == 0)) || fail "${desc} 的 policy_denied 增量应为 0（实际 ${dd}）"
   else ((dd >= wantDeny)) || fail "${desc} 的 policy_denied 增量应 ≥ ${wantDeny}（实际 ${dd}）"; fi
-  if ((wantOK == 0)); then ((dk == 0)) || fail "${desc} 的 dial_ok 增量必须为 0（实际 ${dk}）"
+  if ((wantOK < 0)); then : # 本机环境对公网时通时不通：不判 dial_ok，由调用方按结果记录
+  elif ((wantOK == 0)); then ((dk == 0)) || fail "${desc} 的 dial_ok 增量必须为 0（实际 ${dk}）"
   else ((dk >= wantOK)) || fail "${desc} 的 dial_ok 增量应 ≥ ${wantOK}（实际 ${dk}）"; fi
+  LAST_DK=${dk}
   [[ "$(stat_of "${a}" bind_failed)" == "0" ]] || fail "bind_failed 应为 0"
 }
 S0="$(netstats)"; log "netstats 起点：${S0}"
 PUB=223.5.5.5
-viaNode "g. 节点 ${PUB}:53（公网 IP）" "${PUB}" 53 0 1
+if [[ ${PUBLIC_OK} -eq 1 ]]; then
+  viaNode "g. 节点 ${PUB}:53（公网 IP）" "${PUB}" 53 0 1
+else # 本机环境限制公网：策略必须放行（policy_denied +0）；拨号成不成功取决于本机环境，按结果记录
+  viaNode "g. 节点 ${PUB}:53（公网 IP；本机环境限制公网）" "${PUB}" 53 0 -1
+fi
 IFACE="$(stat_of "$(netstats)" interface)"
 [[ -n "${IFACE}" ]] || fail "出站后 interface 应非空"
-ok "g. 虚拟机 TCP 经绑定物理网卡（${IFACE}）出站"
+if [[ ${PUBLIC_OK} -eq 1 ]]; then ok "g. 虚拟机 TCP 经绑定物理网卡（${IFACE}）出站"
+elif ((LAST_DK >= 1)); then ok "g. 虚拟机 TCP 经绑定物理网卡（${IFACE}）出站（本机环境这次放行了这个目标）"
+else log "g. 被本机环境挡住：策略放行、拨号绑的是物理网卡（${IFACE}），本机拒绝了到公网的连接（不算失败）"; fi
 # 原 h（节点域名经直连 DoH 解析）：M2-1b 起节点域名只经网关 DNS 解析，开放模式下网关 DNS 一律 REFUSED，
 # 改由 6c 的 4g-iii 在收紧模式下覆盖。
 viaNode "j1. 节点 10.0.0.1:80（私有）" 10.0.0.1 80 1 0
@@ -612,8 +642,15 @@ viaHop() {
     (($(ext_delta "${HB}" "${HA}") == 0 && $(dh hop_denied) >= 1)) || fail "$1：不应向外拨号，hop_denied 应增长"
   fi
 }
-viaHop "4g-i. 节点 223.5.5.5:443（字面量第一跳）" 223.5.5.5 443 yes
-ok "4g-i. 第一跳放行"
+if [[ ${PUBLIC_OK} -eq 1 ]]; then
+  viaHop "4g-i. 节点 223.5.5.5:443（字面量第一跳）" 223.5.5.5 443 yes
+  ok "4g-i. 第一跳放行"
+else
+  hopcase "4g-i. 节点 223.5.5.5:443（字面量第一跳；本机环境限制公网）" 223.5.5.5 443
+  (($(dh hop_denied) == 0)) || fail "4g-i. 第一跳不应被 hop_denied 拒绝"
+  if (($(ext_delta "${HB}" "${HA}") >= 1)); then ok "4g-i. 第一跳放行，向外拨号成功（本机环境这次放行了这个目标）"
+  else log "4g-i. 被本机环境挡住：第一跳没有被收紧策略拒绝（hop_denied +0），本机拒绝了到公网的连接（不算失败）"; fi
+fi
 viaHop "4g-ii. 节点 223.5.5.5:53（端口不符）" 223.5.5.5 53 no
 viaHop "4g-ii. 节点 119.29.29.29:443（不在路线上）" 119.29.29.29 443 no
 ok "4g-ii. 端口不符、不在路线上的公网目标都被拒（hop_denied 增长，没有向外拨号）"
@@ -635,14 +672,28 @@ term_wait_vm
 start_vm guest/out "${STATE}" --first-hop dns.alidns.com:443
 wait_health 90 || fail "4g-iii：90 秒内 health 不通"
 for _ in $(seq 1 40); do [[ "$(json "$(health)" 'd["engines"]["sing-box"]["state"]')" == "running" ]] && break; sleep 0.25; done
-hopcase "4g-iii-a. 节点 dns.alidns.com:443（登记的域名第一跳）" dns.alidns.com 443
-(($(dh dns_answered) >= 1 && $(dh resolver_dial_ok) >= 1 && $(ext_delta "${HB}" "${HA}") >= 1 && $(dh hop_denied) == 0)) ||
-  fail "4g-iii-a. 网关应答（dns_answered 增长）、abroad-vm 经 DoH 解析（resolver_dial_ok 增长）、向外拨号成功、hop_denied +0"
-ok "4g-iii-a. mihomo 用网关（裸 IP 的 UDP nameserver）解析节点域名，答出的地址放行（实测 a 成立）"
-hopcase "4g-iii-c. 节点 dns.alidns.com:853（端口不符）" dns.alidns.com 853
-(($(dh dns_answered) >= 1 && $(dh hop_denied) >= 1 && $(ext_delta "${HB}" "${HA}") == 0)) ||
-  fail "4g-iii-c. 域名照样应答，但端口不属于第一跳：hop_denied 增长，没有向外拨号"
-ok "4g-iii-c. 答过的地址只在第一跳的端口上放行"
+if [[ ${PUBLIC_OK} -eq 1 ]]; then
+  hopcase "4g-iii-a. 节点 dns.alidns.com:443（登记的域名第一跳）" dns.alidns.com 443
+  (($(dh dns_answered) >= 1 && $(dh resolver_dial_ok) >= 1 && $(ext_delta "${HB}" "${HA}") >= 1 && $(dh hop_denied) == 0)) ||
+    fail "4g-iii-a. 网关应答（dns_answered 增长）、abroad-vm 经 DoH 解析（resolver_dial_ok 增长）、向外拨号成功、hop_denied +0"
+  ok "4g-iii-a. mihomo 用网关（裸 IP 的 UDP nameserver）解析节点域名，答出的地址放行（实测 a 成立）"
+  hopcase "4g-iii-c. 节点 dns.alidns.com:853（端口不符）" dns.alidns.com 853
+  (($(dh dns_answered) >= 1 && $(dh hop_denied) >= 1 && $(ext_delta "${HB}" "${HA}") == 0)) ||
+    fail "4g-iii-c. 域名照样应答，但端口不属于第一跳：hop_denied 增长，没有向外拨号"
+  ok "4g-iii-c. 答过的地址只在第一跳的端口上放行"
+else # 网关代解析要经物理网卡做 DoH（公网），被本机环境挡住：只核对登记的域名没有被拒绝、没有向外拨号成功
+  hopcase "4g-iii-a. 节点 dns.alidns.com:443（登记的域名第一跳；本机环境限制公网）" dns.alidns.com 443
+  (($(dh dns_refused) == 0 && $(dh hop_denied) == 0)) || fail "4g-iii-a. 登记的域名不应被网关拒绝（dns_refused +0），不应有 hop_denied"
+  if (($(dh dns_answered) >= 1)); then
+    ok "4g-iii-a. 网关应答了登记的域名（本机环境这次放行了 DoH），向外拨号 +$(ext_delta "${HB}" "${HA}")"
+    hopcase "4g-iii-c. 节点 dns.alidns.com:853（端口不符）" dns.alidns.com 853
+    (($(dh hop_denied) >= 1 && $(ext_delta "${HB}" "${HA}") == 0)) || fail "4g-iii-c. 端口不属于第一跳：hop_denied 增长，没有向外拨号"
+    ok "4g-iii-c. 答过的地址只在第一跳的端口上放行"
+  else
+    log "4g-iii-a. 被本机环境挡住：登记的域名被网关接受（dns_refused +0），abroad-vm 的 DoH 解析经物理网卡到公网被本机拒绝（dns_failed +$(dh dns_failed)），不算失败"
+    log "4g-iii-c. 被本机环境挡住：依赖 4g-iii-a 的解析结果，跳过"
+  fi
+fi
 term_wait_vm
 ok "6c. 收紧模式一轮完成，abroad-vm 以 0 退出"
 
@@ -1060,7 +1111,10 @@ up9c wg-a UP9_A || fail "9c. 开发上游 wg-a 没有起来"
 up9c clash-b UP9_B || fail "9c. 开发上游 clash-b 没有起来"
 NODES9="${OUT}/dev-nodes-9c-${TS}.yaml"
 printf 'proxies:\n - {name: exit, type: socks5, server: 127.0.0.1, port: %s}\n' "${UP9_MAIN}" >"${NODES9}"
-DSOCK="${OUT}/d9c.sock"
+# 直连 socket 的上级目录必须是自己的、0700（abroad-vm 监听前检查，architect 判 W-2a）。
+D9DIR="${OUT}/d9c"
+mkdir -p "${D9DIR}" && chmod 700 "${D9DIR}"
+DSOCK="${D9DIR}/d.sock"
 rm -f "${DSOCK}"
 VM_STATE="${STATE}"
 VM_LOG="${OUT}/abroad-vm-${TS}-9c.log"
@@ -1076,9 +1130,19 @@ ok "9c. 开发版虚拟机已起（开发出口 wg-a、clash-b，直连拨号模
 D9_ST="${OUT}/d9c-${TS}"
 D9_LOG="${OUT}/daemon-sim-9c-${TS}.log"
 D9_RC=0
+D9N0="$(netstats)"
+# 直连目标：能经物理网卡到公网时用默认的 1.1.1.1:443，否则用前置检查选出的局域网目标（端口不是 443，客户端先发字节）。
+D9_TARGET=()
+[[ ${PUBLIC_OK} -eq 1 ]] || D9_TARGET=(--direct-target "${LAN_TARGET}")
 D9="$("${BIN}/abroad-dev" daemon-sim --multi --vm-dir "${STATE}" --state-dir "${D9_ST}" --exit-check-host generate.test \
-  --direct-sock "${DSOCK}" --log "${D9_LOG}" 2>>"${EVID}")" || D9_RC=$?
-log "9c. 报告：${D9}"
+  --direct-sock "${DSOCK}" ${D9_TARGET[@]+"${D9_TARGET[@]}"} --log "${D9_LOG}" 2>>"${EVID}")" || D9_RC=$?
+D9N1="$(netstats)"
+log "9c. 报告：$(printf '%s' "${D9}" | sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<地址>/g')"
+[[ ${PUBLIC_OK} -eq 1 ]] && log "9c. 直连目标：公网 1.1.1.1:443" || log "9c. 直连目标：局域网（${LT#* }；本机不能经物理网卡到公网）"
+D9DOK=$(($(stat_of "${D9N1}" direct_dial_ok) - $(stat_of "${D9N0}" direct_dial_ok)))
+log "9c. 直连拨号：direct_dial_ok +${D9DOK}，绑定的网卡 $(stat_of "${D9N1}" interface)，bind_failed $(stat_of "${D9N1}" bind_failed)"
+((D9DOK >= 2)) || fail "9c. 直连拨号计数应增长（改规则前后各一次），实际 +${D9DOK}"
+[[ "$(stat_of "${D9N1}" interface)" == "${IFC}" ]] || fail "9c. 直连拨号绑的网卡应是物理网卡 ${IFC}"
 json "${D9}" '"\n".join("  %s：期望 %s，实际 %s，%s" % (c["name"], c["want"], c["got"], "通过" if c["ok"] else "不通过") for c in d["checks"])' | tee -a "${EVID}"
 [[ ${D9_RC} -eq 0 && "$(json "${D9}" 'd["ok"]')" == "True" ]] || fail "9c. 多出口多应用的检查没有全部通过（退出码 ${D9_RC}）"
 # 日志不泄漏：测试用的域名、目的地址、应用 ID 不出现在 daemon 日志里（daemon-sim 自查，报告里的 log_leak；这里再搜一遍）。
@@ -1098,6 +1162,7 @@ term_wait "${VM_PID}" "abroad-vm（开发版）"
 VM_PID=""
 stop_listeners
 [[ ! -e "${DSOCK}" ]] || fail "9c. 直连 socket 没有清理"
+rmdir "${D9DIR}" 2>/dev/null || true
 
 if [[ ${PANIC} -eq 1 ]]; then
   section "7. panic 探测（只记录现象，不判通过与否）"

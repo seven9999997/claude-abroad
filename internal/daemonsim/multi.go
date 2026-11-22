@@ -22,9 +22,11 @@ import (
 // 出口 A、出口 B（开发上游，/whoami 回各自的名字）和真实的直连拨号模块。
 type MultiConfig struct {
 	Config
-	DirectSock   string         // abroad-vm 的 direct.sock
-	DirectTarget netip.AddrPort // 直连应用连的公网地址（只连接，不收发；默认 1.1.1.1:443）
-	PinnedName   string         // 置顶域名（默认 claude.ai）
+	DirectSock string // abroad-vm 的 direct.sock
+	// DirectTarget 是直连应用连的地址（默认 1.1.1.1:443）。连上后先发几个非 TLS 的字节：裸 IP 加 443 而客户端不先发数据时，
+	// daemon 会按“看不清去向”改走主代理（M3 定下的行为）；本机不能经物理网卡到公网时用局域网目标（端口不是 443）。
+	DirectTarget netip.AddrPort
+	PinnedName   string // 置顶域名（默认 claude.ai）
 }
 
 // Check 是一项检查的结果（不含地址、域名）。
@@ -135,17 +137,19 @@ func RunMulti(ctx context.Context, cfg MultiConfig) (rep MultiReport) {
 	}
 	add(Check{Name: "应用 A 经出口 wg-a", Want: "wg-a", Got: whoami(portA+1, "whoami.test")})
 	add(Check{Name: "应用 B 经出口 clash-b", Want: "clash-b", Got: whoami(portB+1, "whoami.test")})
-	// 应用 C 直连：经真实的直连拨号模块连一个公网地址（只看连接是否建成）。
-	d0 := directOK(cfg.VMDir)
-	func() {
+	// 应用 C 直连：经真实的直连拨号模块连 DirectTarget（只看连接是否建成、直连拨号计数是否增长）。
+	// 每轮用不同的源端口：上一轮关掉的连接还在 TIME_WAIT，同一个源端口绑不上。
+	directRound := func(round string, src uint16) {
+		d0 := directOK(cfg.VMDir)
 		c, cancel := context.WithTimeout(ctx, cfg.Timeout)
 		defer cancel()
-		conn, err := cl.DialTCPFrom(c, portC+1, cfg.DirectTarget)
+		conn, err := cl.DialTCPFrom(c, src, cfg.DirectTarget)
 		got := "connected"
 		if err != nil {
 			got = "failed"
 		} else {
 			_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+			_, _ = conn.Write([]byte("abroad-9c\r\n")) // 先发非 TLS 的字节，daemon 才看得清去向
 			// 连接被接受之后才发起直连；等直连拨号模块的计数增长。
 			for i := 0; i < 50 && directOK(cfg.VMDir) == d0; i++ {
 				time.Sleep(100 * time.Millisecond)
@@ -155,14 +159,18 @@ func RunMulti(ctx context.Context, cfg MultiConfig) (rep MultiReport) {
 			}
 			conn.Close()
 		}
-		add(Check{Name: "应用 C 经直连拨号模块", Want: "connected", Got: got})
-	}()
+		add(Check{Name: "应用 C 经直连拨号模块" + round, Want: "connected", Got: got})
+	}
+	directRound("", portC+1)
 	// 把 A 改成直连后访问置顶域名：经 main 到达（main 的开发上游回 main），直连拨号计数不变。
 	aDirect := strings.Replace(MultiRules, `"proxy:wg-a"`, "direct", 1)
 	add(Check{Name: "把应用 A 改成直连", Want: "200", Got: fmt.Sprint(putRules(hs, aDirect))})
 	d1 := directOK(cfg.VMDir)
 	add(Check{Name: "设成直连的应用 A 访问置顶域名经 main", Want: "main", Got: whoami(portA+2, cfg.PinnedName)})
 	add(Check{Name: "直连拨号计数不变", Want: fmt.Sprint(d1), Got: fmt.Sprint(directOK(cfg.VMDir))})
+	// 改规则之后再走一轮：B 仍经 clash-b，C 仍经直连拨号模块。
+	add(Check{Name: "改规则后 应用 B 经出口 clash-b", Want: "clash-b", Got: whoami(portB+2, "whoami.test")})
+	directRound("（改规则后）", portC+2)
 	code, st := hs.op("/v1/restore")
 	add(Check{Name: "恢复", Want: "200 RESTORED", Got: fmt.Sprint(code, " ", st.State)})
 	return finish(rep, hs)

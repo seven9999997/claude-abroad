@@ -103,10 +103,12 @@ func TestRunDirectSockSurvivesVM(t *testing.T) {
 	supTiming.Watchdog = time.Hour
 	supTiming.ShutdownTimeout = time.Second
 	supTiming.StopWait = time.Second
-	defer func() { supTiming = old }()
+	// 用 t.Cleanup 而不是 defer：后注册的“停掉 run”先执行，全局变量等 run 退出后才恢复（否则用例失败退出时
+	// 会和还在跑的 run 竞争，architect 判 W-2a 时补跑 -race 发现）。
+	t.Cleanup(func() { supTiming = old })
 	ld := newLoopDialer(t)
 	directDialerOverride = ld
-	defer func() { directDialerOverride = nil }()
+	t.Cleanup(func() { directDialerOverride = nil })
 
 	base, err := os.MkdirTemp("", "avm")
 	if err != nil {
@@ -135,6 +137,21 @@ func TestRunDirectSockSurvivesVM(t *testing.T) {
 		done <- run([]string{"--image-dir", img, "--state-dir", state, "--direct-sock", sock, "--direct-dns", "192.0.2.53"},
 			sigs, factory, &w)
 	}()
+	var stopOnce sync.Once
+	stop := func() bool { // 发两次 SIGTERM，等 run 退出；只做一次
+		ok := false
+		stopOnce.Do(func() {
+			sigs <- syscall.SIGTERM
+			sigs <- syscall.SIGTERM
+			select {
+			case <-done:
+				ok = true
+			case <-time.After(10 * time.Second):
+			}
+		})
+		return ok
+	}
+	t.Cleanup(func() { stop() })
 	waitSock(t, sock)
 	if err := echoVia(t, sock); err != nil {
 		t.Fatalf("虚拟机运行时：%v", err)
@@ -150,11 +167,7 @@ func TestRunDirectSockSurvivesVM(t *testing.T) {
 	if err := echoVia(t, sock); err != nil {
 		t.Fatalf("虚拟机停了以后直连拨号模块应照常服务：%v", err)
 	}
-	sigs <- syscall.SIGTERM
-	sigs <- syscall.SIGTERM
-	select {
-	case <-done:
-	case <-time.After(10 * time.Second):
+	if !stop() {
 		t.Fatal("没有退出")
 	}
 	if _, err := os.Lstat(sock); !os.IsNotExist(err) {

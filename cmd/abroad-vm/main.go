@@ -209,6 +209,7 @@ func run(args []string, sigs <-chan os.Signal, factory vmhost.Factory, w io.Writ
 		hl.Close()
 		return err
 	}
+	defer un.close() // 最后执行：虚拟机和网络都停了之后关掉协议栈
 	factory = un.factory(factory)
 	// 直连拨号模块：和虚拟机共用同一个绑物理网卡的拨号器（同一个网卡缓存），但生命周期分开。
 	var dd directdial.BoundDialer = un.dialer

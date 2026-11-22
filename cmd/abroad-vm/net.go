@@ -115,6 +115,23 @@ func (u *userNet) stats() NetStats {
 	return st
 }
 
+// close 关闭虚拟网络的协议栈（补丁 0007）。最多等 5 秒：虚拟机卡死、网络协程没收拾完时协议栈的协程可能退不出，
+// 这时不再等（进程马上要退出），只记一笔。
+func (u *userNet) close() {
+	if u.vn == nil {
+		return
+	}
+	done := make(chan struct{})
+	go func() { u.vn.Close(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		if u.logf != nil {
+			u.logf("关闭虚拟网络超时（5 秒），不再等待")
+		}
+	}
+}
+
 func (u *userNet) logStats() {
 	if u.logf != nil {
 		st := u.stats()

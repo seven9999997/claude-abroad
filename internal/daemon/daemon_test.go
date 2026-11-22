@@ -524,6 +524,22 @@ func TestSocketSecurity(t *testing.T) {
 	if fi, _ := os.Lstat(sock); fi.Mode()&os.ModeSymlink == 0 {
 		t.Fatal("符号链接不应被动")
 	}
+
+	// 状态目录不是 0700：拒绝启动，不留下任何 socket（监听前检查目录，architect 判 W-2a）。
+	_ = os.Remove(sock)
+	if err := os.Chmod(e.dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if d, err := Start(bg, e.opts()); err == nil {
+		d.abandon()
+		t.Fatal("状态目录 0755 时应拒绝启动")
+	}
+	for _, p := range []string{sock, sock + "~"} {
+		if _, err := os.Lstat(p); !os.IsNotExist(err) {
+			t.Fatalf("拒绝启动时不应有 %s", p)
+		}
+	}
+	_ = os.Chmod(e.dir, 0o700)
 }
 
 // h. 监护在 daemon 里跑着。

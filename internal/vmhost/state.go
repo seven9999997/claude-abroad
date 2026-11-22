@@ -106,9 +106,9 @@ func (s *StateDir) WritePID() error {
 // ListenUnix 在 path 上监听 unix socket，权限 0600。残留的 socket 文件会先删掉
 // （调用方已持有单实例锁，所以它不属于正在运行的实例）；同名的非 socket 文件不删，直接报错。
 func ListenUnix(path string) (net.Listener, error) {
-	if len(path) > MaxSocketPath {
+	if len(path)+1 > MaxSocketPath { // 监听时先用 path 加 “~” 的临时名字
 		return nil, usererror.New("监听 "+filepath.Base(path),
-			fmt.Sprintf("路径有 %d 字节，超过 unix socket 的上限 %d", len(path), MaxSocketPath),
+			fmt.Sprintf("路径有 %d 字节，超过 unix socket 的上限 %d", len(path)+1, MaxSocketPath),
 			"请用更短的 --state-dir。", nil)
 	}
 	if fi, err := os.Lstat(path); err == nil {
@@ -119,13 +119,13 @@ func ListenUnix(path string) (net.Listener, error) {
 			return nil, err
 		}
 	}
-	l, err := net.Listen("unix", path)
+	// 上级目录必须是自己的、0700；先用临时名字监听、改成 0600 再改名（没有权限更宽的窗口，architect 判 W-2a 时指出）。
+	l, err := ListenPrivateUnix(path, os.Getuid())
+	if errors.Is(err, ErrSocketDir) {
+		return nil, usererror.Wrap("监听 "+filepath.Base(path), err, "socket 要放在只有你自己能进的目录里（属主是你、权限 0700）。")
+	}
 	if err != nil {
 		return nil, usererror.Wrap("监听 "+filepath.Base(path), err, "请检查状态目录。")
-	}
-	if err := os.Chmod(path, 0o600); err != nil {
-		l.Close()
-		return nil, err
 	}
 	return l, nil
 }

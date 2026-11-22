@@ -3,6 +3,7 @@ package daemon
 import (
 	"claude-abroad/internal/envcheck"
 	"claude-abroad/internal/gatesm"
+	"claude-abroad/internal/vmhost"
 	"context"
 	"encoding/json"
 	"errors"
@@ -240,13 +241,10 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 		}
 	}()
 
-	ln, err := net.Listen("unix", sock)
+	// 状态目录必须是属主本人、0700（store 建目录时已保证，这里在监听前再查一次）；先用临时名字监听、改成 0600 再改名，
+	// 没有权限更宽的窗口（architect 判 W-2a 时指出）。
+	ln, err := vmhost.ListenPrivateUnix(sock, d.store.UID)
 	if err != nil {
-		d.stopInternals(false)
-		return nil, err
-	}
-	if err := os.Chmod(sock, 0o600); err != nil {
-		ln.Close()
 		d.stopInternals(false)
 		return nil, err
 	}

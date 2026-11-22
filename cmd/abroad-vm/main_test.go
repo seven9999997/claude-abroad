@@ -75,6 +75,7 @@ func TestNewUserNetModes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(u.close) // 不关的话协议栈的协程留在进程里，-race -count=N 时越跑越慢
 	st := u.stats()
 	if st.OutboundMode != "first_hop" || st.FirstHopCount != 1 || u.dialer.BeforeDial == nil || u.gwdns == nil {
 		t.Fatalf("默认应收紧：%+v", st)
@@ -84,6 +85,7 @@ func TestNewUserNetModes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(u.close)
 	if st := u.stats(); st.OutboundMode != "open" || u.dialer.BeforeDial != nil || u.gwdns != nil {
 		t.Fatalf("--outbound-open 应是开放模式：%+v", st)
 	}
