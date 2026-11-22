@@ -32,7 +32,6 @@ struct LoadStateView<Content: View>: View {
 /// 页面共用的提示、终端退路、确认框。
 struct PageChrome: ViewModifier {
     @ObservedObject var model: PageModel
-    var onConfirm: (Bool) -> Void = { _ in }
     func body(content: Content) -> some View {
         content
             .safeAreaInset(edge: .bottom) {
@@ -40,9 +39,6 @@ struct PageChrome: ViewModifier {
             }
             .sheet(isPresented: Binding(get: { model.terminal != nil }, set: { if !$0 { Task { await model.dismissTerminal() } } })) {
                 if let t = model.terminal { TerminalSheet(prompt: t) { Task { await model.dismissTerminal() } } }
-            }
-            .sheet(isPresented: Binding(get: { model.pendingConfirm != nil }, set: { if !$0, model.pendingConfirm != nil { onConfirm(false) } })) {
-                if let p = model.pendingConfirm { ConfirmSheet(prompt: p, answer: onConfirm) }
             }
     }
 }
@@ -243,7 +239,7 @@ struct RegionPage: View {
             }
             .padding()
         }
-        .modifier(PageChrome(model: model, onConfirm: { ok in Task { await model.answerConfirm(ok) } }))
+        .modifier(PageChrome(model: model))
         .task { await model.load() }
     }
 }

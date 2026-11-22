@@ -37,7 +37,7 @@ struct IntegrationTests {
         await setup.next()
         #expect(setup.step == .mainProxy)
         let mainDone = setup.progress?.steps?.first(where: { $0.id == "main_proxy" })?.done ?? false
-        let main = MainProxyModel(client: client)
+        let main = MainProxyModel(client: client, flow: fakeFlow(client))
         if mainDone == false {
             try await IntegrationTests.applyMainProxy(main)
         }
@@ -46,11 +46,11 @@ struct IntegrationTests {
         await setup.next()
         #expect(setup.step == .done && setup.completed && setup.shouldShow == false)
         // 启用。
-        let st = StatusModel(client: client, sleeper: TaskSleeper())
+        let st = StatusModel(client: client, sleeper: TaskSleeper(), flow: fakeFlow(client))
         await st.refresh()
         if st.phase != .abroad {
             await st.enable()
-            if st.pendingConfirm != nil { await st.answerConfirm(true) }
+            if st.flow.isActive { await confirmNow(st.flow) }
         }
         #expect(st.phase == .abroad, "启用后应是已出国：\(String(describing: st.notice))")
         await st.disable()
@@ -74,7 +74,7 @@ struct IntegrationTests {
         let node = try #require(main.nodes.first { $0.name == "it-exit" })
         main.selectedExit = node.id
         await main.apply()
-        if main.pendingConfirm != nil { await main.answerConfirm(true) }
+        if main.flow.isActive { await confirmNow(main.flow) }
         guard case .succeeded(let country, _) = main.applyState else {
             Issue.record("应用主代理：\(main.applyState)"); return
         }
@@ -85,7 +85,7 @@ struct IntegrationTests {
     @Test func enableDisableWithEvents() async throws {
         // 启用要有出口基准：还没应用过主代理时先应用（测试顺序不保证）。
         if case .ok(let sv) = await client.setup(), sv.steps?.first(where: { $0.id == "main_proxy" })?.done != true {
-            try await IntegrationTests.applyMainProxy(MainProxyModel(client: client))
+            try await IntegrationTests.applyMainProxy(MainProxyModel(client: client, flow: fakeFlow(client)))
         }
         let m = StatusModel(client: client, sleeper: TaskSleeper())
         m.start()
@@ -114,7 +114,7 @@ struct IntegrationTests {
             try await t.events(path: "/v1/events") { _ in got.lock.lock(); got.n += 1; got.lock.unlock() }
         }
         if case .ok(let sv) = await client.setup(), sv.steps?.first(where: { $0.id == "main_proxy" })?.done != true {
-            try await IntegrationTests.applyMainProxy(MainProxyModel(client: client))
+            try await IntegrationTests.applyMainProxy(MainProxyModel(client: client, flow: fakeFlow(client)))
         }
         try await Task.sleep(nanoseconds: 300_000_000)
         var out: Outcome<DaemonStatus> = await client.enable()

@@ -198,6 +198,46 @@ public enum L10n {
     public static let retry = "重试"
     public static let listSeparator = "、"
 
+    // 确认框与通知（M5-10）
+    public static func confirmRemaining(_ s: Int) -> String { "确认码 \(s) 秒内有效" }
+    public static func confirmWait(_ s: Int) -> String { "\(s) 秒后可以确认" }
+    public static let confirmExpired = "已过期，请重新发起"
+    public static let confirmRefreshed = "确认码已失效，下面是重新取到的内容（可能有变化），请再确认一次"
+    public static let notificationsToggle = "发送通知（保护断开和恢复、更换主代理失败、回国完成、地区就绪）"
+    public static let openClaude = "打开 Claude"
+    public static func notificationTitle(_ k: NotificationKind) -> String {
+        switch k {
+        case .protectionLost: return "保护断开"
+        case .protectionRestored: return "保护已恢复"
+        case .switchRolledBack: return "更换主代理失败"
+        case .switchRollbackIncomplete: return "更换主代理失败"
+        case .restoreDone: return "已回国"
+        case .regionReady: return "地区已就绪"
+        }
+    }
+    public static func notifyProtectionLost(_ reason: String, _ detail: String) -> String {
+        "代理流量已关闭：" + reason + (detail.isEmpty ? "" : "（" + detail + "）")
+    }
+    /// 闸门原因代码的名称（不认识的代码原样显示）。
+    public static func gateReasonName(_ code: String) -> String {
+        switch code {
+        case "takeover": return "本机接管出了问题"
+        case "exit_check": return "主代理的出口检查没有通过"
+        case "env_check": return "环境检测的硬性项没有通过"
+        case "state": return "没有启用"
+        case "main_proxy_switch": return "正在更换主代理"
+        default: return code
+        }
+    }
+    public static let confirmNotNeededDone = "这次不需要确认，已完成"
+    public static let confirmSubmitting = "正在执行…"
+    public static let notifyProtectionRestored = "代理流量已恢复"
+    public static let notifySwitchRolledBack = "已经回到原来的主代理"
+    public static let notifySwitchRollbackIncomplete = "恢复原来的主代理没有完成，稍后会自动重试"
+    public static let notifyRestoreDone = "本机网络已恢复"
+    public static func notifyRestorePending(_ items: [String]) -> String { "本机网络已恢复；还没还原：" + items.joined(separator: "、") + "（后台会自动重试）" }
+    public static let notifyRegionReady = "时区和语言已写入，环境检测通过，可以打开 Claude 了"
+
     public static func titleLine(_ phase: String) -> String { appName + "：" + phase }
     public static func exitLine(_ ip: String, _ place: String) -> String { mainExit + "：" + ip + "（" + place + "）" }
     public static func exitNoteLine(_ note: String) -> String { mainExit + "：" + note }

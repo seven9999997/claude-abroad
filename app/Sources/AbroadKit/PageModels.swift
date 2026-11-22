@@ -11,15 +11,18 @@ public class PageModel: ObservableObject {
     @Published public internal(set) var state: LoadState = .loading
     @Published public internal(set) var notice: Notice?
     @Published public internal(set) var terminal: TerminalPrompt?
-    @Published public var pendingConfirm: ConfirmPrompt?
     @Published public internal(set) var busy = false
 
     public let client: APIClient
     public let authorizer: Authorizer
 
-    public init(client: APIClient, authorizer: Authorizer = TerminalAuthorizer()) {
+    /// 统一的确认框（各页面共用一个实例）。
+    public let flow: ConfirmFlow
+
+    public init(client: APIClient, authorizer: Authorizer = TerminalAuthorizer(), flow: ConfirmFlow? = nil) {
         self.client = client
         self.authorizer = authorizer
+        self.flow = flow ?? ConfirmFlow(client: client)
     }
 
     func authorize(_ op: SensitiveOperation, _ reason: ErrorText) async {
@@ -46,7 +49,7 @@ public class PageModel: ObservableObject {
         case let .busy(t), let .invalid(t), let .failed(_, t): notice = Notice(kind: .error, text: t)
         case .unsupported(let t): notice = Notice(kind: .error, text: ErrorText(raw: L10n.unsupported + "：" + t.raw, code: t.code))
         case .unreachable(let c): state = .unreachable(c)
-        case .needsConfirm(let p): pendingConfirm = p
+        case .needsConfirm(let p): p.discard() // 这些页面的操作不会要两步确认；地区页自己交给统一的确认框
         }
         return false
     }
@@ -293,7 +296,6 @@ public final class RegionModel: PageModel {
     @Published public var formTimezone = ""
     @Published public var formLang = ""
     @Published public private(set) var switched = false
-    private var lastOp: SensitiveOperation?
 
     public var targetText: String? {
         guard let t = region?.target else { return nil }
@@ -322,21 +324,27 @@ public final class RegionModel: PageModel {
         await put(.regionAuto) { await self.client.putRegion(mode: "exit") }
     }
 
-    private func put(_ op: SensitiveOperation, _ call: () async -> Outcome<Empty>) async {
+    private func put(_ op: SensitiveOperation, _ call: @escaping () async -> Outcome<Empty>) async {
+        guard !flow.isActive else { return }
         busy = true
         defer { busy = false }
         switched = false
-        lastOp = op
-        if await handle(await call(), op: op) { switched = true; await load() }
+        await finish(await call(), op: op, call: call)
     }
 
-    /// 会变时的两步确认。
-    public func answerConfirm(_ accept: Bool) async {
-        guard let p = pendingConfirm else { return }
-        pendingConfirm = nil
-        guard accept else { p.discard(); return }
-        let o = await client.confirm(p, as: Empty.self)
-        if await handle(o, op: lastOp) { switched = true; await load() }
+    /// 结果处理：会变时交给统一的确认框（确认码无效时重新发起第一步取新预览）。
+    private func finish(_ o: Outcome<Empty>, op: SensitiveOperation, call: @escaping () async -> Outcome<Empty>) async {
+        if case .needsConfirm(let p) = o {
+            _ = flow.present(p, as: Empty.self, refetch: { [weak self] in
+                let r = await call()
+                if case .needsConfirm(let np) = r { return .prompt(np) }
+                await self?.finish(r, op: op, call: call)
+                if case .ok = r { return .done }
+                return .failed
+            }, onResult: { [weak self] r in await self?.finish(r, op: op, call: call) })
+            return
+        }
+        if await handle(o, op: op) { switched = true; await load() }
     }
 }
 
@@ -363,8 +371,16 @@ public final class SettingsModel: PageModel {
     @Published public private(set) var security: ApiSecurity?
     public let env: EnvModel
 
-    public init(client: APIClient, env: EnvModel? = nil) {
+    public let preference: NotificationPreference
+    /// 通知开关（界面偏好，只影响通知）。
+    @Published public var notificationsEnabled: Bool {
+        didSet { preference.enabled = notificationsEnabled }
+    }
+
+    public init(client: APIClient, env: EnvModel? = nil, preference: NotificationPreference = MemoryPreference()) {
         self.env = env ?? EnvModel(client: client)
+        self.preference = preference
+        notificationsEnabled = preference.enabled
         super.init(client: client)
     }
 

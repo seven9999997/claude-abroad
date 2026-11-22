@@ -246,20 +246,22 @@ let envJSON = "{\"at\":\"2026-11-22T00:00:00Z\",\"hard\":\"fail\",\"items\":[{\"
         default: return json(404, "{}")
         }
     }
-    let m = RegionModel(client: APIClient(transport: t))
+    let rc = APIClient(transport: t)
+    let flow = fakeFlow(rc)
+    let m = RegionModel(client: rc, flow: flow)
     await m.load()
     #expect(m.targetText == L10n.regionTarget("Asia/Tokyo", "ja-JP", "ja_JP") && m.sourceText == L10n.regionSourceManual && m.pending == ["时区", "语言"])
     m.formTimezone = "Asia/Tokyo"
     m.formLang = "ja-JP"
     await m.setManual()
-    #expect(m.switched && m.pendingConfirm == nil)
+    #expect(m.switched && flow.prompt == nil)
     // 会变：需要确认
     mode.v = "change"
     m.formTimezone = "Europe/Paris"
     m.formLang = "fr-FR"
     await m.setManual()
-    #expect(m.pendingConfirm?.region?.to == "B" && m.switched == false)
-    await m.answerConfirm(true)
+    #expect(flow.prompt?.region?.to == "B" && m.switched == false)
+    await confirmNow(flow)
     #expect(m.switched)
     // 会变且要本人授权
     mode.v = "auth"

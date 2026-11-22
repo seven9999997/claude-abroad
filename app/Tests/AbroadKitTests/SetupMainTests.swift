@@ -146,7 +146,8 @@ func tempDir() -> URL {
 @MainActor
 func mainModel(_ f: FakeMain, files: InputFiles = InputFiles(directory: tempDir())) -> (MainProxyModel, FakeTransport) {
     let t = FakeTransport { f.handle($0) }
-    return (MainProxyModel(client: APIClient(transport: t), files: files), t)
+    let c = APIClient(transport: t)
+    return (MainProxyModel(client: c, files: files, flow: fakeFlow(c)), t)
 }
 
 @MainActor
@@ -243,12 +244,12 @@ func mainModel(_ f: FakeMain, files: InputFiles = InputFiles(directory: tempDir(
     m.selectedExit = "n-exit"
     f.applyResponse = json(409, confirmJSON)
     await m.apply()
-    #expect(m.pendingConfirm?.region?.to == "B")
+    #expect(m.flow.prompt?.region?.to == "B")
     f.applyResponse = nil
-    await m.answerConfirm(true)
+    await confirmNow(m.flow)
     let last = try #require(t.requests.last(where: { $0.path == "/v1/main-proxy/apply" }))
     #expect(String(decoding: last.body ?? Data(), as: UTF8.self).contains("confirm"))
-    #expect(m.applyState == .succeeded(country: "US", timezone: "America/Los_Angeles") && m.pendingConfirm == nil)
+    #expect(m.applyState == .succeeded(country: "US", timezone: "America/Los_Angeles") && m.flow.prompt == nil)
 }
 
 @MainActor

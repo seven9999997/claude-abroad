@@ -10,6 +10,7 @@ struct SettingsView: View {
         TabView {
             Form {
                 LabeledContent(L10n.appName, value: "")
+                Toggle(L10n.notificationsToggle, isOn: $model.notificationsEnabled)
                 if let s = model.signatureText { Text(s).font(.caption) }
             }
             .tabItem { Text(L10n.settingsGeneral) }

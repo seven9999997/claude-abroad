@@ -70,7 +70,7 @@ func appSources() throws -> [(String, String)] {
 @Test func sourceRules() throws {
     let files = try appSources()
     #expect(files.count >= 8)
-    let allowedImports: Set<String> = ["Foundation", "Network", "SwiftUI", "Combine", "AppKit", "UniformTypeIdentifiers", "AbroadAPI", "AbroadKit"]
+    let allowedImports: Set<String> = ["Foundation", "Network", "SwiftUI", "Combine", "AppKit", "UniformTypeIdentifiers", "UserNotifications", "AbroadAPI", "AbroadKit"]
     let forbidden = [
         "@State ", "@State(", "@Observable", "#Preview", "@Entry", "@Bindable", // 宏
         "UserDefaults", "NSKeyedArchiver", "write(to", "createFile", "createDirectory", "removeItem", ".moveItem(", ".copyItem(",
@@ -86,7 +86,7 @@ func appSources() throws -> [(String, String)] {
             #expect(allowedImports.contains(m), "\(name) 引入了 \(m)")
         }
         let code = src.split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }.joined(separator: "\n")
-        for f in forbidden where !(name == "InputFiles.swift" && inputOnly.contains(f)) {
+        for f in forbidden where !(name == "InputFiles.swift" && inputOnly.contains(f)) && !(name == "Notifications.swift" && f == "UserDefaults") {
             #expect((code.contains(f)) == false, "\(name) 里出现了 \(f)")
         }
         if name == "InputFiles.swift" { continue }

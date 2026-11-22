@@ -12,6 +12,8 @@ import (
 
 	"claude-abroad/internal/api"
 	"claude-abroad/internal/claudeproc"
+	"claude-abroad/internal/exitcheck"
+	"claude-abroad/internal/gatesm"
 )
 
 // codeOf 取错误应答里的代码和结构化数据。
@@ -240,5 +242,40 @@ func TestNo409WithPlainText(t *testing.T) {
 				t.Errorf("%s:%d：409 要用 writeErr 显式给代码：%s", f, i+1, strings.TrimSpace(line))
 			}
 		}
+	}
+}
+
+// M5-10 复审建议改：出口检查不通过时，闸门关闭事件的说明（应用会把它放进“保护断开”的通知）里不含出口 IP、城市、州省。
+// 复查的说明只有没通过的项名和原因代码（failedItems）。
+func TestExitCheckEventNoAddress(t *testing.T) {
+	m := newMainEnv(t, false)
+	m.addYAML(t, "本地", mainNodesYAML)
+	m.enableWith(t, "exit")
+	r := passReport()
+	r.Verdict = exitcheck.Fail
+	r.Items[2] = exitcheck.Item{Name: "mainland", Result: exitcheck.Fail, Cause: exitcheck.CauseMainland, Detail: "203.0.113.7 在大陆段"}
+	// 真实模式的复查是 FullExitCheck → verdictOf → failedItems；这里把带地址的报告原样接进去。
+	m.d.re.Check = func(context.Context) (gatesm.Result, string) { return verdictOf(r) }
+	m.d.re.RunOnce(context.Background())
+	st := status(t, m.d)
+	if st.GateOpen {
+		t.Fatal("出口检查不通过应关闸门")
+	}
+	found := false
+	for _, ev := range st.Events {
+		if ev.Source == "gate" && ev.Kind == "gate_closed" && strings.HasPrefix(ev.Detail, "exit_check：") {
+			found = true
+		}
+		for _, x := range []string{"203.0.113.7", "Exampleville", "Example State"} {
+			if strings.Contains(ev.Detail, x) {
+				t.Errorf("事件说明里出现了 %q：%+v", x, ev)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("应有 exit_check 的闸门关闭事件：%+v", st.Events)
+	}
+	if got := failedItems(r); got != "mainland（mainland）" && !strings.Contains(got, "mainland") || strings.Contains(got, "203.0.113.7") {
+		t.Fatalf("failedItems：%q", got)
 	}
 }

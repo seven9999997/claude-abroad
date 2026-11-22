@@ -19,11 +19,6 @@ struct MainProxyPage: View {
             .padding(.vertical, 4)
         }
         .task { await model.refresh() }
-        .sheet(isPresented: confirmShown) {
-            if let p = model.pendingConfirm {
-                ConfirmSheet(prompt: p) { ok in Task { await model.answerConfirm(ok); onApplied() } }
-            }
-        }
         .sheet(isPresented: lanShown) {
             if let p = model.lanPrompt {
                 LANSheet(prompt: p, confirm: { Task { await model.confirmLAN() } }, cancel: { model.lanPrompt = nil })
@@ -36,9 +31,6 @@ struct MainProxyPage: View {
         }
     }
 
-    private var confirmShown: Binding<Bool> {
-        Binding(get: { model.pendingConfirm != nil }, set: { if !$0, model.pendingConfirm != nil { Task { await model.answerConfirm(false) } } })
-    }
     private var lanShown: Binding<Bool> {
         Binding(get: { model.lanPrompt != nil }, set: { if !$0 { model.lanPrompt = nil } })
     }

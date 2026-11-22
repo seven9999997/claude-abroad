@@ -99,7 +99,6 @@ public final class MainProxyModel: ObservableObject {
     @Published public private(set) var applyState: ApplyState = .idle
     @Published public private(set) var checkState: CheckState = .idle
     @Published public var lanPrompt: LANPrompt?
-    @Published public var pendingConfirm: ConfirmPrompt?
     @Published public private(set) var terminal: TerminalPrompt?
     @Published public private(set) var notice: Notice?
     @Published public private(set) var busy = false
@@ -107,14 +106,16 @@ public final class MainProxyModel: ObservableObject {
     public let client: APIClient
     public let authorizer: Authorizer
     public let files: InputFiles
-    private var confirmKind: ConfirmKind?
+    public let flow: ConfirmFlow
+    public let notifier: Notifier
 
-    enum ConfirmKind { case select, apply }
-
-    public init(client: APIClient, authorizer: Authorizer = TerminalAuthorizer(), files: InputFiles = InputFiles()) {
+    public init(client: APIClient, authorizer: Authorizer = TerminalAuthorizer(), files: InputFiles = InputFiles(),
+                flow: ConfirmFlow? = nil, notifier: Notifier? = nil) {
         self.client = client
         self.authorizer = authorizer
         self.files = files
+        self.flow = flow ?? ConfirmFlow(client: client)
+        self.notifier = notifier ?? Notifier()
     }
 
     // ---- 读 ----
@@ -275,13 +276,16 @@ public final class MainProxyModel: ObservableObject {
 
     /// 应用主代理：先保存选择（已启用时这一步就是切换），未启用时再建立出口基准。
     public func apply() async {
-        guard let exit = selectedExit, !busy else { return }
+        guard let exit = selectedExit, !busy, !flow.isActive else { return }
         busy = true
         applyState = .checking
         defer { busy = false }
-        let out = await client.selectMain(selected: exit, chain: via.isEmpty ? [] : via + [exit])
-        await handleSelect(out)
+        let chain = via.isEmpty ? [] : via + [exit]
+        lastSelect = (exit, chain)
+        await handleSelect(await client.selectMain(selected: exit, chain: chain))
     }
+
+    private var lastSelect: (String, [String])?
 
     private func handleSelect(_ out: Outcome<MainSelectOutcome>) async {
         switch out {
@@ -296,8 +300,15 @@ public final class MainProxyModel: ObservableObject {
             }
         case .needsConfirm(let p):
             applyState = .idle
-            confirmKind = .select
-            pendingConfirm = p
+            let sel = lastSelect
+            _ = flow.present(p, as: MainSelectOutcome.self, refetch: { [weak self] in
+                guard let self, let sel else { return .failed }
+                let o = await self.client.selectMain(selected: sel.0, chain: sel.1)
+                if case .needsConfirm(let np) = o { return .prompt(np) }
+                await self.handleSelect(o)
+                if case .ok = o { return .done }
+                return .failed
+            }, onResult: { [weak self] o in await self?.handleSelect(o) })
         case .needsAuthorization(let t):
             applyState = .idle
             guard let exit = selectedExit else { return }
@@ -309,6 +320,7 @@ public final class MainProxyModel: ObservableObject {
             }
         case let .invalid(t), let .failed(_, t), let .busy(t), let .unsupported(t):
             applyState = .failed(t, Rollback.of(t))
+            notifier.switchFailed(t.code)
         case .unreachable:
             applyState = .failed(ErrorText(raw: L10n.backendDown), .none)
         }
@@ -321,31 +333,21 @@ public final class MainProxyModel: ObservableObject {
             needsReselect = false
             await refresh()
         case .needsConfirm(let p):
-            confirmKind = .apply
-            pendingConfirm = p
+            _ = flow.present(p, as: DaemonMainProxyResult.self, refetch: { [weak self] in
+                guard let self else { return .failed }
+                let o = await self.client.applyMain()
+                if case .needsConfirm(let np) = o { return .prompt(np) }
+                await self.handleApply(o)
+                if case .ok = o { return .done }
+                return .failed
+            }, onResult: { [weak self] o in await self?.handleApply(o) })
         case .needsAuthorization(let t):
             await authorize(.mainApply, t)
         case let .invalid(t), let .failed(_, t), let .busy(t), let .unsupported(t):
             applyState = .failed(t, Rollback.of(t))
+            notifier.switchFailed(t.code)
         case .unreachable:
             applyState = .failed(ErrorText(raw: L10n.backendDown), .none)
-        }
-    }
-
-    /// 两步确认的回答（通用的确认对话框：地区从什么变成什么、要结束哪些进程）。
-    public func answerConfirm(_ accept: Bool) async {
-        guard let p = pendingConfirm else { return }
-        pendingConfirm = nil
-        let kind = confirmKind
-        confirmKind = nil
-        guard accept else { p.discard(); if applyState == .checking { applyState = .idle }; return }
-        busy = true
-        applyState = .checking
-        defer { busy = false }
-        switch kind {
-        case .select: await handleSelect(await client.confirm(p, as: MainSelectOutcome.self))
-        case .apply: await handleApply(await client.confirm(p, as: DaemonMainProxyResult.self))
-        case nil: applyState = .idle
         }
     }
 

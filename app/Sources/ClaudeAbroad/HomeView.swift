@@ -36,22 +36,11 @@ struct HomeView: View {
             buttons
         }
         .padding(20)
-        .sheet(isPresented: confirmShown) {
-            if let p = model.pendingConfirm {
-                ConfirmSheet(prompt: p) { ok in Task { await model.answerConfirm(ok) } }
-            }
-        }
         .sheet(isPresented: terminalShown) {
             if let cmd = model.terminalCommand {
                 TerminalSheet(prompt: TerminalPrompt(commands: [cmd])) { model.dismissTerminal() }
             }
         }
-    }
-
-    private var confirmShown: Binding<Bool> {
-        Binding(get: { model.pendingConfirm != nil }, set: { shown in
-            if !shown, model.pendingConfirm != nil { Task { await model.answerConfirm(false) } }
-        })
     }
 
     private var terminalShown: Binding<Bool> {

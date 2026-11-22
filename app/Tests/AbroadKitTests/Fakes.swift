@@ -80,3 +80,22 @@ func eventually(_ f: @MainActor () -> Bool) async -> Bool {
     }
     return f()
 }
+
+/// 假时钟（确认框的 3 秒延时和有效期不真等）。
+final class FakeNow: NowProvider, @unchecked Sendable {
+    private let lock = NSLock()
+    private var t = Date(timeIntervalSince1970: 1_800_000_000)
+    func now() -> Date { lock.lock(); defer { lock.unlock() }; return t }
+    func advance(_ s: Double) { lock.lock(); t = t.addingTimeInterval(s); lock.unlock() }
+}
+
+/// 带假时钟的确认框。
+@MainActor
+func fakeFlow(_ client: APIClient) -> ConfirmFlow { ConfirmFlow(client: client, clock: FakeNow()) }
+
+/// 过了 3 秒再点确认。
+@MainActor
+func confirmNow(_ flow: ConfirmFlow) async {
+    (flow.clock as! FakeNow).advance(ConfirmFlow.delay + 0.1)
+    await flow.confirm()
+}

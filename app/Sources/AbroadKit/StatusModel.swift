@@ -112,7 +112,6 @@ public final class StatusModel: ObservableObject {
     @Published public private(set) var connection: ConnectionError?
     @Published public private(set) var busy = false
     @Published public private(set) var exitInfo: ExitInfo?
-    @Published public var pendingConfirm: ConfirmPrompt?
     @Published public var terminalCommand: String?
     @Published public var notice: Notice?
 
@@ -122,15 +121,24 @@ public final class StatusModel: ObservableObject {
     private var loop: Task<Void, Never>?
     private var backoff = ReconnectBackoff()
     /// 等确认的那个操作（确认后照着它走授权等后续）。
-    private var confirmOp: SensitiveOperation?
+    /// 统一的确认框（各页面共用一个实例；m5-plan v2.9 决定 2）。
+    public let flow: ConfirmFlow
+    /// 通知（触发来源只有事件流和操作的结果）。
+    public let notifier: Notifier
+    /// 刚连上或重连后的第一次状态只建立基线、不通知。
+    private var baselinePending = true
 
-    public init(client: APIClient, authorizer: Authorizer = TerminalAuthorizer(), sleeper: Sleeper = TaskSleeper()) {
+    public init(client: APIClient, authorizer: Authorizer = TerminalAuthorizer(), sleeper: Sleeper = TaskSleeper(),
+                flow: ConfirmFlow? = nil, notifier: Notifier? = nil) {
         self.client = client
         self.authorizer = authorizer
         self.sleeper = sleeper
+        self.flow = flow ?? ConfirmFlow(client: client)
+        self.notifier = notifier ?? Notifier()
     }
 
-    public var menu: MenuAvailability { MenuAvailability.from(phase, reachable: reachable, busy: busy || daemonBusy, stalled: stalledState) }
+    /// 有确认框时，其他会触发确认的按钮不可用。
+    public var menu: MenuAvailability { MenuAvailability.from(phase, reachable: reachable, busy: busy || daemonBusy || flow.isActive, stalled: stalledState) }
 
     /// 后台回过“忙”（有别的操作在进行）时的状态；状态变了就清掉。
     @Published public private(set) var daemonBusy = false
@@ -179,6 +187,8 @@ public final class StatusModel: ObservableObject {
         switch await client.status() {
         case .ok(let st):
             apply(st)
+            notifier.observe(status: st, reconnect: baselinePending)
+            baselinePending = false
             if case .ok(let e) = await client.mainExit() { exitInfo = ExitInfo.from(e) }
             return true
         case .unreachable(let c):
@@ -217,8 +227,11 @@ public final class StatusModel: ObservableObject {
         backoff.reset()
         let transport = client.transport
         do {
-            try await transport.events(path: "/v1/events") { [weak self] _ in
-                Task { @MainActor [weak self] in _ = await self?.refresh() }
+            try await transport.events(path: "/v1/events") { [weak self] ev in
+                Task { @MainActor [weak self] in
+                    self?.notifier.observe(event: ev)
+                    _ = await self?.refresh()
+                }
             }
             // 后台断开了：下一轮重连。
             setUnreachable(.noListener)
@@ -232,6 +245,7 @@ public final class StatusModel: ObservableObject {
 
     /// 事件到达（测试和事件流共用）。
     public func handleEvent(_ ev: SSEEvent) async {
+        notifier.observe(event: ev)
         await refresh()
     }
 
@@ -244,6 +258,7 @@ public final class StatusModel: ObservableObject {
     }
 
     func setUnreachable(_ c: ConnectionError) {
+        baselinePending = true // 重连后的第一次状态只建立基线
         reachable = false
         connection = c
         phase = .error
@@ -255,16 +270,6 @@ public final class StatusModel: ObservableObject {
     public func disable() async { await perform(nil) { await self.client.disable() } }
     public func restore() async { await perform(.restore) { await self.client.restore() } }
 
-    /// 用户在确认框里点了确认 / 取消。
-    public func answerConfirm(_ accept: Bool) async {
-        guard let p = pendingConfirm else { return }
-        pendingConfirm = nil
-        let op = confirmOp
-        confirmOp = nil
-        guard accept else { p.discard(); return }
-        await perform(op) { await self.client.confirm(p, as: DaemonStatus.self) }
-    }
-
     /// 关掉终端退路的提示后刷新一次（用户可能刚在终端里执行了命令）。
     public func dismissTerminal() {
         terminalCommand = nil
@@ -272,20 +277,33 @@ public final class StatusModel: ObservableObject {
     }
 
     private func perform(_ op: SensitiveOperation?, _ call: @escaping () async -> Outcome<DaemonStatus>) async {
-        guard !busy else { return }
+        guard !busy, !flow.isActive else { return }
         busy = true
         let before = phase
         phase = .checking
         defer { busy = false }
-        let out = await call()
+        await finish(await call(), op: op, before: before, call: call)
+    }
+
+    /// 操作的结果（第一次请求和确认之后的请求共用）。
+    private func finish(_ out: Outcome<DaemonStatus>, op: SensitiveOperation?, before: Phase, call: @escaping () async -> Outcome<DaemonStatus>) async {
         switch out {
         case .ok(let st):
             apply(st)
             notice = nil
+            if op == .restore { notifier.restoreDone(pending: st.region?.pending ?? []) }
         case .needsConfirm(let p):
             phase = before
-            confirmOp = op
-            pendingConfirm = p
+            // 交给统一的确认框：确认码无效时重新发起第一步取新预览；后台这次不再要求确认时照常处理结果。
+            _ = flow.present(p, as: DaemonStatus.self, refetch: { [weak self] in
+                let o = await call()
+                if case .needsConfirm(let np) = o { return .prompt(np) }
+                await self?.finish(o, op: op, before: before, call: call)
+                if case .ok = o { return .done }
+                return .failed
+            }, onResult: { [weak self] o in
+                await self?.finish(o, op: op, before: before, call: call)
+            })
         case .needsAuthorization(let t):
             phase = before
             guard let op else { notice = Notice(kind: .error, text: t); return }

@@ -68,14 +68,17 @@ func fakeBackend(state: Box<String>, enable: @escaping @Sendable (HTTPRequest) -
         if req.body != nil { state.v = "ENABLED"; return json(200, statusJSON(state: "ENABLED", gate: true)) }
         return json(409, confirmJSON)
     }
-    let m = StatusModel(client: APIClient(transport: t), sleeper: NoSleep())
+    let client = APIClient(transport: t)
+    let flow = fakeFlow(client)
+    let m = StatusModel(client: client, sleeper: NoSleep(), flow: flow)
     await m.refresh()
     #expect(m.phase == .home && m.menu.enable && m.exitInfo?.ip == "203.0.113.7")
     await m.enable()
-    #expect(m.pendingConfirm != nil && m.phase == .home && !m.busy)
-    #expect(m.pendingConfirm?.region?.to == "B")
-    await m.answerConfirm(true)
-    #expect(m.pendingConfirm == nil && m.phase == .abroad && m.menu.disable)
+    #expect(flow.prompt != nil && m.phase == .home && !m.busy)
+    #expect(flow.prompt?.region?.to == "B")
+    #expect(m.menu.enable == false, "有确认框时其他会触发确认的按钮不可用")
+    await confirmNow(flow)
+    #expect(flow.prompt == nil && m.phase == .abroad && m.menu.disable)
     await m.disable()
     #expect(m.phase == .offline)
 }
@@ -84,13 +87,15 @@ func fakeBackend(state: Box<String>, enable: @escaping @Sendable (HTTPRequest) -
 @Test func confirmCancelled() async {
     let state = Box("RESTORED")
     let t = fakeBackend(state: state) { _ in json(409, confirmJSON) }
-    let m = StatusModel(client: APIClient(transport: t), sleeper: NoSleep())
+    let client = APIClient(transport: t)
+    let flow = fakeFlow(client)
+    let m = StatusModel(client: client, sleeper: NoSleep(), flow: flow)
     await m.refresh()
     await m.enable()
-    let p = m.pendingConfirm
+    let p = flow.prompt
     let n = t.requests.count
-    await m.answerConfirm(false)
-    #expect(m.pendingConfirm == nil && p?.isUsed == true && t.requests.count == n && m.phase == .home)
+    flow.cancel()
+    #expect(flow.prompt == nil && p?.isUsed == true && t.requests.count == n && m.phase == .home)
 }
 
 @MainActor

@@ -7,15 +7,18 @@ import SwiftUI
 @main
 struct ClaudeAbroadApp: App {
     private static let client = APIClient(transport: UnixTransport.fromEnvironment())
-    @StateObject private var model = StatusModel(client: ClaudeAbroadApp.client)
+    /// 各页面共用一个确认框（同一时间只有一个）和一个通知者。
+    @MainActor private static let flow = ConfirmFlow(client: client)
+    @MainActor private static let notifier = SystemServices.makeNotifier()
+    @StateObject private var model = StatusModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow, notifier: ClaudeAbroadApp.notifier)
     @StateObject private var setup = SetupModel(client: ClaudeAbroadApp.client)
-    @StateObject private var main = MainProxyModel(client: ClaudeAbroadApp.client)
-    @StateObject private var exits = ExitsModel(client: ClaudeAbroadApp.client)
-    @StateObject private var apps = AppsModel(client: ClaudeAbroadApp.client)
-    @StateObject private var env = EnvModel(client: ClaudeAbroadApp.client)
-    @StateObject private var region = RegionModel(client: ClaudeAbroadApp.client)
-    @StateObject private var engines = EnginesModel(client: ClaudeAbroadApp.client)
-    @StateObject private var settings = SettingsModel(client: ClaudeAbroadApp.client)
+    @StateObject private var main = MainProxyModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow, notifier: ClaudeAbroadApp.notifier)
+    @StateObject private var exits = ExitsModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow)
+    @StateObject private var apps = AppsModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow)
+    @StateObject private var env = EnvModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow)
+    @StateObject private var region = RegionModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow)
+    @StateObject private var engines = EnginesModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow)
+    @StateObject private var settings = SettingsModel(client: ClaudeAbroadApp.client, preference: ClaudeAbroadApp.notifier.preference)
 
     var body: some Scene {
         MenuBarExtra {
@@ -26,7 +29,7 @@ struct ClaudeAbroadApp: App {
                 .task { model.start() }
         }
         Window(L10n.appName, id: "main") {
-            MainWindow(status: model, setup: setup, main: main, exits: exits, apps: apps, env: env, region: region, engines: engines)
+            MainWindow(status: model, setup: setup, main: main, exits: exits, apps: apps, env: env, region: region, engines: engines, flow: ClaudeAbroadApp.flow)
                 .frame(minWidth: 620, minHeight: 520)
                 .task { model.start() }
         }
@@ -46,8 +49,26 @@ struct MainWindow: View {
     let env: EnvModel
     let region: RegionModel
     let engines: EnginesModel
+    @ObservedObject var flow: ConfirmFlow
 
     var body: some View {
+        content
+            .sheet(isPresented: Binding(get: { flow.isActive }, set: { if !$0, flow.isActive { flow.cancel() } })) {
+                ConfirmSheet(flow: flow)
+            }
+            .safeAreaInset(edge: .top) {
+                if let note = flow.completedNote {
+                    HStack {
+                        Label(note, systemImage: "checkmark.circle")
+                        Spacer()
+                        Button(L10n.close) { flow.dismissCompletedNote() }
+                    }
+                    .padding(8)
+                }
+            }
+    }
+
+    @ViewBuilder private var content: some View {
         if setup.shouldShow && setup.step != .done {
             SetupView(setup: setup, main: main, status: status)
         } else {
