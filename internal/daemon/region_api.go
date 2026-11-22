@@ -288,11 +288,19 @@ func (d *Daemon) handleEnable(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			d.run(w, r, "enable", async, d.m.Enable, giveBack)
+			d.run(w, r, "enable", async, d.enableWithMain, giveBack)
 			return
 		}
 	}
-	d.run(w, r, "enable", async, d.m.Enable, nil)
+	d.run(w, r, "enable", async, d.enableWithMain, nil)
+}
+
+// enableWithMain 是启用：abroadd 持有主代理配置时先下发（M5-4：未启用时保存的选择在启用时下发一次）。
+func (d *Daemon) enableWithMain(ctx context.Context) error {
+	if err := d.ensureMainPushed(ctx); err != nil {
+		return err
+	}
+	return d.m.Enable(ctx)
 }
 
 // MainProxyRequest 是应用主代理的请求体。
@@ -331,6 +339,13 @@ func (d *Daemon) handleApplyMainProxy(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, errBody{err.Error()})
 		return
 	}
+	d.finishMainProxy(w, r, req, base)
+}
+
+// finishMainProxy 是“应用主代理”在出口检查之后的部分（M5-4 抽出来，PUT /v1/main-proxy 共用）：按基准确定目标地区
+// （会变且已启用时两步确认）→ 保存基准 → 同步地区。写应答；返回是否成功（失败或要确认时调用方负责回滚）。
+func (d *Daemon) finishMainProxy(w http.ResponseWriter, r *http.Request, req MainProxyRequest, base exitcheck.Baseline) bool {
+	bs := d.opts.Sys.Baseline
 	res := MainProxyResult{}
 	var target *region.Target
 	if d.regionOn() {
@@ -347,18 +362,18 @@ func (d *Daemon) handleApplyMainProxy(w http.ResponseWriter, r *http.Request) {
 		ch, err := d.regionCheck(r.Context(), *target)
 		if err != nil {
 			writeJSON(w, http.StatusUnprocessableEntity, errBody{err.Error()})
-			return
+			return false
 		}
 		ok, gb := d.confirmGate(w, r, OpMainProxy, req.Confirm, *target, ch)
 		if !ok {
-			return
+			return false
 		}
 		giveBack = gb
 	}
 	sum, err := bs.Save(base)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, errBody{err.Error()})
-		return
+		return false
 	}
 	res.Baseline = sum
 	d.events.Add("baseline", "baseline_saved", "规则 "+string(sum.Rule)+"，国家 "+sum.Country)
@@ -368,13 +383,14 @@ func (d *Daemon) handleApplyMainProxy(w http.ResponseWriter, r *http.Request) {
 				giveBack()
 			}
 			writeJSON(w, code, errBody{err.Error()})
-			return
+			return false
 		}
 		res.Region, res.Synced = target, enabled
 	} else {
 		d.envKick() // 没有地区同步时也算一次“应用主代理”
 	}
 	writeJSON(w, http.StatusOK, res)
+	return true
 }
 
 // mainProxyTarget：已锁定的是手动指定的目标时保持不变；否则按这次的出口确定。

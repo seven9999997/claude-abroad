@@ -3,6 +3,8 @@ package agent
 import (
 	"claude-abroad/internal/mihomocfg"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -41,6 +43,21 @@ type MainProxy struct {
 
 	mu         sync.Mutex
 	configured atomic.Bool
+	digest     atomic.Pointer[string] // 当前配置的摘要（sha256 前 16 个十六进制字符；M5-4：abroadd 比对是否是自己下发的）
+}
+
+// Digest 返回当前主代理配置的摘要（没有下发过时为空）。摘要不含配置内容。
+func (m *MainProxy) Digest() string {
+	if p := m.digest.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// ConfigDigest 是主代理配置的摘要（abroadd 下发时用同一个函数算，好比对）。
+func ConfigDigest(b []byte) string {
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:8])
 }
 
 // Configured 表示是否下发过可用的主代理配置。
@@ -74,8 +91,12 @@ func (m *MainProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	dg := ConfigDigest(body)
 	code, msg := m.apply(r.Context(), body)
 	clear(body)
+	if code == http.StatusOK {
+		m.digest.Store(&dg)
+	}
 	if code == http.StatusOK {
 		writeJSON(w, code, map[string]any{"ok": true})
 		return

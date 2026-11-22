@@ -49,6 +49,11 @@ type System struct {
 	// 开发用的照旧）；CheckExit 为 nil 时不检查（正式的出口永远到不了“通过”）。
 	ExitVM    ExitVM
 	CheckExit func(ctx context.Context, tag string) exitcheck.Report
+	// 主代理由 abroadd 持有（M5-4）：MainProfile 是主代理存储的 profile 目录（空时用状态目录下的 secrets/main）；
+	// MainVM 为 nil 时不下发（只管理存储）；FetchSource 抓取订阅（viaHost 为真表示经本机网络；nil 时不能抓取）。
+	MainProfile string
+	MainVM      MainProxyVM
+	FetchSource func(ctx context.Context, url string, viaHost bool) ([]byte, error)
 }
 
 // Hint 是一条冲突检查的提示项。

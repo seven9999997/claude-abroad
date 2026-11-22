@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -27,9 +28,10 @@ type Outbound struct {
 	// allow 是启动时白名单的快照。PolicyRef.Store 能在运行时换白名单，但两者会不一致：
 	// 换白名单必须重启 abroad-vm（目前没有任何调用方在运行时换）。
 	allow []netip.AddrPort
-	hops  []FirstHop
-	byDom map[string]int // 域名 → hops 下标
-	now   func() time.Time
+	// main 是主代理那一组（第一跳和用户确认过的局域网节点）：启动时由 --first-hop 给定，M5-4 起可以整体原子替换
+	// （mainhops.go）。读不加锁。
+	main atomic.Pointer[mainSet]
+	now  func() time.Time
 
 	mu       sync.Mutex
 	answered map[string]map[netip.Addr]time.Time // 域名 → 地址 → 最后一次应答的时间
@@ -45,21 +47,17 @@ func NewOutbound(allow []netip.AddrPort, hops []FirstHop, now func() time.Time) 
 	if now == nil {
 		now = time.Now
 	}
-	o := &Outbound{allow: allow, hops: hops, byDom: map[string]int{}, now: now, answered: map[string]map[netip.Addr]time.Time{}}
-	for i, h := range hops {
-		if _, isIP := h.Addr(); !isIP {
-			o.byDom[h.Host] = i
-		}
-	}
+	o := &Outbound{allow: allow, now: now, answered: map[string]map[netip.Addr]time.Time{}}
+	o.main.Store(newMainSet(hops, nil))
 	return o
 }
 
 // Hops 返回第一跳的条数。
-func (o *Outbound) Hops() int { return len(o.hops) }
+func (o *Outbound) Hops() int { return len(o.main.Load().hops) }
 
 // Registered 报告 name（小写、无末尾点）是否是登记过的第一跳域名或分流出口端点的域名（网关只代解析这些）。
 func (o *Outbound) Registered(name string) bool {
-	if _, ok := o.byDom[name]; ok {
+	if _, ok := o.main.Load().byDom[name]; ok {
 		return true
 	}
 	o.mu.Lock()
@@ -73,7 +71,7 @@ func (o *Outbound) Learn(name string, addrs []netip.Addr) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.exitLearnLocked(name, addrs, now) // 分流出口端点的域名（过 ValidExitAddr）
-	if _, ok := o.byDom[name]; !ok {
+	if _, ok := o.main.Load().byDom[name]; !ok {
 		return
 	}
 	m := o.answered[name]
@@ -114,7 +112,13 @@ func (o *Outbound) BeforeDial(network string, dst netip.AddrPort) error {
 			return nil
 		}
 	}
-	for _, h := range o.hops {
+	ms := o.main.Load()
+	for _, w := range ms.lan {
+		if w.Addr() == a && w.Port() == p {
+			return nil
+		}
+	}
+	for _, h := range ms.hops {
 		if ha, isIP := h.Addr(); isIP && ha == a && h.HasPort(p) {
 			return nil
 		}
@@ -123,7 +127,11 @@ func (o *Outbound) BeforeDial(network string, dst netip.AddrPort) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	for name, m := range o.answered {
-		if t, ok := m[a]; ok && now.Sub(t) <= AnsweredKeep && o.hops[o.byDom[name]].HasPort(p) {
+		i, ok := ms.byDom[name]
+		if !ok {
+			continue
+		}
+		if t, ok := m[a]; ok && now.Sub(t) <= AnsweredKeep && ms.hops[i].HasPort(p) {
 			return nil
 		}
 	}

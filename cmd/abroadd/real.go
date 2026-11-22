@@ -132,6 +132,8 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		},
 		User: f.pfUser, RootFS: os.DirFS("/"), FirstHop: daemon.MainProxyFirstHop(f.mainStore),
 		Data: dp, VM: daemon.ExternalVM{Dir: f.vmDir}, ExitVM: daemon.ExternalVM{Dir: f.vmDir},
+		// 主代理由 abroadd 持有（M5-4）：存储就是 --main-proxy-store；订阅启用时经数据通道走主代理，经本机网络时经直连拨号模块。
+		MainProfile: f.mainStore, MainVM: daemon.ExternalVM{Dir: f.vmDir}, FetchSource: realFetch(dp.Streams(), direct),
 		// 按出口的检查（M4-8）：经该出口开流，不做基准比对（判定只看 HTTPS、出口 IP、大陆段、DoH）。
 		CheckExit: func(ctx context.Context, tag string) exitcheck.Report {
 			return checker.Check(ctx, tag, exitcheck.Options{})

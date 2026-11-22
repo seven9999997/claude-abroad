@@ -23,6 +23,9 @@ const (
 	ReasonExitCheck Reason = "exit_check" // 主代理的出口检查明确不通过，或“无法判断”超过 10 分钟
 	ReasonEnvCheck  Reason = "env_check"  // 环境检测的硬性项明确不通过（8.1，M4-6）
 	ReasonState     Reason = "state"      // 状态不是启用（未启用、停用、恢复、回滚）
+	// ReasonMainSwitch 是正在更换主代理（M5-4，m5-plan v2.2 决定 2）：从关闸门开始，到新主代理的出口检查通过、
+	// 或失败后回到旧配置为止；之后由复查决定是否放行。
+	ReasonMainSwitch Reason = "main_proxy_switch"
 )
 
 // 事件种类。

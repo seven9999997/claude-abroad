@@ -180,7 +180,7 @@ func pruneAnswered(m map[netip.Addr]time.Time, now time.Time) {
 // Keep 报告网关为 name 答出的地址 a 要不要留下（交给虚拟机、记进放行名单）：第一跳域名要公网 IPv4；
 // 分流出口端点的域名要过 ValidExitAddr（私有地址可以）。两者都是时任一满足即可。
 func (o *Outbound) Keep(name string, a netip.Addr) bool {
-	if _, ok := o.byDom[name]; ok && publicV4(a) {
+	if _, ok := o.main.Load().byDom[name]; ok && publicV4(a) {
 		return true
 	}
 	o.mu.Lock()

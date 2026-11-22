@@ -136,6 +136,10 @@ func TestMainProxySuccess(t *testing.T) {
 	if !f.mp.Configured() || f.startCount() != 1 {
 		t.Fatal("应标记已配置并启动 mihomo")
 	}
+	// M5-4：摘要等于 abroadd 用同一个函数算出的值，不含配置内容。
+	if d := f.mp.Digest(); d != ConfigDigest(yamlWith(sentinel)) || len(d) != 16 || strings.Contains(d, sentinel) {
+		t.Fatalf("摘要不对：%q", d)
+	}
 	// 再下发一次：替换并重启。
 	if code, _ := f.put(t, yamlWith("other")); code != 200 || f.startCount() != 2 {
 		t.Fatalf("第二次下发：%d，启动 %d 次", code, f.startCount())

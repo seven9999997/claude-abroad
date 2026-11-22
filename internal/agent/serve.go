@@ -146,6 +146,7 @@ func Serve(ctx context.Context, e *Env) error {
 	var once sync.Once
 	clock := &Clock{Sys: e.Sys, Now: e.Now, Logf: func(format string, a ...any) { e.logf("serve："+format, a...) }}
 	st.SetClock(clock.Status)
+	st.SetMainDigest(eng.mainProxy.Digest)
 	api := &API{State: st, Shutdown: func() { once.Do(func() { close(stop) }) },
 		Logs: eng.logs, MainProxy: eng.mainProxy, Clock: clock, Exits: exits}
 	// 地区（M4-5）：写三个文件，有变化时重启引擎（主代理已下发时连 mihomo 一起）。

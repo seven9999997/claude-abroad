@@ -68,6 +68,23 @@ public struct ClaudeprocTarget: Codable, Sendable {
     }
 }
 
+public struct DaemonAddSourceRequest: Codable, Sendable {
+    public var kind: String
+    public var name: String
+    public var url: String?
+    public var content: String?
+    public var node: [String: JSONValue]?
+    public var viaHost: Bool?
+    enum CodingKeys: String, CodingKey {
+        case kind = "kind"
+        case name = "name"
+        case url = "url"
+        case content = "content"
+        case node = "node"
+        case viaHost = "via_host"
+    }
+}
+
 public struct DaemonBaselineSummary: Codable, Sendable {
     public var rule: String
     public var country: String
@@ -180,6 +197,24 @@ public struct DaemonJob: Codable, Sendable {
     }
 }
 
+public struct DaemonLANConfirmRequest: Codable, Sendable {
+    public var node: String
+    enum CodingKeys: String, CodingKey {
+        case node = "node"
+    }
+}
+
+public struct DaemonMainProxyNodeView: Codable, Sendable {
+    public var id: String
+    public var name: String
+    public var type: String
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case name = "name"
+        case type = "type"
+    }
+}
+
 public struct DaemonMainProxyRequest: Codable, Sendable {
     public var confirm: String?
     public var rule: String?
@@ -199,6 +234,64 @@ public struct DaemonMainProxyResult: Codable, Sendable {
         case region = "region"
         case synced = "synced"
         case note = "note"
+    }
+}
+
+public struct DaemonMainProxySourceView: Codable, Sendable {
+    public var id: String
+    public var name: String
+    public var kind: String
+    public var updated: String
+    public var error: String?
+    public var skipped: Int64?
+    public var nodes: [DaemonMainProxyNodeView]?
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case name = "name"
+        case kind = "kind"
+        case updated = "updated"
+        case error = "error"
+        case skipped = "skipped"
+        case nodes = "nodes"
+    }
+}
+
+public struct DaemonMainProxyView: Codable, Sendable {
+    public var selected: DaemonMainProxyNodeView?
+    public var chain: [DaemonMainProxyNodeView]?
+    public var applied: Bool
+    public var needsReselect: Bool
+    public var lanPending: Bool
+    public var sources: Int64
+    public var note: String?
+    enum CodingKeys: String, CodingKey {
+        case selected = "selected"
+        case chain = "chain"
+        case applied = "applied"
+        case needsReselect = "needs_reselect"
+        case lanPending = "lan_pending"
+        case sources = "sources"
+        case note = "note"
+    }
+}
+
+public struct DaemonMainSelectRequest: Codable, Sendable {
+    public var selected: String
+    public var chain: [String]?
+    public var rule: String?
+    public var confirm: String?
+    enum CodingKeys: String, CodingKey {
+        case selected = "selected"
+        case chain = "chain"
+        case rule = "rule"
+        case confirm = "confirm"
+    }
+}
+
+public struct DaemonRefreshRequest: Codable, Sendable {
+    public var viaHost: Bool?
+    enum CodingKeys: String, CodingKey {
+        case viaHost = "via_host"
     }
 }
 
@@ -257,6 +350,17 @@ public struct DaemonRulesSummary: Codable, Sendable {
         case localDomains = "local_domains"
         case pinnedExtra = "pinned_extra"
         case blockUdp443 = "block_udp_443"
+    }
+}
+
+public struct DaemonSourceAdded: Codable, Sendable {
+    public var id: String
+    public var needsReselect: Bool?
+    public var sources: [DaemonMainProxySourceView]?
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case needsReselect = "needs_reselect"
+        case sources = "sources"
     }
 }
 

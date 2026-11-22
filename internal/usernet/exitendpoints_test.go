@@ -16,7 +16,8 @@ import (
 func firstHopSnapshot(o *Outbound) string {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return fmt.Sprint(o.allow, o.hops, o.byDom, o.answered)
+	ms := o.main.Load()
+	return fmt.Sprint(o.allow, ms.hops, ms.byDom, ms.lan, o.answered)
 }
 
 // m. 替换操作的校验逐条有反例；主代理第一跳那一组在任何替换前后不变。

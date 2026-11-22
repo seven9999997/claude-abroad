@@ -62,6 +62,10 @@ type RealParams struct {
 	// ExitVM、CheckExit：分流出口的下发和按出口的检查（M4-8；nil 时不下发、不检查）。
 	ExitVM    ExitVM
 	CheckExit func(ctx context.Context, tag string) exitcheck.Report
+	// 主代理由 abroadd 持有（M5-4）。
+	MainProfile string
+	MainVM      MainProxyVM
+	FetchSource func(ctx context.Context, url string, viaHost bool) ([]byte, error)
 }
 
 // ErrNoAllowUser 是查不到放行用户。
@@ -152,6 +156,7 @@ func NewRealSystem(p RealParams) (System, error) {
 		},
 		VM: p.VM, Exit: p.Exit, Baseline: p.Baseline, Teardown: teardown, Killer: p.Killer, Claude: p.Claude, Locale: locale, VMRegion: p.VMRegion, Env: p.Env,
 		ExitVM: p.ExitVM, CheckExit: p.CheckExit,
+		MainProfile: p.MainProfile, MainVM: p.MainVM, FetchSource: p.FetchSource,
 		Preflight: realPreflight{PreflightHints{C: chk}, p.FirstHop != nil},
 		Data:      p.Data,
 	}, nil

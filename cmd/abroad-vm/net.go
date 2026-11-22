@@ -175,6 +175,35 @@ func (u *userNet) hostHandler() http.Handler {
 		}
 		writeHostJSON(w, http.StatusOK, map[string]any{"ok": true, "count": len(req.Endpoints)})
 	})
+	// PUT /v1/main-hops：整体替换出站白名单里主代理的那一组（M5-4，m5-plan v2.2 决定 1）：
+	// {"hops":["host:port[,port|lo-hi…]"],"lan":[{"addr":"IPv4:端口","confirmed":true}]}；不合法 422，不改任何东西；
+	// 分流出口那一组和启动时的静态白名单不受影响。回环一律拒绝，局域网节点要带“已经用户确认”的标记。
+	mux.HandleFunc("/v1/main-hops", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			w.Header().Set("Allow", http.MethodPut)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req usernet.MainHops
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil {
+			writeHostJSON(w, http.StatusBadRequest, map[string]string{"error": "请求体不对"})
+			return
+		}
+		if u.out == nil {
+			writeHostJSON(w, http.StatusConflict, map[string]string{"error": "开放模式（--outbound-open）下出站没有收紧，不需要第一跳名单"})
+			return
+		}
+		if err := u.out.SetMainHops(req); err != nil {
+			writeHostJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+		if u.logf != nil {
+			u.logf("主代理的第一跳名单已替换（第一跳 %d 项、局域网节点 %d 个）", len(req.Hops), len(req.LAN)) // 不写地址和域名
+		}
+		writeHostJSON(w, http.StatusOK, map[string]any{"ok": true, "hops": len(req.Hops), "lan": len(req.LAN)})
+	})
 	mux.HandleFunc("/v1/netstats", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", http.MethodGet)

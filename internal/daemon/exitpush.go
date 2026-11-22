@@ -181,6 +181,7 @@ func (l *exitLoop) run(ctx context.Context, done chan struct{}) {
 // round 跑一轮：下发或刷新，然后检查。
 func (l *exitLoop) round(ctx context.Context) {
 	d := l.d
+	d.maintainMain(ctx) // 先主代理（重启、配置被改），再分流出口（M5-4 决定 3）
 	vm := d.opts.Sys.ExitVM
 	if vm == nil || len(d.exits.All()) == 0 && !l.pendingNow() {
 		return

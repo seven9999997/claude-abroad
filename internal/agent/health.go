@@ -47,7 +47,15 @@ type Health struct {
 
 // MainProxyStatus 是主代理的状态。
 type MainProxyStatus struct {
-	Configured bool `json:"configured"`
+	Configured bool   `json:"configured"`
+	Digest     string `json:"digest,omitempty"` // 当前配置的摘要（M5-4；不含配置内容）
+}
+
+// SetMainDigest 设置读主代理配置摘要的函数（M5-4）。
+func (s *State) SetMainDigest(f func() string) {
+	s.mu.Lock()
+	s.mainDig = f
+	s.mu.Unlock()
 }
 
 // State 汇总 agent 的运行状态，供 health 读取。并发安全。
@@ -62,6 +70,7 @@ type State struct {
 	now      func() time.Time
 	engines  func() map[string]EngineStatus
 	mainCfg  func() bool
+	mainDig  func() string
 	data     func() DataStats
 	clock    func() ClockStatus
 	exits    func() []ExitStatus
@@ -154,6 +163,9 @@ func (s *State) Snapshot() Health {
 	}
 	if s.mainCfg != nil {
 		h.MainProxy.Configured = s.mainCfg()
+	}
+	if s.mainDig != nil {
+		h.MainProxy.Digest = s.mainDig()
 	}
 	if s.data != nil {
 		d := s.data()

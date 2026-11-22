@@ -94,14 +94,17 @@ type Daemon struct {
 	envDone      chan struct{}
 	realIP       *envcheck.RealIP // 本机真实公网 IP（只在内存，M4-6b）
 
-	jobs    jobs // 任务（M5-2）
-	srv     *http.Server
-	ln      net.Listener
-	supStop context.CancelFunc
-	supDone chan struct{}
-	reDone  chan struct{}
-	rrDone  chan struct{}
-	once    sync.Once
+	jobs jobs // 任务（M5-2）
+	// 主代理的存储（M5-4）；mainBoot 是上次下发主代理时虚拟机的启动标识（exitPushMu 保护）。
+	main     *MainStore
+	mainBoot string
+	srv      *http.Server
+	ln       net.Listener
+	supStop  context.CancelFunc
+	supDone  chan struct{}
+	reDone   chan struct{}
+	rrDone   chan struct{}
+	once     sync.Once
 
 	// 分流出口（M4-8）。
 	exits      *ExitStore
@@ -133,6 +136,11 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 		d.confirms = newConfirms(nil)
 	}
 	d.store = state.NewStore(o.StateDir)
+	mp := o.Sys.MainProfile
+	if mp == "" {
+		mp = filepath.Join(o.StateDir, "secrets", "main")
+	}
+	d.main = &MainStore{Profile: mp}
 	timeout, retry := o.LockTimeout, o.LockRetry
 	if timeout <= 0 {
 		timeout = DefaultLockTimeout

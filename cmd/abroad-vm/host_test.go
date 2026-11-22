@@ -124,3 +124,52 @@ func TestHostPeerCheck(t *testing.T) {
 		t.Fatalf("应断开 4 次：%d", rejects.Load())
 	}
 }
+
+// M5-4 验收 e（abroad-vm 一侧）：PUT /v1/main-hops 合法时整体替换主代理那一组（分流出口那一组不受影响），
+// 不合法 422 且不改，局域网节点不带确认被拒，开放模式 409，只能 PUT。
+func TestHostMainHops(t *testing.T) {
+	out := usernet.NewOutbound(nil, []usernet.FirstHop{{Host: "9.9.9.7", Ports: []usernet.PortRange{{Lo: 443, Hi: 443}}}}, nil)
+	u := &userNet{out: out, mode: outboundFirstHop}
+	h := u.hostHandler()
+	put := func(path, body string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodPut, path, strings.NewReader(body)))
+		return w
+	}
+	if w := put("/v1/exit-endpoints", `{"endpoints":[{"host":"203.0.113.5","proto":"udp","port":51820}]}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := put("/v1/main-hops", `{"hops":["8.8.4.9:8443"],"lan":[{"addr":"192.168.1.20:7890","confirmed":true}]}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	dial := func(n, dst string) bool { return out.BeforeDial(n, netip.MustParseAddrPort(dst)) == nil }
+	if dial("tcp", "9.9.9.7:443") || !dial("tcp", "8.8.4.9:8443") || !dial("tcp", "192.168.1.20:7890") || !dial("udp", "203.0.113.5:51820") {
+		t.Fatal("旧第一跳不可达、新的可达，分流出口照旧")
+	}
+	for _, body := range []string{
+		`{"hops":["127.0.0.1:7890"]}`,
+		`{"lan":[{"addr":"192.168.1.30:7890"}]}`,
+		`{"lan":[{"addr":"127.0.0.1:7890","confirmed":true}]}`,
+	} {
+		if w := put("/v1/main-hops", body); w.Code != 422 {
+			t.Errorf("%s：应 422，得到 %d", body, w.Code)
+		}
+	}
+	if !dial("tcp", "8.8.4.9:8443") || dial("tcp", "192.168.1.30:7890") {
+		t.Fatal("被拒的替换不改任何东西")
+	}
+	if w := put("/v1/main-hops", `{"hops":[],"x":1}`); w.Code != 400 {
+		t.Fatal("未知字段 400")
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/main-hops", nil))
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatal("没有读操作")
+	}
+	open := (&userNet{mode: outboundOpen}).hostHandler()
+	w = httptest.NewRecorder()
+	open.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/v1/main-hops", strings.NewReader(`{"hops":[]}`)))
+	if w.Code != http.StatusConflict {
+		t.Fatal("开放模式 409")
+	}
+}

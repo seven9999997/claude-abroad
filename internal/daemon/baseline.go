@@ -60,6 +60,11 @@ func (b *BaselineService) Save(base exitcheck.Baseline) (BaselineSummary, error)
 	return BaselineSummary{Rule: base.Rule, Country: base.Country, Timezone: base.Timezone}, nil
 }
 
+// summarizeBaseline 是基准的摘要（不含出口 IP）。
+func summarizeBaseline(base exitcheck.Baseline) BaselineSummary {
+	return BaselineSummary{Rule: base.Rule, Country: base.Country, Timezone: base.Timezone}
+}
+
 // Probe 跑一轮带位置查询的检查并得出基准，不保存（应用主代理的两步确认：第一次调用不改任何东西）。
 func (b *BaselineService) Probe(ctx context.Context, rule exitpolicy.Rule) (exitcheck.Baseline, error) {
 	if rule == "" {

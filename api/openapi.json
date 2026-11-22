@@ -80,6 +80,34 @@
         ],
         "type": "object"
       },
+      "DaemonAddSourceRequest": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "node": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "url": {
+            "type": "string"
+          },
+          "via_host": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "name"
+        ],
+        "type": "object"
+      },
       "DaemonBaselineSummary": {
         "properties": {
           "country": {
@@ -272,6 +300,36 @@
         ],
         "type": "object"
       },
+      "DaemonLANConfirmRequest": {
+        "properties": {
+          "node": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "node"
+        ],
+        "type": "object"
+      },
+      "DaemonMainProxyNodeView": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type"
+        ],
+        "type": "object"
+      },
       "DaemonMainProxyRequest": {
         "properties": {
           "confirm": {
@@ -302,6 +360,110 @@
           "baseline",
           "synced"
         ],
+        "type": "object"
+      },
+      "DaemonMainProxySourceView": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonMainProxyNodeView"
+            },
+            "type": "array"
+          },
+          "skipped": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "updated": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "updated"
+        ],
+        "type": "object"
+      },
+      "DaemonMainProxyView": {
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "chain": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonMainProxyNodeView"
+            },
+            "type": "array"
+          },
+          "lan_pending": {
+            "type": "boolean"
+          },
+          "needs_reselect": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          },
+          "selected": {
+            "$ref": "#/components/schemas/DaemonMainProxyNodeView"
+          },
+          "sources": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "applied",
+          "lan_pending",
+          "needs_reselect",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "DaemonMainSelectRequest": {
+        "properties": {
+          "chain": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "confirm": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string"
+          },
+          "selected": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "selected"
+        ],
+        "type": "object"
+      },
+      "DaemonRefreshRequest": {
+        "properties": {
+          "via_host": {
+            "type": "boolean"
+          }
+        },
         "type": "object"
       },
       "DaemonRegionChange": {
@@ -404,6 +566,26 @@
           "offline_allow",
           "pinned_extra",
           "proxy"
+        ],
+        "type": "object"
+      },
+      "DaemonSourceAdded": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "needs_reselect": {
+            "type": "boolean"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonMainProxySourceView"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id"
         ],
         "type": "object"
       },
@@ -1237,6 +1419,71 @@
         "x-level": "read"
       }
     },
+    "/v1/main-proxy": {
+      "get": {
+        "description": "主代理：保存的选择、是否已下发、是否需要重新选择、局域网节点是否待确认（不含服务器、密码、订阅地址）",
+        "operationId": "main-get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonMainProxyView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      },
+      "put": {
+        "description": "选节点或链并应用（已启用时：关闸门、换第一跳、下发、检查、失败回滚）",
+        "operationId": "main-select",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonMainSelectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonMainProxyResult"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "sensitive"
+      }
+    },
     "/v1/main-proxy/apply": {
       "post": {
         "description": "应用主代理",
@@ -1273,6 +1520,191 @@
           }
         },
         "x-level": "sensitive"
+      }
+    },
+    "/v1/main-proxy/check": {
+      "post": {
+        "description": "检查当前主代理（只检查，不保存）",
+        "operationId": "main-check",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonBaselineSummary"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "normal"
+      }
+    },
+    "/v1/main-proxy/lan-confirm": {
+      "post": {
+        "description": "确认局域网节点（绑定来源、节点、第一跳地址）",
+        "operationId": "main-lan-confirm",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonLANConfirmRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "sensitive"
+      }
+    },
+    "/v1/main-proxy/sources": {
+      "get": {
+        "description": "主代理的来源（不含订阅地址和节点的服务器、密码）",
+        "operationId": "main-sources",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonMainProxySourceView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      },
+      "post": {
+        "description": "添加来源：订阅、本地配置内容、手动节点",
+        "operationId": "main-source-add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonAddSourceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonSourceAdded"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "sensitive"
+      }
+    },
+    "/v1/main-proxy/sources/{id}": {
+      "delete": {
+        "description": "删除来源（正在使用的拒绝）",
+        "operationId": "main-source-delete",
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "sensitive"
+      }
+    },
+    "/v1/main-proxy/sources/{id}/refresh": {
+      "post": {
+        "description": "更新订阅（只更新节点列表，不下发）",
+        "operationId": "main-source-refresh",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonRefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonSourceAdded"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "normal"
       }
     },
     "/v1/region": {
