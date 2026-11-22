@@ -406,3 +406,30 @@ func TestDoHStaleServedQuickly(t *testing.T) {
 		t.Fatalf("DoH 卡住时应在 2 秒内回旧结果：%v %s %v，用时 %s", addrs, ttl, err, time.Since(start))
 	}
 }
+
+// M5-4：第一跳域名的答案全是私有地址时被拒并计 dns_hop_private（给用户“局域网里的代理请直接填 IP 地址”的提示）；
+// 有公网地址时照常、不计；分流出口端点的域名答私有地址是允许的，也不计。
+func TestGatewayDNSHopPrivate(t *testing.T) {
+	hops, _ := ParseFirstHops([]string{"node.example.com:443"})
+	o := NewOutbound(nil, hops, nil)
+	_ = o.SetExitEndpoints([]ExitEndpoint{{Host: "wg.example.com", Proto: "udp", Port: 51820}}, false)
+	answer := []netip.Addr{netip.MustParseAddr("192.168.1.20")}
+	g := &GatewayDNS{Out: o, Resolve: func(_ context.Context, name string) ([]netip.Addr, time.Duration, error) {
+		return answer, time.Minute, nil
+	}}
+	ctx := context.Background()
+	if m, _ := g.Exchange(ctx, query("node.example.com", dns.TypeA)); m.Rcode != dns.RcodeServerFailure {
+		t.Fatalf("第一跳域名只答私有地址时应 SERVFAIL：%v", m)
+	}
+	if c := g.Counters(); c.HopPrivate != 1 || c.Failed != 1 {
+		t.Fatalf("应计一次 dns_hop_private：%+v", c)
+	}
+	if m, _ := g.Exchange(ctx, query("wg.example.com", dns.TypeA)); m.Rcode != dns.RcodeSuccess {
+		t.Fatalf("分流出口端点的域名答私有地址是允许的：%v", m)
+	}
+	answer = []netip.Addr{netip.MustParseAddr("9.9.9.9"), netip.MustParseAddr("10.0.0.1")}
+	g.Exchange(ctx, query("node.example.com", dns.TypeA))
+	if c := g.Counters(); c.HopPrivate != 1 {
+		t.Fatalf("有公网地址时不计：%+v", c)
+	}
+}

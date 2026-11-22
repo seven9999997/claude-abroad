@@ -44,19 +44,19 @@ func TestSetMainHops(t *testing.T) {
 	}
 	before := firstHopSnapshot(o)
 	for name, m := range map[string]MainHops{
-		"第一跳是回环":       {Hops: []string{"127.0.0.1:7890"}},
-		"局域网是回环":       {LAN: []MainLAN{{Addr: "127.0.0.1:7890", Confirmed: true}}},
-		"局域网是组播":       {LAN: []MainLAN{{Addr: "224.0.0.9:1", Confirmed: true}}},
-		"局域网是 fake 段":   {LAN: []MainLAN{{Addr: "198.18.0.5:1", Confirmed: true}}},
+		"第一跳是回环":         {Hops: []string{"127.0.0.1:7890"}},
+		"局域网是回环":         {LAN: []MainLAN{{Addr: "127.0.0.1:7890", Confirmed: true}}},
+		"局域网是组播":         {LAN: []MainLAN{{Addr: "224.0.0.9:1", Confirmed: true}}},
+		"局域网是 fake 段":    {LAN: []MainLAN{{Addr: "198.18.0.5:1", Confirmed: true}}},
 		"局域网是 Anthropic": {LAN: []MainLAN{{Addr: "160.79.104.10:443", Confirmed: true}}},
 		"局域网是 IPv6":      {LAN: []MainLAN{{Addr: "[fd00::1]:443", Confirmed: true}}},
-		"局域网是公网":        {LAN: []MainLAN{{Addr: "203.0.113.9:443", Confirmed: true}}},
-		"局域网是虚拟机子网":     {LAN: []MainLAN{{Addr: "192.168.127.1:443", Confirmed: true}}},
-		"局域网没确认":        {LAN: []MainLAN{{Addr: "192.168.1.20:7890"}}},
-		"第一跳是私有地址":      {Hops: []string{"192.168.1.20:7890"}},
-		"第一跳 IPv6":      {Hops: []string{"[2001:db8::1]:443"}},
-		"第一跳主机名无效":      {Hops: []string{"bad_host:443"}},
-		"端口 0":          {LAN: []MainLAN{{Addr: "192.168.1.20:0", Confirmed: true}}},
+		"局域网是公网":         {LAN: []MainLAN{{Addr: "203.0.113.9:443", Confirmed: true}}},
+		"局域网是虚拟机子网":      {LAN: []MainLAN{{Addr: "192.168.127.1:443", Confirmed: true}}},
+		"局域网没确认":         {LAN: []MainLAN{{Addr: "192.168.1.20:7890"}}},
+		"第一跳是私有地址":       {Hops: []string{"192.168.1.20:7890"}},
+		"第一跳 IPv6":       {Hops: []string{"[2001:db8::1]:443"}},
+		"第一跳主机名无效":       {Hops: []string{"bad_host:443"}},
+		"端口 0":           {LAN: []MainLAN{{Addr: "192.168.1.20:0", Confirmed: true}}},
 	} {
 		if err := o.SetMainHops(m); err == nil {
 			t.Errorf("%s：应被拒", name)

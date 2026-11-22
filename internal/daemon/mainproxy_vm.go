@@ -24,6 +24,8 @@ type MainProxyVM interface {
 	PushMainProxy(ctx context.Context, yaml []byte) error
 	// MainProxyDigest 读 agent 报告的当前主代理配置的摘要（没有时为空）。
 	MainProxyDigest(ctx context.Context) (string, error)
+	// HopPrivate 读 abroad-vm 的计数：第一跳域名的答案全是私有地址、因此被拒的次数（dns_hop_private）。
+	HopPrivate(ctx context.Context) (int64, error)
 }
 
 // 主代理下发的时限（agent 的校验加等端口约 20 秒）。
@@ -80,4 +82,15 @@ func (v ExternalVM) MainProxyDigest(ctx context.Context) (string, error) {
 		return "", ErrVMNotReady
 	}
 	return h.MainProxy.Digest, nil
+}
+
+// HopPrivate 实现 MainProxyVM（host.sock 的 netstats 里的 dns_hop_private）。
+func (v ExternalVM) HopPrivate(ctx context.Context) (int64, error) {
+	var st struct {
+		HopPrivate int64 `json:"dns_hop_private"`
+	}
+	if err := getJSON(ctx, v.hostSock(), "http://abroad-vm/v1/netstats", &st); err != nil {
+		return 0, ErrVMNotReady
+	}
+	return st.HopPrivate, nil
 }

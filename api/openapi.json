@@ -108,6 +108,50 @@
         ],
         "type": "object"
       },
+      "DaemonAppView": {
+        "properties": {
+          "app": {
+            "type": "string"
+          },
+          "conns": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "exits": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "app",
+          "conns",
+          "name",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "DaemonAppsView": {
+        "properties": {
+          "apps": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonAppView"
+            },
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "DaemonBaselineSummary": {
         "properties": {
           "country": {
@@ -176,6 +220,64 @@
         ],
         "type": "object"
       },
+      "DaemonEngineView": {
+        "properties": {
+          "last_error": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "restarts": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "since": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "restarts",
+          "state"
+        ],
+        "type": "object"
+      },
+      "DaemonEnginesView": {
+        "properties": {
+          "boot_changed": {
+            "type": "boolean"
+          },
+          "engines": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonEngineView"
+            },
+            "type": "array"
+          },
+          "kernel": {
+            "type": "string"
+          },
+          "reachable": {
+            "type": "boolean"
+          },
+          "uptime_s": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "boot_changed",
+          "reachable"
+        ],
+        "type": "object"
+      },
       "DaemonEnvSettingsRequest": {
         "properties": {
           "disabled": {
@@ -207,6 +309,25 @@
           "kind",
           "source",
           "time"
+        ],
+        "type": "object"
+      },
+      "DaemonExitCheckResult": {
+        "properties": {
+          "cached": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DaemonExitStatus"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cached",
+          "status",
+          "tag"
         ],
         "type": "object"
       },
@@ -458,6 +579,56 @@
         ],
         "type": "object"
       },
+      "DaemonPreflightItem": {
+        "properties": {
+          "fix": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "undecidable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "fix",
+          "id",
+          "title"
+        ],
+        "type": "object"
+      },
+      "DaemonPreflightView": {
+        "properties": {
+          "blocking": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonPreflightItem"
+            },
+            "type": "array"
+          },
+          "cached": {
+            "type": "boolean"
+          },
+          "checked_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonPreflightItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "cached",
+          "checked_at"
+        ],
+        "type": "object"
+      },
       "DaemonRefreshRequest": {
         "properties": {
           "via_host": {
@@ -566,6 +737,42 @@
           "offline_allow",
           "pinned_extra",
           "proxy"
+        ],
+        "type": "object"
+      },
+      "DaemonSetupStep": {
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "done",
+          "id"
+        ],
+        "type": "object"
+      },
+      "DaemonSetupView": {
+        "properties": {
+          "completed": {
+            "type": "boolean"
+          },
+          "completed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonSetupStep"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "completed"
         ],
         "type": "object"
       },
@@ -1054,6 +1261,35 @@
         "x-level": "sensitive"
       }
     },
+    "/v1/apps": {
+      "get": {
+        "description": "在联网的应用（不含目的地址、域名、用户目录）",
+        "operationId": "apps",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonAppsView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      }
+    },
     "/v1/baseline": {
       "post": {
         "description": "已过时：应用主代理的别名，保留到 M6",
@@ -1159,6 +1395,35 @@
         },
         "x-async": true,
         "x-level": "per_call"
+      }
+    },
+    "/v1/engines": {
+      "get": {
+        "description": "引擎与虚拟机的状态（不含配置和端点）",
+        "operationId": "engines",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonEnginesView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
       }
     },
     "/v1/envcheck": {
@@ -1388,6 +1653,35 @@
           }
         },
         "x-level": "sensitive"
+      }
+    },
+    "/v1/exits/{tag}/check": {
+      "post": {
+        "description": "单独检查一个分流出口（同一出口同时只跑一个，有最小间隔）",
+        "operationId": "exit-check",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonExitCheckResult"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "normal"
       }
     },
     "/v1/jobs/{id}": {
@@ -1707,6 +2001,35 @@
         "x-level": "normal"
       }
     },
+    "/v1/preflight": {
+      "get": {
+        "description": "启用前的冲突检查（脱敏；最小间隔 2 秒）",
+        "operationId": "preflight",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonPreflightView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      }
+    },
     "/v1/region": {
       "get": {
         "description": "",
@@ -1857,6 +2180,64 @@
           }
         },
         "x-level": "per_call"
+      }
+    },
+    "/v1/setup": {
+      "get": {
+        "description": "安装引导的进度",
+        "operationId": "setup-get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonSetupView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      }
+    },
+    "/v1/setup/complete": {
+      "post": {
+        "description": "完成安装引导（主代理没应用过时 422）",
+        "operationId": "setup-complete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonSetupView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "normal"
       }
     },
     "/v1/status": {

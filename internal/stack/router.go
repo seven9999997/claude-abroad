@@ -248,6 +248,7 @@ func (p *Proxy) commit(e *flowEntry, r *route, dec rules.Decision) rules.Decisio
 		dec = p.decide(r)
 	}
 	e.decided, e.who, e.dest, e.network, e.action, e.flow = true, r.who, r.dest, r.network, dec.Action, r.flow
+	e.reason = dec.Reason
 	return dec
 }
 

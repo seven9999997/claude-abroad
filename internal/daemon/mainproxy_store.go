@@ -81,12 +81,21 @@ type appliedRecord struct {
 type MainStore struct {
 	Profile string
 	mu      sync.Mutex
+	// failSave 只给测试注入“写盘失败”（nil 表示正常）。
+	failSave func() error
 }
 
 func (m *MainStore) file(name string) string { return filepath.Join(managedproxy.Dir(m.Profile), name) }
 
 func (m *MainStore) load() (managedproxy.Store, error) { return managedproxy.Load(m.Profile) }
-func (m *MainStore) save(s managedproxy.Store) error   { return s.Save(m.Profile) }
+func (m *MainStore) save(s managedproxy.Store) error {
+	if m.failSave != nil {
+		if err := m.failSave(); err != nil {
+			return err
+		}
+	}
+	return s.Save(m.Profile)
+}
 
 func readJSONFile(path string, v any) (bool, error) {
 	b, err := os.ReadFile(path)

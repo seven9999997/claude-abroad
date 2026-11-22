@@ -2,11 +2,11 @@ package main
 
 import (
 	"claude-abroad/internal/claudeproc"
+	"claude-abroad/internal/console"
 	"claude-abroad/internal/directdial"
 	"claude-abroad/internal/envcheck"
 	"claude-abroad/internal/exitcheck"
 	"claude-abroad/internal/procinfo"
-	"claude-abroad/internal/region"
 	"claude-abroad/internal/rules"
 	"context"
 	"errors"
@@ -131,7 +131,9 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 			return u.Uid, nil
 		},
 		User: f.pfUser, RootFS: os.DirFS("/"), FirstHop: daemon.MainProxyFirstHop(f.mainStore),
-		Data: dp, VM: daemon.ExternalVM{Dir: f.vmDir}, ExitVM: daemon.ExternalVM{Dir: f.vmDir},
+		// 冲突检查读 shell 配置：当前控制台用户的主目录（每次读时重新取；没人登录时这一项跳过；M5-5）。
+		HomeFS: console.HomeFS{},
+		Data:   dp, VM: daemon.ExternalVM{Dir: f.vmDir}, ExitVM: daemon.ExternalVM{Dir: f.vmDir},
 		// 主代理由 abroadd 持有（M5-4）：存储就是 --main-proxy-store；订阅启用时经数据通道走主代理，经本机网络时经直连拨号模块。
 		MainProfile: f.mainStore, MainVM: daemon.ExternalVM{Dir: f.vmDir}, FetchSource: realFetch(dp.Streams(), direct),
 		// 按出口的检查（M4-8）：经该出口开流，不做基准比对（判定只看 HTTPS、出口 IP、大陆段、DoH）。
@@ -230,17 +232,7 @@ func realEnvDeps(claude *claudeproc.Service, direct *directdial.Client) *daemon.
 			return out, nil
 		},
 		// 15、16：当前登录用户（/dev/console 的属主）的主目录。
-		Home: func() (string, error) {
-			name, _, err := region.ConsoleUser()
-			if err != nil {
-				return "", err
-			}
-			u, err := user.Lookup(name)
-			if err != nil {
-				return "", err
-			}
-			return u.HomeDir, nil
-		},
+		Home: console.HomeDir, // M5-5：由控制台用户的 uid 查出（和冲突检查同一个取法）
 	}
 	// 08 的本机真实公网 IP：经直连拨号模块按域名取一个连到 STUN 服务器的 UDP 连接（只在内存里）。
 	if direct != nil {

@@ -312,21 +312,54 @@ func (l *exitLoop) checkAll(ctx context.Context, exits []StoredExit) {
 			if ctx.Err() != nil {
 				return
 			}
-			items := map[string]string{}
-			for _, it := range rep.Items {
-				items[it.Name] = string(it.Result)
-			}
-			before := l.d.exitAvail.View(tag).Up
-			l.d.exitAvail.Update(tag, toGate(rep.SplitVerdict()), toGate(rep.UDPResult()), items)
-			if after := l.d.exitAvail.View(tag); after.Up != before {
-				if after.Up {
-					l.d.events.Add("exits", "exit_up", "分流出口 "+tag+" 可用")
-				} else {
-					l.d.events.Add("exits", "exit_down", "分流出口 "+tag+" 不可用（"+after.Reason+"），命中它的连接走主代理")
-				}
-			}
+			l.applyReport(tag, rep)
 		}(x.Tag)
 	}
+}
+
+// applyReport 把一次按出口检查的结果写进可用状态，变化时发事件。
+func (l *exitLoop) applyReport(tag string, rep exitcheck.Report) {
+	items := map[string]string{}
+	for _, it := range rep.Items {
+		items[it.Name] = string(it.Result)
+	}
+	before := l.d.exitAvail.View(tag).Up
+	l.d.exitAvail.Update(tag, toGate(rep.SplitVerdict()), toGate(rep.UDPResult()), items)
+	if after := l.d.exitAvail.View(tag); after.Up != before {
+		if after.Up {
+			l.d.events.Add("exits", "exit_up", "分流出口 "+tag+" 可用")
+		} else {
+			l.d.events.Add("exits", "exit_down", "分流出口 "+tag+" 不可用（"+after.Reason+"），命中它的连接走主代理")
+		}
+	}
+}
+
+// checkOne 同步地检查一个出口（M5-5 的手动检查）：和定时检查共用“同一个出口同时只跑一个”；正在跑时直接返回。
+func (l *exitLoop) checkOne(ctx context.Context, tag string) {
+	check := l.d.opts.Sys.CheckExit
+	if check == nil {
+		return
+	}
+	l.checkMu.Lock()
+	if l.inflight == nil {
+		l.inflight = map[string]bool{}
+	}
+	if l.inflight[tag] {
+		l.checkMu.Unlock()
+		return
+	}
+	l.inflight[tag] = true
+	l.checkMu.Unlock()
+	defer func() {
+		l.checkMu.Lock()
+		delete(l.inflight, tag)
+		l.checkMu.Unlock()
+	}()
+	rep := check(ctx, tag)
+	if ctx.Err() != nil {
+		return
+	}
+	l.applyReport(tag, rep)
 }
 
 func toGate(r exitcheck.Result) gatesm.Result {

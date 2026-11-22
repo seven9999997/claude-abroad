@@ -127,6 +127,7 @@ type flowEntry struct {
 	dest    rules.Dest
 	network string
 	action  rules.Action
+	reason  rules.Reason
 	flow    Flow
 }
 

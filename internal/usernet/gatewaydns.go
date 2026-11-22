@@ -24,7 +24,7 @@ type GatewayDNS struct {
 	Out     *Outbound
 	Resolve func(ctx context.Context, name string) ([]netip.Addr, time.Duration, error)
 
-	answered, refused, failed atomic.Int64
+	answered, refused, failed, hopPrivate atomic.Int64
 }
 
 // DNSCounters 是网关 DNS 的计数。
@@ -33,11 +33,13 @@ type DNSCounters struct {
 	Refused  int64 `json:"dns_refused"`
 	// Failed 是登记域名的 A 查询回 SERVFAIL 的次数（解析失败或没有公网地址）。
 	Failed int64 `json:"dns_failed"`
+	// HopPrivate 是第一跳域名的答案全是私有地址、因此被拒的次数（M5-4：给用户“局域网里的代理请直接填 IP 地址”的提示）。
+	HopPrivate int64 `json:"dns_hop_private"`
 }
 
 // Counters 返回计数快照。
 func (g *GatewayDNS) Counters() DNSCounters {
-	return DNSCounters{Answered: g.answered.Load(), Refused: g.refused.Load(), Failed: g.failed.Load()}
+	return DNSCounters{Answered: g.answered.Load(), Refused: g.refused.Load(), Failed: g.failed.Load(), HopPrivate: g.hopPrivate.Load()}
 }
 
 func reply(q *dns.Msg, rcode int) *dns.Msg {
@@ -78,6 +80,9 @@ func (g *GatewayDNS) Exchange(ctx context.Context, q *dns.Msg) (*dns.Msg, error)
 		}
 	}
 	if len(keep) == 0 {
+		if len(addrs) > 0 && allPrivate(addrs) && g.Out.IsMainHopDomain(name) {
+			g.hopPrivate.Add(1)
+		}
 		g.failed.Add(1)
 		return reply(q, dns.RcodeServerFailure), nil
 	}
@@ -92,4 +97,21 @@ func (g *GatewayDNS) Exchange(ctx context.Context, q *dns.Msg) (*dns.Msg, error)
 	}
 	g.answered.Add(1)
 	return m, nil
+}
+
+// allPrivate 报告 addrs 是否全是局域网 IPv4（10/8、172.16/12、192.168/16、100.64/10）。
+func allPrivate(addrs []netip.Addr) bool {
+	for _, a := range addrs {
+		a = a.Unmap()
+		in := false
+		for _, p := range mainLANPrefixes {
+			if p.Contains(a) {
+				in = true
+			}
+		}
+		if !in {
+			return false
+		}
+	}
+	return true
 }

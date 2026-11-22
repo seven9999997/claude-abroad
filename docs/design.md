@@ -1,6 +1,6 @@
 # Claude 出国 技术方案
 
-> 状态：草案 v0.24（2026-11-22，architect 判 M5-4：域名第一跳解析成私有地址按现状定，见 11.1、16）。v0.23（2026-11-22，architect 判 M5-2：主代理第一跳白名单运行中替换、应用主代理的顺序与回滚、主代理由 abroadd 持有，见 4.5、7.2、11.1、R20、16）。v0.22（2026-11-22，architect 判 M5-1：socket 权限 0755/0666 只按对端 uid 判、三种调用方、核验系统授权的极小 cgo，见 11.1、12、16）。v0.21（2026-11-22，architect 审 m5-plan v1：前缀 /v1、推迟期间需要两步确认的操作按敏感处理、改规则的分级原则、授权凭证的语义，见 11.1、第 16 节）。v0.20（2026-11-22，M5-0：签名校验推迟期间的权限模型见 11.1，M5 的范围见 14，见第 16 节）。v0.19（2026-11-22，M4-9：手动地区可以显式指定地区格式，见 9.1、第 16 节）。v0.18（2026-11-21，M4-8：分流出口端点放进出站白名单、由 agent 解析，出口第一次通过检查前不可用）
+> 状态：草案 v0.25（2026-11-22，architect 判 M5-5：命令行的约定见 11.3、16）。v0.24（2026-11-22，architect 判 M5-4：域名第一跳解析成私有地址按现状定，见 11.1、16）。v0.23（2026-11-22，architect 判 M5-2：主代理第一跳白名单运行中替换、应用主代理的顺序与回滚、主代理由 abroadd 持有，见 4.5、7.2、11.1、R20、16）。v0.22（2026-11-22，architect 判 M5-1：socket 权限 0755/0666 只按对端 uid 判、三种调用方、核验系统授权的极小 cgo，见 11.1、12、16）。v0.21（2026-11-22，architect 审 m5-plan v1：前缀 /v1、推迟期间需要两步确认的操作按敏感处理、改规则的分级原则、授权凭证的语义，见 11.1、第 16 节）。v0.20（2026-11-22，M5-0：签名校验推迟期间的权限模型见 11.1，M5 的范围见 14，见第 16 节）。v0.19（2026-11-22，M4-9：手动地区可以显式指定地区格式，见 9.1、第 16 节）。v0.18（2026-11-21，M4-8：分流出口端点放进出站白名单、由 agent 解析，出口第一次通过检查前不可用）
 > 适用平台：macOS 14+，Apple Silicon；Windows 10/11，x64（平台层见 `docs/design-windows.md`）
 > 参考来源：[Claude-Cage](../../Claude-Cage)（MIT）的网络闸门、出口检查与虚拟机网络隔离设计
 
@@ -952,13 +952,15 @@ Docker、OrbStack、Parallels 等虚拟化软件不算冲突，启用后它们�
 abroad status | check [--device] | up | down               # 不需要 sudo
 sudo abroad restore [--force] [--yes] [--kill-browsers]   # 以下都需要 sudo
 sudo abroad uninstall [--yes]
-abroad main add-source <url|file> [--name] [--via-host] | add-node http|socks5 <host:port> [--user --pass]
+abroad main add-source --file <配置文件>|--url-file <存订阅地址的文件>|--stdin [--name] [--via-host] | add-node --file <节点 YAML>   # 敏感内容一律从文件或标准输入读（v0.25）
 abroad main nodes | use <node> [--via <relay>...] | show | check
 abroad exit add <file|url> [--name] | ls | check <id> | rm <id>
 abroad app ls | set <app> direct|block|main|proxy:<exit> | rm <app>
 abroad region auto | set <tz> <lang> | show
 abroad engine ls | install <name> [--version] | rollback <name>
 ```
+
+**M5-6 的约定**（v0.25，m5-plan v2.4）：命令行只是本地接口的一个客户端，不直接读写状态目录、规则文件、secrets，不执行系统命令。需要 sudo 的子命令由路由表的级别推出：敏感的先在本地检查是不是 root（Windows 上是“以管理员身份运行”），不是就提示并退出、不发请求；按本次调用决定级别的（启用、切换地区、改规则）先不带 sudo 发请求，被拒时提示“这一次需要 sudo”和原因。`--yes` 只跳过命令行自己的文字确认，不能代替 sudo，也不能代替两步确认（预览照样打印）。订阅地址、节点密码、出口配置不经命令行参数传入（会出现在进程列表和 shell 历史里），只从文件或标准输入读，输出里不回显。默认输出给人看的文本，`--json` 输出接口原始应答。退出码：0 成功、2 参数错误、3 被拒（权限）、4 需要确认、5 冲突（忙）、6 连不上 abroadd、7 以后的版本提供、1 其他失败。设计里列了但后端还没有的子命令（引擎安装和回滚、`check --device`、卸载的实际流程、`restore --force`、`--kill-browsers`）保留命令，执行时说明“在以后的版本提供”。
 
 ### 11.4 安装、更新与卸载
 
@@ -1091,6 +1093,10 @@ Windows 版与 Mac 版同时开发：一个 Mac 任务、一个 Windows 任务�
 | R7 | 某些 macOS 系统服务（APNs、时间同步）在断网规则下的表现 | 在停用状态下观察系统日志 | 提供可选的"系统服务直连"预设 |
 
 ## 16. 修订记录
+
+**v0.25（2026-11-22）architect 判 M5-5（M5-6 的补充决定）**
+
+- 11.3：命令行只是接口的客户端；需要 sudo 的子命令由路由表级别推出、两层拒绝；`--yes` 只跳过文字确认；敏感内容不经参数传入；退出码约定；尚未提供的子命令。
 
 **v0.24（2026-11-22）architect 判 M5-4**
 

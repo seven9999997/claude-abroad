@@ -96,15 +96,19 @@ type Daemon struct {
 
 	jobs jobs // 任务（M5-2）
 	// 主代理的存储（M5-4）；mainBoot 是上次下发主代理时虚拟机的启动标识（exitPushMu 保护）。
-	main     *MainStore
-	mainBoot string
-	srv      *http.Server
-	ln       net.Listener
-	supStop  context.CancelFunc
-	supDone  chan struct{}
-	reDone   chan struct{}
-	rrDone   chan struct{}
-	once     sync.Once
+	main      *MainStore
+	mainBoot  string
+	mainDirty bool // 回退没有完成：下一轮无条件重新下发（exitPushMu 保护）
+	// M5-5：冲突检查接口的缓存、手动检查出口的去重。
+	pf      preflightCache
+	exitChk exitCheckGuard
+	srv     *http.Server
+	ln      net.Listener
+	supStop context.CancelFunc
+	supDone chan struct{}
+	reDone  chan struct{}
+	rrDone  chan struct{}
+	once    sync.Once
 
 	// 分流出口（M4-8）。
 	exits      *ExitStore

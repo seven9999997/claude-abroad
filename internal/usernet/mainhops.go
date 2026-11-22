@@ -107,3 +107,9 @@ func (o *Outbound) SetMainHops(m MainHops) error {
 
 // MainLANCount 是当前局域网主代理节点的个数（诊断用）。
 func (o *Outbound) MainLANCount() int { return len(o.main.Load().lan) }
+
+// IsMainHopDomain 报告 name 是不是主代理第一跳的域名。
+func (o *Outbound) IsMainHopDomain(name string) bool {
+	_, ok := o.main.Load().byDom[name]
+	return ok
+}

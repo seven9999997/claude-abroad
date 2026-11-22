@@ -309,6 +309,9 @@ func (d *Daemon) handleMainSelect(w http.ResponseWriter, r *http.Request) {
 	d.switchMain(w, r, p, MainProxyRequest{Rule: req.Rule, Confirm: req.Confirm})
 }
 
+// HopPrivateHint 是第一跳域名解析到局域网地址时给用户的提示。
+const HopPrivateHint = "局域网里的代理请直接填 IP 地址"
+
 // mainErr 组装面向用户的错误：中文的产品规则原样作为原因，系统错误按 usererror 归类（不原样给出底层文字）。
 func mainErr(action string, err error, next string) error {
 	if err == nil {
@@ -347,6 +350,7 @@ func (d *Daemon) switchMain(w http.ResponseWriter, r *http.Request, p mainPlan, 
 	d.exitPushMu.Lock()
 	defer d.exitPushMu.Unlock()
 	old, _ := d.main.applied()
+	oldBase, oldBaseErr := os.ReadFile(bs.Path) // 更换前的基准（保存失败时整体回退要用；没有时为空）
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 2*MainPushTimeout+ExitCheckTimeout)
 	defer cancel()
 	d.gate.AddReason(gatesm.ReasonMainSwitch, "正在更换主代理")
@@ -354,12 +358,25 @@ func (d *Daemon) switchMain(w http.ResponseWriter, r *http.Request, p mainPlan, 
 		d.gate.ClearReason(gatesm.ReasonMainSwitch)
 		d.re.Kick()
 	}
-	fail := func(code int, what string, err error) {
-		d.restoreMain(ctx, vm, old)
+	// rollback 回到旧的第一跳和旧配置；回退的下发没成功时返回 false（事件和应答要如实，下一轮会重新下发）。
+	rollback := func() bool {
+		ok := d.restoreMain(ctx, vm, old)
 		done()
-		d.events.Add("main_proxy", "switch_failed", what+"："+usererror.Reason(err))
-		writeJSON(w, code, errBody{mainErr(what, err, "已经回到原来的主代理；请检查新节点后再试。").Error()})
+		return ok
 	}
+	hint := "" // 能照着做的提示（例如第一跳域名解析到了局域网地址），放在“下一步”的最前面
+	next := func(restored bool) string {
+		if restored {
+			return hint + "已经回到原来的主代理；请检查新节点后再试。"
+		}
+		return hint + "新节点没有生效；恢复原来的主代理没有完成，稍后会自动重试。"
+	}
+	fail := func(code int, what string, err error) {
+		restored := rollback()
+		d.events.Add("main_proxy", "switch_failed", what+"："+usererror.Reason(err))
+		writeJSON(w, code, errBody{mainErr(what, err, next(restored)).Error()})
+	}
+	hp0, hpErr := vm.HopPrivate(ctx)
 	if err := vm.PushMainHops(ctx, p.hops); err != nil {
 		fail(http.StatusBadGateway, "替换虚拟机出站白名单里的主代理第一跳", err)
 		return
@@ -370,43 +387,97 @@ func (d *Daemon) switchMain(w http.ResponseWriter, r *http.Request, p mainPlan, 
 	}
 	base, err := bs.Probe(ctx, req.Rule)
 	if err != nil {
+		// 第一跳域名解析到了局域网地址（网关不放行，v2.3 偏差的结论）：给出能照着做的提示。
+		if hp1, err2 := vm.HopPrivate(ctx); hpErr == nil && err2 == nil && hp1 > hp0 {
+			hint = "节点的域名解析到了局域网地址，" + HopPrivateHint + "；"
+		}
 		fail(http.StatusUnprocessableEntity, "检查新的主代理", err)
 		return
 	}
-	if !d.finishMainProxy(w, r, req, base) { // 应答已经写了（要确认 409、被拒 403、出错）
-		d.restoreMain(ctx, vm, old)
-		done()
+	// 后半段（地区、基准）的应答先暂存：选择和“已下发”记录保存成功之后才发出去（M5-4 建议改 1）。
+	rec := &bufferedResponse{header: http.Header{}}
+	if !d.finishMainProxy(rec, r, req, base) { // 要确认 409、被拒 403、出错：回退后照原样转发
+		rollback()
+		rec.flushTo(w)
 		return
 	}
 	d.main.mu.Lock()
 	err = d.main.save(p.store)
 	if err == nil {
 		err = d.main.saveApplied(appliedRecord{Store: p.store, Digest: p.digest, Hops: p.hops})
+	}
+	if err == nil {
 		_ = os.Remove(d.main.file("pending.json"))
 	}
 	d.main.mu.Unlock()
 	if err != nil {
-		d.opts.logf("保存主代理的选择：%v", err) // 已经生效，只是没记下；下次重启后按旧记录比对会重新下发
+		// 新主代理已经生效、但没记下：不能报告成功（下一轮核对会按旧记录把旧的下发回去）。整体回退，含基准。
+		if oldBaseErr == nil {
+			_ = managedproxy.Write(bs.Path, oldBase)
+		} else {
+			_ = os.Remove(bs.Path)
+		}
+		fail(http.StatusInternalServerError, "保存主代理的选择", err)
+		return
 	}
 	d.events.Add("main_proxy", "switched", "主代理已更换")
 	done()
+	rec.flushTo(w)
+}
+
+// bufferedResponse 暂存一个应答（状态码、头、正文），确定要发时再写给真正的 ResponseWriter。
+type bufferedResponse struct {
+	header http.Header
+	code   int
+	body   []byte
+}
+
+func (b *bufferedResponse) Header() http.Header { return b.header }
+func (b *bufferedResponse) WriteHeader(code int) {
+	if b.code == 0 {
+		b.code = code
+	}
+}
+func (b *bufferedResponse) Write(p []byte) (int, error) {
+	if b.code == 0 {
+		b.code = http.StatusOK
+	}
+	b.body = append(b.body, p...)
+	return len(p), nil
+}
+func (b *bufferedResponse) flushTo(w http.ResponseWriter) {
+	for k, v := range b.header {
+		w.Header()[k] = v
+	}
+	if b.code == 0 {
+		b.code = http.StatusOK
+	}
+	w.WriteHeader(b.code)
+	_, _ = w.Write(b.body)
 }
 
 // restoreMain 把虚拟机恢复到旧的第一跳名单和旧配置（没有旧记录时清空第一跳名单：新配置不会被放行）。
-func (d *Daemon) restoreMain(ctx context.Context, vm MainProxyVM, old *appliedRecord) {
+// 回退的下发有一步没成功时返回 false：发“回退没有完成”的事件，并让下一轮的核对无条件重新下发（mainDirty）。
+func (d *Daemon) restoreMain(ctx context.Context, vm MainProxyVM, old *appliedRecord) bool {
+	var errs []error
 	if old == nil {
-		_ = vm.PushMainHops(ctx, usernet.MainHops{})
+		errs = append(errs, vm.PushMainHops(ctx, usernet.MainHops{}))
+	} else if cfg, err := old.Store.VMRuntimeConfig(); err != nil {
+		errs = append(errs, vm.PushMainHops(ctx, usernet.MainHops{}), err)
+	} else {
+		errs = append(errs, vm.PushMainHops(ctx, old.Hops), vm.PushMainProxy(ctx, cfg.YAML))
+	}
+	if errors.Join(errs...) != nil {
+		d.mainDirty = true
+		d.events.Add("main_proxy", "rollback_incomplete", "回退没有完成，下一轮会重试")
+		return false
+	}
+	if old == nil {
 		d.events.Add("main_proxy", "rolled_back", "没有旧的主代理可以恢复：清空了第一跳名单")
-		return
+	} else {
+		d.events.Add("main_proxy", "rolled_back", "已回到原来的主代理")
 	}
-	cfg, err := old.Store.VMRuntimeConfig()
-	if err != nil {
-		_ = vm.PushMainHops(ctx, usernet.MainHops{})
-		return
-	}
-	_ = vm.PushMainHops(ctx, old.Hops)
-	_ = vm.PushMainProxy(ctx, cfg.YAML)
-	d.events.Add("main_proxy", "rolled_back", "已回到原来的主代理")
+	return true
 }
 
 // managedMain 报告 abroadd 是否持有主代理的配置（v2.2 决定 8：有“已下发”记录或“待下发”的选择）。开发工具手动下发的
@@ -485,7 +556,7 @@ func (d *Daemon) maintainMain(ctx context.Context) {
 		return
 	}
 	rebooted := d.mainBoot != "" && boot != d.mainBoot
-	drift := derr == nil && cur != a.Digest
+	drift := derr == nil && cur != a.Digest || d.mainDirty // 回退没有完成时无条件重新下发
 	if !rebooted && !drift && d.mainBoot != "" {
 		return
 	}
@@ -504,6 +575,7 @@ func (d *Daemon) maintainMain(ctx context.Context) {
 		if vm.PushMainHops(pctx, a.Hops) != nil || vm.PushMainProxy(pctx, cfg.YAML) != nil {
 			return // 下一轮再试；主代理没下发成功之前出口检查不通过，闸门保持关闭
 		}
+		d.mainDirty = false
 	}
 	d.mainBoot = boot
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,15 +21,18 @@ import (
 
 // fakeMainVM 记录对虚拟机的调用时间线（M5-4 验收 d、h、i）。
 type fakeMainVM struct {
-	mu       sync.Mutex
-	line     []string
-	boot     string
-	digest   string // 虚拟机里当前配置的摘要
-	hops     usernet.MainHops
-	failHops error
-	failPush error
-	gateAt   func() bool // 下发配置时闸门是否开着
-	gateSeen []bool
+	mu          sync.Mutex
+	line        []string
+	boot        string
+	digest      string // 虚拟机里当前配置的摘要
+	hops        usernet.MainHops
+	failHops    error
+	failHopsN   int // 接下来连续失败几次（测回退本身失败）
+	failPush    error
+	gateAt      func() bool // 下发配置时闸门是否开着
+	hopPrivate  int64
+	unreachable bool
+	gateSeen    []bool
 }
 
 func (f *fakeMainVM) log(s string) { f.line = append(f.line, s) }
@@ -40,6 +44,11 @@ func (f *fakeMainVM) BootID(context.Context) (string, error) {
 func (f *fakeMainVM) PushMainHops(_ context.Context, m usernet.MainHops) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.failHopsN > 0 {
+		f.failHopsN--
+		f.log("hops-fail")
+		return errors.New("假的 host.sock 一直失败")
+	}
 	if f.failHops != nil {
 		err := f.failHops
 		f.failHops = nil // 只失败一次（回滚时的下发要成功）
@@ -71,6 +80,11 @@ func (f *fakeMainVM) PushMainProxy(_ context.Context, yaml []byte) error {
 	f.log("proxy:" + f.digest)
 	return nil
 }
+func (f *fakeMainVM) HopPrivate(context.Context) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.hopPrivate, nil
+}
 func (f *fakeMainVM) MainProxyDigest(context.Context) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -101,6 +115,7 @@ func (f *fakeMainVM) timeline() []string {
 	defer f.mu.Unlock()
 	return append([]string(nil), f.line...)
 }
+
 // mainLine 只取主代理的下发（出口循环同时会下发分流出口）。
 func (f *fakeMainVM) mainLine() []string {
 	var out []string
@@ -241,10 +256,10 @@ func TestMainSources(t *testing.T) {
 	}
 	before, _ := os.ReadFile(f)
 	for name, req := range map[string]AddSourceRequest{
-		"YAML 不合法":  {Kind: "yaml", Name: "坏", Content: "proxies: [ {name: x, type: nope} ]"},
-		"节点缺字段":     {Kind: "node", Name: "坏", Node: map[string]any{"type": "ss"}},
-		"种类不对":      {Kind: "ftp", Name: "坏"},
-		"订阅地址协议不对":  {Kind: "subscription", Name: "坏", URL: "file:///etc/passwd", ViaHost: true},
+		"YAML 不合法":   {Kind: "yaml", Name: "坏", Content: "proxies: [ {name: x, type: nope} ]"},
+		"节点缺字段":      {Kind: "node", Name: "坏", Node: map[string]any{"type": "ss"}},
+		"种类不对":       {Kind: "ftp", Name: "坏"},
+		"订阅地址协议不对":   {Kind: "subscription", Name: "坏", URL: "file:///etc/passwd", ViaHost: true},
 		"名字为空的 YAML": {Kind: "yaml", Name: "", Content: mainNodesYAML},
 	} {
 		bb, _ := json.Marshal(req)
@@ -691,5 +706,101 @@ func TestMainConcurrent(t *testing.T) {
 		if strings.HasPrefix(s, "hops:") && i+1 < len(tl) && !strings.HasPrefix(tl[i+1], "proxy") && !strings.HasPrefix(tl[i+1], "hops") {
 			t.Fatalf("第一跳和配置之间插进了别的下发：%v", tl)
 		}
+	}
+}
+
+// M5-4 建议改 1：新主代理已经生效、但选择没存下来时整体回退——虚拟机回到旧配置、基准回到更换前，应答是失败。
+func TestMainSwitchSaveFails(t *testing.T) {
+	m := newMainEnv(t, false)
+	m.addYAML(t, "本地", mainNodesYAML)
+	m.enableWith(t, "exit")
+	old, _ := m.d.main.applied()
+	baseBefore, _ := os.ReadFile(filepath.Join(m.env.dir, BaselineFile))
+	m.pr.mu.Lock()
+	r := passReport() // 同一个国家、换一个出口 IP：基准文件不同（看得出有没有回退），地区不变（不触发确认）
+	r.IP = netip.MustParseAddr("203.0.113.99")
+	r.Geo.IP = r.IP
+	m.pr.rep = r
+	m.pr.mu.Unlock()
+	m.d.main.failSave = func() error { return errors.New("假的写盘失败") }
+	code, b := m.sel(t, MainSelectRequest{Selected: m.nodeID(t, "exit2")})
+	m.d.main.failSave = nil
+	if code != http.StatusInternalServerError || !strings.Contains(string(b), "保存主代理的选择") || !strings.Contains(string(b), "已经回到原来的主代理") {
+		t.Fatalf("保存失败应整体回退并报失败：%d %s", code, b)
+	}
+	if m.vm.digest != old.Digest {
+		t.Fatal("虚拟机里应回到旧配置")
+	}
+	if after, _ := os.ReadFile(filepath.Join(m.env.dir, BaselineFile)); string(after) != string(baseBefore) {
+		t.Fatal("基准应恢复成更换前的")
+	}
+	if a, _ := m.d.main.applied(); a.Digest != old.Digest {
+		t.Fatal("“已下发”记录应还是旧的")
+	}
+	// 下一轮核对：摘要一致，不会把别的配置下发回去。
+	m.vm.reset()
+	m.d.exitLoop.round(context.Background())
+	for _, s := range m.vm.mainLine() {
+		if strings.HasPrefix(s, "proxy:") {
+			t.Fatalf("回退成功后下一轮不应再下发：%v", m.vm.mainLine())
+		}
+	}
+}
+
+// M5-4 建议改 2：回退本身没成功时，事件和应答如实，下一轮重新下发旧配置。
+func TestMainRollbackIncomplete(t *testing.T) {
+	m := newMainEnv(t, false)
+	m.addYAML(t, "本地", mainNodesYAML)
+	m.enableWith(t, "exit")
+	old, _ := m.d.main.applied()
+	m.d.exitLoop.round(context.Background()) // 记下启动标识
+	m.vm.mu.Lock()
+	m.vm.failHopsN = 2 // 换第一跳失败，回退时换回旧第一跳也失败
+	m.vm.mu.Unlock()
+	code, b := m.sel(t, MainSelectRequest{Selected: m.nodeID(t, "exit2")})
+	if code == 200 || !strings.Contains(string(b), "恢复原来的主代理没有完成") || strings.Contains(string(b), "已经回到原来的主代理") {
+		t.Fatalf("回退没完成时应答要如实：%d %s", code, b)
+	}
+	evs := fmt.Sprint(m.d.events.List())
+	if !strings.Contains(evs, "rollback_incomplete") {
+		t.Fatalf("应有“回退没有完成”的事件：%s", evs)
+	}
+	m.vm.reset()
+	m.d.exitLoop.round(context.Background())
+	tl := m.vm.mainLine()
+	if len(tl) < 2 || !strings.HasPrefix(tl[0], "hops:8.8.4.20") || tl[1] != "proxy:"+old.Digest {
+		t.Fatalf("下一轮应重新下发旧的第一跳和旧配置：%v", tl)
+	}
+	m.vm.reset()
+	m.d.exitLoop.round(context.Background())
+	if len(m.vm.mainLine()) != 0 {
+		t.Fatal("补发成功后不应再重复下发")
+	}
+}
+
+// v2.3 偏差的结论：第一跳域名解析到局域网地址（网关拒绝、计 dns_hop_private）导致检查失败时，错误里给出“填 IP”的提示。
+func TestMainHopPrivateHint(t *testing.T) {
+	m := newMainEnv(t, false)
+	m.addYAML(t, "本地", mainNodesYAML)
+	m.enableWith(t, "exit")
+	m.pr.mu.Lock()
+	r := passReport()
+	r.Items[0] = exitcheck.Item{Name: "https", Result: exitcheck.Unknown, Cause: exitcheck.CauseTimeout}
+	m.pr.rep = r
+	m.pr.mu.Unlock()
+	m.vm.mu.Lock()
+	m.vm.gateAt = func() bool { m.vm.hopPrivate++; return false } // 下发期间网关拒了一次私有答案
+	m.vm.mu.Unlock()
+	code, b := m.sel(t, MainSelectRequest{Selected: m.nodeID(t, "exit2")})
+	if code == 200 || !strings.Contains(string(b), HopPrivateHint) {
+		t.Fatalf("应给出“局域网里的代理请直接填 IP 地址”：%d %s", code, b)
+	}
+	// 没有拒过私有答案的失败：不给这条提示。
+	m.vm.mu.Lock()
+	m.vm.gateAt = nil
+	m.vm.mu.Unlock()
+	code, b = m.sel(t, MainSelectRequest{Selected: m.nodeID(t, "exit2")})
+	if code == 200 || strings.Contains(string(b), HopPrivateHint) {
+		t.Fatalf("别的原因的失败不应给这条提示：%d %s", code, b)
 	}
 }

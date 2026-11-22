@@ -85,6 +85,30 @@ public struct DaemonAddSourceRequest: Codable, Sendable {
     }
 }
 
+public struct DaemonAppView: Codable, Sendable {
+    public var app: String
+    public var name: String
+    public var conns: Int64
+    public var exits: [String]?
+    public var reason: String
+    enum CodingKeys: String, CodingKey {
+        case app = "app"
+        case name = "name"
+        case conns = "conns"
+        case exits = "exits"
+        case reason = "reason"
+    }
+}
+
+public struct DaemonAppsView: Codable, Sendable {
+    public var apps: [DaemonAppView]?
+    public var truncated: Bool?
+    enum CodingKeys: String, CodingKey {
+        case apps = "apps"
+        case truncated = "truncated"
+    }
+}
+
 public struct DaemonBaselineSummary: Codable, Sendable {
     public var rule: String
     public var country: String
@@ -127,6 +151,38 @@ public struct DaemonDirectStatus: Codable, Sendable {
     }
 }
 
+public struct DaemonEngineView: Codable, Sendable {
+    public var name: String
+    public var state: String
+    public var restarts: Int64
+    public var since: String?
+    public var lastError: String?
+    enum CodingKeys: String, CodingKey {
+        case name = "name"
+        case state = "state"
+        case restarts = "restarts"
+        case since = "since"
+        case lastError = "last_error"
+    }
+}
+
+public struct DaemonEnginesView: Codable, Sendable {
+    public var reachable: Bool
+    public var version: String?
+    public var kernel: String?
+    public var uptimeS: Int64?
+    public var bootChanged: Bool
+    public var engines: [DaemonEngineView]?
+    enum CodingKeys: String, CodingKey {
+        case reachable = "reachable"
+        case version = "version"
+        case kernel = "kernel"
+        case uptimeS = "uptime_s"
+        case bootChanged = "boot_changed"
+        case engines = "engines"
+    }
+}
+
 public struct DaemonEnvSettingsRequest: Codable, Sendable {
     public var disabled: [String]?
     enum CodingKeys: String, CodingKey {
@@ -144,6 +200,17 @@ public struct DaemonEventRecord: Codable, Sendable {
         case kind = "kind"
         case time = "time"
         case detail = "detail"
+    }
+}
+
+public struct DaemonExitCheckResult: Codable, Sendable {
+    public var tag: String
+    public var cached: Bool
+    public var status: DaemonExitStatus
+    enum CodingKeys: String, CodingKey {
+        case tag = "tag"
+        case cached = "cached"
+        case status = "status"
     }
 }
 
@@ -288,6 +355,32 @@ public struct DaemonMainSelectRequest: Codable, Sendable {
     }
 }
 
+public struct DaemonPreflightItem: Codable, Sendable {
+    public var id: String
+    public var title: String
+    public var fix: String
+    public var undecidable: Bool?
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case title = "title"
+        case fix = "fix"
+        case undecidable = "undecidable"
+    }
+}
+
+public struct DaemonPreflightView: Codable, Sendable {
+    public var checkedAt: String
+    public var cached: Bool
+    public var blocking: [DaemonPreflightItem]?
+    public var warnings: [DaemonPreflightItem]?
+    enum CodingKeys: String, CodingKey {
+        case checkedAt = "checked_at"
+        case cached = "cached"
+        case blocking = "blocking"
+        case warnings = "warnings"
+    }
+}
+
 public struct DaemonRefreshRequest: Codable, Sendable {
     public var viaHost: Bool?
     enum CodingKeys: String, CodingKey {
@@ -350,6 +443,26 @@ public struct DaemonRulesSummary: Codable, Sendable {
         case localDomains = "local_domains"
         case pinnedExtra = "pinned_extra"
         case blockUdp443 = "block_udp_443"
+    }
+}
+
+public struct DaemonSetupStep: Codable, Sendable {
+    public var id: String
+    public var done: Bool
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case done = "done"
+    }
+}
+
+public struct DaemonSetupView: Codable, Sendable {
+    public var completed: Bool
+    public var completedAt: String?
+    public var steps: [DaemonSetupStep]?
+    enum CodingKeys: String, CodingKey {
+        case completed = "completed"
+        case completedAt = "completed_at"
+        case steps = "steps"
     }
 }
 
