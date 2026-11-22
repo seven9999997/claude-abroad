@@ -162,6 +162,8 @@ func TestRepoWindowsPlaceholdersFail(t *testing.T) {
 		"internal/wfp/wfp_windows.go:*": "W-2a 的 WFP 系统层（真正的实现）",
 		// W-2a：第一级探查的 Windows 实现（真正的探查，不是占位）。步骤表、预测、判定、脱敏在 steps.go（Mac 上有单测）。
 		"cmd/abroad-wfp-probe/probe_windows.go:*": "W-2a 的第一级探查（真正的实现）",
+		// M5-6：命令行的客户端包在 Windows 上分辨“socket 文件在、没有进程在听”（WSAECONNREFUSED），只做错误比较。
+		"internal/apiclient/refused_windows.go:isRefused": "M5-6 的错误分类（只比较错误码，不是占位）",
 	}
 	PlaceholdersFail(t, root, allow)
 	// 例外也不能假装成功：不返回 nil 错误、不 return true。

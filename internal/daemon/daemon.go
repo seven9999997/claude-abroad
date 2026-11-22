@@ -103,12 +103,14 @@ type Daemon struct {
 	pf      preflightCache
 	exitChk exitCheckGuard
 	srv     *http.Server
-	ln      net.Listener
-	supStop context.CancelFunc
-	supDone chan struct{}
-	reDone  chan struct{}
-	rrDone  chan struct{}
-	once    sync.Once
+	// quitting 在正常退出开始时关闭：事件流这类不会自己结束的应答据此收尾，不让退出等满时限。
+	quitting chan struct{}
+	ln       net.Listener
+	supStop  context.CancelFunc
+	supDone  chan struct{}
+	reDone   chan struct{}
+	rrDone   chan struct{}
+	once     sync.Once
 
 	// 分流出口（M4-8）。
 	exits      *ExitStore
@@ -290,6 +292,8 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	}
 	d.ln = &peerListener{Listener: ln, uid: d.store.UID, peer: peer, console: cons, onReject: o.OnReject, max: int64(maxc)}
 	d.srv = &http.Server{Handler: d.handler(), ReadHeaderTimeout: rht, ConnContext: connContext}
+	d.quitting = make(chan struct{})
+	d.srv.RegisterOnShutdown(func() { close(d.quitting) })
 	go func() { _ = d.srv.Serve(d.ln) }()
 	o.logf("abroadd 已启动，本地接口 %s", sock)
 	return d, nil

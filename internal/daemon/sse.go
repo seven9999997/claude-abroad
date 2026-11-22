@@ -8,7 +8,7 @@ import (
 )
 
 // handleEvents 是 GET /v1/events（Server-Sent Events，只读级别）：先发一行注释表示连上了，之后每条事件一个
-// “id/event/data” 块。订阅数到上限时 503。客户端断开时退订、协程退出。
+// “id/event/data” 块。订阅数到上限时 503。客户端断开时退订、协程退出；abroadd 正常退出时主动结束，不让退出等满时限。
 func (d *Daemon) handleEvents(w http.ResponseWriter, r *http.Request) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
@@ -33,6 +33,8 @@ func (d *Daemon) handleEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-r.Context().Done():
+			return
+		case <-d.quitting: // abroadd 正常退出：结束事件流（客户端看到断开）
 			return
 		case ev := <-ch:
 			b, _ := json.Marshal(ev)

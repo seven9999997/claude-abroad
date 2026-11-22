@@ -537,3 +537,28 @@ func TestSocketDirShared(t *testing.T) {
 		t.Fatal("组或其他人可写的目录应拒绝启动")
 	}
 }
+
+// 有事件流订阅者连着时，正常退出不能等满时限：事件流主动结束，客户端读到断开。
+func TestShutdownEndsEventStream(t *testing.T) {
+	e := newEnv(t)
+	d := e.start(e.opts())
+	br, closeSSE := openSSE(t, d)
+	defer closeSSE()
+	for i := 0; i < 200 && d.events.Subscribers() < 1; i++ {
+		time.Sleep(5 * time.Millisecond)
+	}
+	start := time.Now()
+	done := make(chan struct{})
+	go func() { d.Shutdown(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("有事件流订阅者时退出被卡住")
+	}
+	if el := time.Since(start); el > 5*time.Second {
+		t.Fatalf("退出用了 %v", el)
+	}
+	if _, err := io.ReadAll(br); err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Logf("读到的结束：%v", err)
+	}
+}
