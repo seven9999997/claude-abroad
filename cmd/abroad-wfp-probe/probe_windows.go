@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -46,12 +47,12 @@ func run(o options, stdout, stderr io.Writer) int {
 	}
 	lan, gw := localNet()
 	p := Plan{Duration: o.Duration, AllowSID: o.AllowSID, SelfSID: selfSID, LAN: lan, Gateway: gw,
-		Public4: public4, PublicDNS: publicDNS, Public6: public6, Keep: o.Keep, KeepPort: 22}
+		Public4: public4, PublicDNS: publicDNS, Public6: public6, Keep: o.Keep, KeepPort: 22, Rehearse: o.Rehearse}
 	if err := p.Validate(); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	filters, err := wfprules.Render(p.Config())
+	filters, err := p.Filters() // 装哪一组过滤器只在这里决定
 	if err != nil {
 		fmt.Fprintf(stderr, "生成规则失败：%v\n", err)
 		return 2
@@ -81,12 +82,12 @@ func run(o options, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "列出 WFP 对象失败：%v\n", err)
 		return 4
 	}
-	rep := Report{Started: time.Now(), Duration: p.Duration, Rules: string(wfprules.Summary(filters)), CleanBefore: wfp.CleanPlan(before),
+	rep := Report{Mode: p.ModeName(), Started: time.Now(), Duration: p.Duration, Rules: string(wfprules.Summary(filters)), CleanBefore: wfp.CleanPlan(before),
 		OthersBefore: wfp.FormatOthers(wfp.SummarizeOthers(before.Others, before.Providers, before.Sublayers))}
 	steps := p.Steps()
 	preds := make([]Result, len(steps))
 	for i, st := range steps {
-		out, why := Predict(filters, st)
+		out, why := Predict(filters, st, p.Rehearse)
 		preds[i] = Result{Step: st, Predicted: out, Why: why, Actual: NotRun}
 	}
 	if !wfp.NothingOurs(before) {
@@ -94,7 +95,11 @@ func run(o options, stdout, stderr io.Writer) int {
 		return 5
 	}
 	if !o.Yes {
-		fmt.Fprintf(stdout, "计划（没有装任何过滤器；确认后加 --yes 再执行，期间最长 %v 不能上外网）：\n", p.Duration)
+		if p.Rehearse {
+			fmt.Fprintf(stdout, "演练计划（没有装任何过滤器；确认后加 --yes 再执行，只装一条拦回环端口 %d 的过滤器，网络不受影响，最长 %v）：\n", RehearsalPort, p.Duration)
+		} else {
+			fmt.Fprintf(stdout, "计划（没有装任何过滤器；确认后加 --yes 再执行，期间最长 %v 不能上外网）：\n", p.Duration)
+		}
 		for _, r := range preds {
 			fmt.Fprintf(stdout, "- [%s] %s：预测 %s（%s）\n", r.Step.ID, r.Step.Title, r.Predicted, r.Why)
 		}
@@ -116,6 +121,8 @@ func run(o options, stdout, stderr io.Writer) int {
 
 	// 装过滤器之前先建立一条公网连接（established 那一项）。
 	pre, preErr := (&net.Dialer{Timeout: 5 * time.Second}).Dial("tcp4", public4HT.String())
+	// WSL 的基线：装过滤器之前同样探测一次（WSL 本来就不通时，过滤器期间的结果没有意义）。
+	wslBase := observeWSL(ctx, public4)
 	childFile := filepath.Join(dir, "child-result.txt")
 	os.Remove(childFile)
 
@@ -129,7 +136,7 @@ func run(o options, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "装过滤器失败（已整体回滚）：%v\n", err)
 		return 4
 	}
-	fmt.Fprintf(stdout, "过滤器已装上（最长 %v）。\n", p.Duration)
+	fmt.Fprintf(stdout, "过滤器已装上（%s，%d 条，最长 %v）。\n", p.ModeName(), len(specs), p.Duration)
 	if o.AllowSID != "" {
 		fmt.Fprintf(stdout, "现在请用另一个账户执行：runas /user:<另一个账户> \"%s --child %s\"\n", exe, childFile)
 	}
@@ -153,6 +160,10 @@ func run(o options, stdout, stderr io.Writer) int {
 			} else {
 				r.Actual, r.Detail = waitChild(ctx, childFile, deadline.Add(-10*time.Second))
 			}
+		case KindWSL:
+			obs := observeWSL(ctx, r.Step.Target)
+			obs.Baseline = &wslBase
+			r.Actual, r.Detail = ClassifyWSL(obs)
 		case KindEnum:
 			r.Actual, r.Detail = checkEnum(watcher, filters)
 		}
@@ -230,7 +241,7 @@ func errText(err error) string {
 }
 
 func tryTCP(st Step) (Outcome, string) {
-	if st.Loopback {
+	if st.Loopback && !st.Target.IsValid() {
 		ln, err := net.Listen("tcp4", "127.0.0.1:0")
 		if err != nil {
 			return Unknown, "回环上监听失败"
@@ -332,6 +343,39 @@ func runChild(file string, stdout io.Writer) int {
 		return 4
 	}
 	return 0
+}
+
+// observeWSL 只调用系统自带的 wsl.exe：先列发行版，有的话在默认发行版里连一次目标。不安装、不修改任何东西。
+func observeWSL(ctx context.Context, target netip.AddrPort) WSLObservation {
+	root := os.Getenv("SystemRoot")
+	if root == "" {
+		root = `C:\Windows`
+	}
+	exe := filepath.Join(root, "System32", "wsl.exe")
+	if _, err := os.Stat(exe); err != nil {
+		return WSLObservation{EntryMissing: true}
+	}
+	var o WSLObservation
+	lc, lcancel := context.WithTimeout(ctx, 20*time.Second)
+	defer lcancel()
+	out, err := exec.CommandContext(lc, exe, "--list", "--quiet").Output()
+	o.ListOut, o.ListFailed = out, err != nil
+	if len(DecodeWSLList(out)) == 0 {
+		return o
+	}
+	pc, pcancel := context.WithTimeout(ctx, 45*time.Second) // 第一次启动 WSL 的虚拟机要几秒到十几秒
+	defer pcancel()
+	pout, err := exec.CommandContext(pc, exe, "-e", "sh", "-c",
+		WSLProbeScript(target.Addr().String(), fmt.Sprint(target.Port()))).CombinedOutput()
+	o.ProbeOut = string(pout)
+	if err != nil && !strings.Contains(o.ProbeOut, WSLMarkerOK) && !strings.Contains(o.ProbeOut, WSLMarkerFail) {
+		if pc.Err() != nil {
+			o.ProbeErr = "45 秒内没有结束"
+		} else {
+			o.ProbeErr = errText(err)
+		}
+	}
+	return o
 }
 
 func checkEnum(e *wfp.Engine, want []wfprules.Filter) (Outcome, string) {

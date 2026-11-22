@@ -30,13 +30,16 @@ func TestParseArgs(t *testing.T) {
 	if err != nil || o.Yes || o.Duration != DefaultDuration {
 		t.Fatalf("默认：%+v %v", o, err)
 	}
+	if o, err := parseArgs([]string{"--rehearse", "--yes"}); err != nil || !o.Rehearse || !o.Yes {
+		t.Fatalf("演练：%+v %v", o, err)
+	}
 	o, err = parseArgs([]string{"--yes", "--seconds", "60", "--allow-sid", otherSID, "--keep-host", "192.168.7.30", "--out", "x.txt"})
 	if err != nil || !o.Yes || o.Duration != 60*time.Second || o.AllowSID != otherSID || o.Keep.String() != "192.168.7.30" || o.Out != "x.txt" {
 		t.Fatalf("%+v %v", o, err)
 	}
 	for _, bad := range [][]string{
 		{"--seconds"}, {"--seconds", "10"}, {"--seconds", "301"}, {"--seconds", "abc"}, {"--yess"}, {"-y"},
-		{"--keep-host", "fe80::1"}, {"--keep-host", "host"}, {"--child", "f", "--yes"}, {"--child", "f", "--allow-sid", otherSID},
+		{"--keep-host", "fe80::1"}, {"--keep-host", "host"}, {"--child", "f", "--yes"}, {"--child", "f", "--allow-sid", otherSID}, {"--child", "f", "--rehearse"},
 	} {
 		if _, err := parseArgs(bad); err == nil {
 			t.Errorf("%v：应报错", bad)
@@ -94,14 +97,14 @@ func TestPredictions(t *testing.T) {
 	}
 	want := map[string]Outcome{
 		"loopback": Allowed, "public-tcp": Blocked, "public-udp": Blocked, "lan-tcp": Allowed, "ipv6-tcp": Blocked,
-		"established": Unknown, "child-sid": Allowed, "enum": Allowed,
+		"established": Unknown, "child-sid": Allowed, "rehearse-hit": Allowed, "wsl": Unknown, "enum": Allowed,
 	}
 	steps := p.Steps()
 	if len(steps) != len(want) {
 		t.Fatalf("步骤数 %d", len(steps))
 	}
 	for _, st := range steps {
-		got, why := Predict(fs, st)
+		got, why := Predict(fs, st, false)
 		if got != want[st.ID] || why == "" {
 			t.Errorf("%s：预测 %s（%s），应为 %s", st.ID, got, why, want[st.ID])
 		}
@@ -110,7 +113,7 @@ func TestPredictions(t *testing.T) {
 	fs, _ = wfprules.Render(p.Config())
 	for _, st := range p.Steps() {
 		if st.ID == "child-sid" {
-			if got, _ := Predict(fs, st); got != NotRun {
+			if got, _ := Predict(fs, st, false); got != NotRun {
 				t.Errorf("没给 --allow-sid 时子命令应是未执行：%s", got)
 			}
 		}
@@ -121,7 +124,7 @@ func TestPredictions(t *testing.T) {
 	fs, _ = wfprules.Render(p.Config())
 	for _, st := range p.Steps() {
 		if st.ID == "lan-tcp" {
-			if got, _ := Predict(fs, st); got != Unknown {
+			if got, _ := Predict(fs, st, false); got != Unknown {
 				t.Errorf("没有网关：%s", got)
 			}
 		}
@@ -195,5 +198,166 @@ func TestRedact(t *testing.T) {
 	}
 	if Redact("abc", []string{"", "a"}) != "abc" {
 		t.Error("太短的词不替换")
+	}
+}
+
+// a. 装哪一组过滤器只由 Plan.Filters 决定：演练模式只有那一条回环过滤器（带我们的提供者和子层），
+// 不管计划里其他字段是什么都不可能得到正式的规则；正式模式与 wfprules.Render 完全相同。
+func TestFilters(t *testing.T) {
+	p := plan()
+	formal, err := p.Filters()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := wfprules.Render(p.Config())
+	if string(wfprules.Summary(formal)) != string(wfprules.Summary(want)) || len(formal) < 10 {
+		t.Fatalf("正式模式应是 wfprules 生成的那组：%d 条", len(formal))
+	}
+	for _, mut := range []func(*Plan){
+		func(*Plan) {},
+		func(p *Plan) { p.AllowSID = "" },
+		func(p *Plan) { p.LAN = nil; p.Keep = netip.Addr{} },
+		func(p *Plan) { p.Gateway = netip.Addr{} },
+	} {
+		p := plan()
+		p.Rehearse = true
+		mut(&p)
+		fs, err := p.Filters()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(fs) != 1 {
+			t.Fatalf("演练模式应只有 1 条，得到 %d 条", len(fs))
+		}
+		f := fs[0]
+		if f.Provider != wfprules.ProviderKey || f.Sublayer != wfprules.SublayerKey || f.Action != wfprules.Block ||
+			f.Layer != wfprules.LayerConnectV4 || f.Key.String() != RehearsalKey {
+			t.Fatalf("演练过滤器：%+v", f)
+		}
+		conds := map[wfprules.Field]string{}
+		for _, c := range f.Conds {
+			conds[c.Field] = c.Value
+		}
+		if len(conds) != 3 || conds[wfprules.FieldLoopback] != "1" || conds[wfprules.FieldProtocol] != "tcp" || conds[wfprules.FieldRemotePort] != "1" {
+			t.Fatalf("演练过滤器的条件只能是“回环 + TCP + 端口 1”：%+v", f.Conds)
+		}
+		for _, g := range formal {
+			if g.Key == f.Key {
+				t.Fatal("演练过滤器的键不能与正式规则重复")
+			}
+		}
+	}
+}
+
+// b. 演练模式下各项的预测都是“照常”（只有 rehearse-hit 预测拦截，用来证明演练过滤器生效）；判定沿用 Verdict。
+func TestRehearsalPredictions(t *testing.T) {
+	p := plan()
+	p.Rehearse = true
+	fs, err := p.Filters()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, st := range p.Steps() {
+		got, why := Predict(fs, st, true)
+		want := Allowed
+		if st.ID == "rehearse-hit" {
+			want = Blocked
+		}
+		if got != want || why == "" {
+			t.Errorf("%s：演练预测 %s（%s），应为 %s", st.ID, got, why, want)
+		}
+	}
+	p.AllowSID = ""
+	for _, st := range p.Steps() {
+		if st.ID == "child-sid" {
+			if got, _ := Predict(fs, st, true); got != NotRun {
+				t.Errorf("没给 --allow-sid 时子命令应是未执行：%s", got)
+			}
+		}
+	}
+	if ok, why := KeepPrediction(fs, plan(), selfSID); !ok {
+		t.Fatalf("演练时远程连接应放行：%s", why)
+	}
+	if !strings.Contains(p.ModeName(), "演练") || strings.Contains(plan().ModeName(), "演练") {
+		t.Fatal("模式名")
+	}
+	if text := (Report{Mode: p.ModeName()}).Format(); !strings.HasPrefix(text, "# abroad-wfp-probe 演练") {
+		t.Fatalf("报告标题：%s", text)
+	}
+}
+
+func utf16le(s string, bom bool) []byte {
+	var b []byte
+	if bom {
+		b = append(b, 0xFF, 0xFE)
+	}
+	for _, r := range s {
+		b = append(b, byte(r), byte(r>>8))
+	}
+	return b
+}
+
+func TestDecodeWSLList(t *testing.T) {
+	for _, c := range []struct {
+		in   []byte
+		want string
+	}{
+		{utf16le("Ubuntu\r\ndocker-desktop\r\n", true), "Ubuntu|docker-desktop"},
+		{utf16le("Ubuntu-22.04\r\n\r\n", false), "Ubuntu-22.04"},
+		{[]byte("Debian\n"), "Debian"},
+		{nil, ""},
+		{utf16le("\r\n", true), ""},
+	} {
+		if got := strings.Join(DecodeWSLList(c.in), "|"); got != c.want {
+			t.Errorf("%q：%q，应为 %q", c.in, got, c.want)
+		}
+	}
+}
+
+// c. WSL 观察项的分类：没装、没有发行版、调用失败、通、不通。
+func TestClassifyWSL(t *testing.T) {
+	list := utf16le("Ubuntu\r\n", true)
+	for _, c := range []struct {
+		name string
+		o    WSLObservation
+		want Outcome
+	}{
+		{"没装 WSL", WSLObservation{EntryMissing: true}, NotRun},
+		{"没有发行版", WSLObservation{ListFailed: true}, NotRun},
+		{"列表为空", WSLObservation{ListOut: utf16le("\r\n", true)}, NotRun},
+		{"调用超时", WSLObservation{ListOut: list, ProbeErr: "45 秒内没有结束"}, Unknown},
+		{"没有标记", WSLObservation{ListOut: list, ProbeOut: "sh: bash: not found"}, Unknown},
+		{"通", WSLObservation{ListOut: list, ProbeOut: WSLMarkerOK + "\n"}, Allowed},
+		{"不通", WSLObservation{ListOut: list, ProbeOut: WSLMarkerFail + "\n"}, Blocked},
+	} {
+		got, why := ClassifyWSL(c.o)
+		if got != c.want || why == "" {
+			t.Errorf("%s：%s（%s），应为 %s", c.name, got, why, c.want)
+		}
+	}
+	// 基线：装过滤器之前就不通（或调用失败）时，过滤器期间的通/不通都记“无法判断”；基线通时照常判。
+	okBase := &WSLObservation{ProbeOut: WSLMarkerOK}
+	failBase := &WSLObservation{ProbeOut: WSLMarkerFail}
+	errBase := &WSLObservation{ProbeErr: "45 秒内没有结束"}
+	for _, c := range []struct {
+		name string
+		o    WSLObservation
+		want Outcome
+	}{
+		{"基线通、期间不通", WSLObservation{ListOut: list, ProbeOut: WSLMarkerFail, Baseline: okBase}, Blocked},
+		{"基线通、期间通", WSLObservation{ListOut: list, ProbeOut: WSLMarkerOK, Baseline: okBase}, Allowed},
+		{"基线不通、期间不通", WSLObservation{ListOut: list, ProbeOut: WSLMarkerFail, Baseline: failBase}, Unknown},
+		{"基线不通、期间通", WSLObservation{ListOut: list, ProbeOut: WSLMarkerOK, Baseline: failBase}, Unknown},
+		{"基线调用失败", WSLObservation{ListOut: list, ProbeOut: WSLMarkerFail, Baseline: errBase}, Unknown},
+		{"基线有、但没装 WSL", WSLObservation{EntryMissing: true, Baseline: failBase}, NotRun},
+	} {
+		got, why := ClassifyWSL(c.o)
+		if got != c.want || why == "" {
+			t.Errorf("%s：%s（%s），应为 %s", c.name, got, why, c.want)
+		}
+	}
+	s := WSLProbeScript("1.1.1.1", "443")
+	if !strings.Contains(s, "/dev/tcp/1.1.1.1/443") || !strings.Contains(s, WSLMarkerOK) || !strings.Contains(s, WSLMarkerFail) {
+		t.Fatal(s)
 	}
 }

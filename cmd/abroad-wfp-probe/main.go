@@ -16,6 +16,7 @@ WR1 第一级探查：在 Windows 防火墙（WFP）里装一组“动态”过�
 装上过滤器期间本机不能上外网（局域网照常），最长持续 --seconds 秒，或直到结束本程序。
 
   --yes               确认开始（不带时只打印计划和预测，不装任何过滤器）
+  --rehearse          演练：流程完全相同，但只装一条“拦回环上 TCP 端口 1”的过滤器，网络不受影响
   --seconds N         时限，默认 120，范围 20–300
   --allow-sid SID     另一个本地账户的 SID（按 README 用这个账户执行一条命令，验证按账户放行）
   --keep-host IP      远程执行时开发机的地址（必须在局域网内；用来预测远程连接不会断）
@@ -27,6 +28,7 @@ WR1 第一级探查：在 Windows 防火墙（WFP）里装一组“动态”过�
 
 type options struct {
 	Yes      bool
+	Rehearse bool
 	Duration time.Duration
 	AllowSID string
 	Keep     netip.Addr
@@ -48,6 +50,8 @@ func parseArgs(args []string) (options, error) {
 		switch a {
 		case "--yes":
 			o.Yes = true
+		case "--rehearse":
+			o.Rehearse = true
 		case "-h", "--help", "/?":
 			o.Help = true
 		case "--seconds", "--allow-sid", "--keep-host", "--out", "--child":
@@ -81,7 +85,7 @@ func parseArgs(args []string) (options, error) {
 			return o, fmt.Errorf("不认识的参数 %q", a)
 		}
 	}
-	if o.Child != "" && (o.Yes || o.AllowSID != "" || o.Keep.IsValid()) {
+	if o.Child != "" && (o.Yes || o.Rehearse || o.AllowSID != "" || o.Keep.IsValid()) {
 		return o, errors.New("--child 不能和别的选项一起用")
 	}
 	return o, nil

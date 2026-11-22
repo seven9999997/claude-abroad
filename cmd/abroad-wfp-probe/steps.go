@@ -9,6 +9,10 @@
 //
 // 每一项同时记下离线求值器的预测和实际结果，不一致的单独标出。启动时先做还原工具的空跑：已经有我们的对象就拒绝开始。
 //
+// 演练模式（--rehearse，design-windows 0.2）：流程与正式执行完全相同，只是装的过滤器换成一条“拦回环上 TCP 端口 1”
+// 的过滤器（没有任何程序用这个端口），网络完全不受影响；各项的预测相应是“照常”，只有 rehearse-hit 那一项预测“拦截”，
+// 用来证明这条过滤器确实生效了。装哪一组过滤器只由 Plan.Filters 决定（纯函数），演练模式不可能装上正式的规则。
+//
 // 本文件是纯逻辑（步骤表、预测、判定、报告、脱敏），在 Mac 上测试；真正的连接和 WFP 调用在 probe_windows.go。
 package main
 
@@ -56,6 +60,7 @@ const (
 	KindEstablish Kind = "established" // 过滤器装上之前建立的连接，装上之后再收发
 	KindChild     Kind = "child"       // 另一个账户运行的子命令（结果文件）
 	KindEnum      Kind = "enum"        // 枚举比对
+	KindWSL       Kind = "wsl"         // 从 WSL 里访问一次外网（只观察，WR9）
 )
 
 // Step 是一项检查。
@@ -81,6 +86,45 @@ type Plan struct {
 	Public6   netip.AddrPort // 公网 IPv6 TCP 目标
 	Keep      netip.Addr     // 远程执行时开发机的地址（SSH 回包的预测）；无效时不做那一项预测
 	KeepPort  uint16         // 本机 SSH 端口
+	Rehearse  bool           // 演练模式：只装回环端口 1 那一条过滤器
+}
+
+// RehearsalPort 是演练过滤器拦截的回环 TCP 端口：端口 1（tcpmux）在 Windows 上没有程序使用。
+const RehearsalPort = 1
+
+// RehearsalKey 是演练过滤器的键（固定；与 wfp 冒烟测试那条的键不同）。
+const RehearsalKey = "9D1E9A5C-3C1B-4E0A-8F57-5A1F00000002"
+
+// RehearsalFilter 是演练模式唯一的过滤器：回环上到 TCP 端口 1 的连接一律拦截，带我们的提供者和子层。
+func RehearsalFilter() wfprules.Filter {
+	k, err := wfprules.ParseGUID(RehearsalKey)
+	if err != nil {
+		panic(err)
+	}
+	return wfprules.Filter{Key: k, Name: "rehearse/loopback-port-1", Layer: wfprules.LayerConnectV4,
+		Sublayer: wfprules.SublayerKey, Provider: wfprules.ProviderKey, Weight: 1, Action: wfprules.Block,
+		Conds: []wfprules.Cond{{Field: wfprules.FieldLoopback, Value: "1"}, {Field: wfprules.FieldProtocol, Value: "tcp"},
+			{Field: wfprules.FieldRemotePort, Value: strconv.Itoa(RehearsalPort)}}}
+}
+
+// Filters 决定要装的那一组过滤器（唯一的决定处）：演练模式只有 RehearsalFilter；正式模式是 wfprules 按 Config 生成的那组。
+func (p Plan) Filters() ([]wfprules.Filter, error) {
+	if p.Rehearse {
+		f := RehearsalFilter()
+		if err := wfprules.Validate(f); err != nil {
+			return nil, err
+		}
+		return []wfprules.Filter{f}, nil
+	}
+	return wfprules.Render(p.Config())
+}
+
+// ModeName 是报告里的模式名。
+func (p Plan) ModeName() string {
+	if p.Rehearse {
+		return "演练（只装回环端口 1 的一条过滤器，网络不受影响）"
+	}
+	return "第一级（只用动态过滤器）"
 }
 
 // Config 是交给 wfprules 的规则配置：没有虚拟网卡（W-2a 不建网卡），允许局域网。
@@ -127,16 +171,28 @@ func (p Plan) Steps() []Step {
 		{ID: "ipv6-tcp", Title: "公网 IPv6 TCP（一律拦截）", Kind: KindTCP, Target: p.Public6, SID: p.SelfSID},
 		{ID: "established", Title: "装过滤器之前建立的公网连接，装上之后再收发", Kind: KindEstablish, Target: p.Public4, SID: p.SelfSID},
 		{ID: "child-sid", Title: "另一个本地账户的进程到公网（按 SID 放行）", Kind: KindChild, Target: p.Public4, SID: p.AllowSID},
+		{ID: "rehearse-hit", Title: fmt.Sprintf("回环上到 TCP 端口 %d 的连接（演练过滤器拦它）", RehearsalPort), Kind: KindTCP, Loopback: true,
+			Target: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), RehearsalPort), SID: p.SelfSID},
+		{ID: "wsl", Title: "从 WSL 里访问外网（只观察，WR9）", Kind: KindWSL, Target: p.Public4},
 		{ID: "enum", Title: "枚举到的我们的过滤器与期望的摘要一致", Kind: KindEnum},
 	}
 	return s
 }
 
-// Predict 用离线求值器算一项的预测。established 和 enum 没有求值器的预测（返回 Unknown 和说明）。
-func Predict(fs []wfprules.Filter, st Step) (Outcome, string) {
+// Predict 用离线求值器算一项的预测。established、wsl 和 enum 没有求值器的预测：正式模式下 established、wsl 是
+// 要实测的（Unknown），演练模式下它们都“照常”（演练过滤器只碰回环端口 1）。
+func Predict(fs []wfprules.Filter, st Step, rehearse bool) (Outcome, string) {
 	switch st.Kind {
 	case KindEstablish:
+		if rehearse {
+			return Allowed, "演练过滤器只拦回环端口 1，已建立的公网连接照常"
+		}
 		return Unknown, "求值器只建模新连接（ALE 连接授权层），已建立的连接是否被重新评估正是要实测的"
+	case KindWSL:
+		if rehearse {
+			return Allowed, "演练过滤器只拦回环端口 1，WSL 照常"
+		}
+		return Unknown, "WSL 的流量经 Hyper-V 虚拟交换机的 NAT 出去，是否经过宿主的出站连接层正是要观察的"
 	case KindEnum:
 		return Allowed, "期望一致"
 	}
@@ -210,6 +266,7 @@ func Verdict(r Result) Outcome {
 
 // Report 是整次探查的输出。
 type Report struct {
+	Mode              string
 	Started, Finished time.Time
 	Duration          time.Duration
 	Rules             string // 期望的摘要
@@ -224,7 +281,11 @@ type Report struct {
 // Format 把报告写成文本（脱敏前）。
 func (r Report) Format() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# abroad-wfp-probe 第一级（只用动态过滤器）\n开始 %s，结束 %s，时限 %v\n\n", r.Started.Format(time.RFC3339), r.Finished.Format(time.RFC3339), r.Duration)
+	mode := r.Mode
+	if mode == "" {
+		mode = "第一级（只用动态过滤器）"
+	}
+	fmt.Fprintf(&b, "# abroad-wfp-probe %s\n开始 %s，结束 %s，时限 %v\n\n", mode, r.Started.Format(time.RFC3339), r.Finished.Format(time.RFC3339), r.Duration)
 	fmt.Fprintf(&b, "## 开始前还原工具空跑\n")
 	if len(r.CleanBefore) == 0 {
 		b.WriteString("没有我们的对象\n")
