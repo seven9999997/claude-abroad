@@ -10,6 +10,12 @@ struct ClaudeAbroadApp: App {
     @StateObject private var model = StatusModel(client: ClaudeAbroadApp.client)
     @StateObject private var setup = SetupModel(client: ClaudeAbroadApp.client)
     @StateObject private var main = MainProxyModel(client: ClaudeAbroadApp.client)
+    @StateObject private var exits = ExitsModel(client: ClaudeAbroadApp.client)
+    @StateObject private var apps = AppsModel(client: ClaudeAbroadApp.client)
+    @StateObject private var env = EnvModel(client: ClaudeAbroadApp.client)
+    @StateObject private var region = RegionModel(client: ClaudeAbroadApp.client)
+    @StateObject private var engines = EnginesModel(client: ClaudeAbroadApp.client)
+    @StateObject private var settings = SettingsModel(client: ClaudeAbroadApp.client)
 
     var body: some Scene {
         MenuBarExtra {
@@ -20,9 +26,12 @@ struct ClaudeAbroadApp: App {
                 .task { model.start() }
         }
         Window(L10n.appName, id: "main") {
-            MainWindow(status: model, setup: setup, main: main)
+            MainWindow(status: model, setup: setup, main: main, exits: exits, apps: apps, env: env, region: region, engines: engines)
                 .frame(minWidth: 620, minHeight: 520)
                 .task { model.start() }
+        }
+        Settings {
+            SettingsView(model: settings, env: settings.env)
         }
     }
 }
@@ -32,6 +41,11 @@ struct MainWindow: View {
     @ObservedObject var status: StatusModel
     @ObservedObject var setup: SetupModel
     @ObservedObject var main: MainProxyModel
+    let exits: ExitsModel
+    let apps: AppsModel
+    let env: EnvModel
+    let region: RegionModel
+    let engines: EnginesModel
 
     var body: some View {
         if setup.shouldShow && setup.step != .done {
@@ -40,6 +54,11 @@ struct MainWindow: View {
             TabView {
                 HomeView(model: status).tabItem { Text(L10n.homeTab) }
                 MainProxyPage(model: main).padding(20).tabItem { Text(L10n.mainProxyTitle) }
+                ExitsPage(model: exits).tabItem { Text(L10n.exitsTitle) }
+                AppsPage(model: apps).tabItem { Text(L10n.appsTitle) }
+                EnvPage(model: env).tabItem { Text(L10n.envTitle) }
+                RegionPage(model: region).tabItem { Text(L10n.regionTitle) }
+                EnginesPage(model: engines).tabItem { Text(L10n.enginesTitle) }
             }
         }
     }

@@ -82,6 +82,15 @@ final class FakeMain: @unchecked Sendable {
     var applyResponse: HTTPResponse?
     var refreshResponse: HTTPResponse?
     var selected: String?
+    /// 把所有错误文字换成别的字符串（验证分支只看代码）。
+    var scramble = false
+
+    func err(_ status: Int, _ code: String, _ text: String, node: String? = nil, field: String? = nil) -> HTTPResponse {
+        var o: [String: String] = ["error": scramble ? "XYZ 随便什么" : text, "code": code]
+        if let node { o["node"] = node }
+        if let field { o["field"] = field }
+        return HTTPResponse(status: status, body: try! JSONSerialization.data(withJSONObject: o))
+    }
 
     func handle(_ r: HTTPRequest) -> HTTPResponse {
         let body = r.body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
@@ -105,14 +114,14 @@ final class FakeMain: @unchecked Sendable {
             return HTTPResponse(status: 200)
         case ("POST", let p) where p.hasSuffix("/refresh"):
             if (body["via_host"] as? Bool) != true && !enabled {
-                return json(422, "{\"error\":\"现在没有启用，没有主代理可走：要经本机网络抓取订阅，请明确选择（via_host）；否则先启用再更新\"}")
+                return err(422, "via_host_required", "现在没有启用，没有主代理可走：要经本机网络抓取订阅，请明确选择（via_host）；否则先启用再更新", field: "via_host")
             }
             return refreshResponse ?? json(200, "{\"id\":\"s2\",\"needs_reselect\":true}")
         case ("PUT", "/v1/main-proxy"):
             if let s = selectResponse { return s }
             let chain = body["chain"] as? [String] ?? []
             if (chain.first ?? body["selected"] as? String) == "n-lan" && !lanConfirmed {
-                return json(422, "{\"error\":\"应用主代理失败：主代理的第一跳是局域网节点，还没有确认。请先在应用里确认这个局域网节点（POST /v1/main-proxy/lan-confirm），再应用。\"}")
+                return err(422, "lan_unconfirmed", "应用主代理失败：主代理的第一跳是局域网节点，还没有确认。请先在应用里确认这个局域网节点（POST /v1/main-proxy/lan-confirm），再应用。", node: "n-lan")
             }
             selected = body["selected"] as? String
             return json(200, "{\"saved\":true,\"note\":\"现在没有启用：已保存，启用时下发并检查\"}")
@@ -201,7 +210,7 @@ func mainModel(_ f: FakeMain, files: InputFiles = InputFiles(directory: tempDir(
 @MainActor
 @Test func addSubscriptionNeedsViaHost() async {
     let f = FakeMain()
-    f.addResponse = json(422, "{\"error\":\"现在没有启用，没有主代理可走：要经本机网络抓取订阅，请明确选择（via_host）；否则先启用再更新\"}")
+    f.addResponse = f.err(422, "via_host_required", "现在没有启用，没有主代理可走：要经本机网络抓取订阅，请明确选择（via_host）；否则先启用再更新", field: "via_host")
     let (m, _) = mainModel(f)
     m.addKind = .subscription
     m.formURL = "https://sub.example.com/x"
@@ -257,12 +266,12 @@ func mainModel(_ f: FakeMain, files: InputFiles = InputFiles(directory: tempDir(
 
 @MainActor
 @Test func applyFailedRollback() async {
-    for (text, want) in [
-        ("应用主代理失败：引擎没有就绪。已经回到原来的主代理；请检查新节点后再试。", Rollback.done),
-        ("应用主代理失败：引擎没有就绪。新节点没有生效；恢复原来的主代理没有完成，稍后会自动重试。", Rollback.incomplete),
+    for (text, code, want) in [
+        ("应用主代理失败：引擎没有就绪。已经回到原来的主代理；请检查新节点后再试。", "switch_rolled_back", Rollback.done),
+        ("应用主代理失败：引擎没有就绪。新节点没有生效；恢复原来的主代理没有完成，稍后会自动重试。", "switch_rollback_incomplete", Rollback.incomplete),
     ] {
         let f = FakeMain()
-        f.selectResponse = json(502, "{\"error\":\"\(text)\"}")
+        f.selectResponse = f.err(502, code, text)
         let (m, _) = mainModel(f)
         await m.refresh()
         m.selectedExit = "n-exit"
@@ -389,4 +398,42 @@ func dumpState(_ m: MainProxyModel) -> String {
     // 只删指定目录里的文件。
     InputFiles(directory: dir.appendingPathComponent("other")).remove(user)
     #expect(FileManager.default.fileExists(atPath: user.path))
+}
+
+/// m5-plan v2.7 验收 a：把后台的错误文字换成任意别的字符串，分支行为不变（只看代码）。
+@MainActor
+@Test func branchesIgnoreErrorText() async {
+    // 经本机网络
+    let f = FakeMain()
+    f.scramble = true
+    f.addResponse = f.err(422, "via_host_required", "", field: "via_host")
+    let (m, _) = mainModel(f)
+    m.addKind = .subscription
+    m.formURL = "https://sub.example.com/x"
+    await m.submitAdd()
+    #expect(m.viaHostNeeded)
+    f.addResponse = nil
+    await m.refresh()
+    await m.refreshSource("s2")
+    #expect(m.refreshNeedsViaHost == "s2")
+    // 局域网（节点取后台给的）
+    m.selectedExit = "n-sub"
+    m.via = ["n-lan"]
+    await m.apply()
+    #expect(m.lanPrompt?.node == "n-lan")
+    m.lanPrompt = nil
+    // 回退
+    for (code, want) in [("switch_rolled_back", Rollback.done), ("switch_rollback_incomplete", Rollback.incomplete), ("internal", Rollback.none)] {
+        f.selectResponse = f.err(502, code, "")
+        m.via = []
+        m.selectedExit = "n-exit"
+        await m.apply()
+        guard case let .failed(_, rb) = m.applyState else { Issue.record("应失败"); continue }
+        #expect(rb == want)
+    }
+    // 文字里带着“回到原来的主代理”等字样、代码却是别的：不当作回退。
+    f.scramble = false
+    f.selectResponse = f.err(502, "internal", "已经回到原来的主代理 局域网 via_host")
+    await m.apply()
+    #expect(m.applyState == .failed(ErrorText(raw: "已经回到原来的主代理 局域网 via_host", code: .internal), .none) && m.lanPrompt == nil && m.viaHostNeeded)
 }

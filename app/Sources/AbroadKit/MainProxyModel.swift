@@ -39,10 +39,13 @@ public enum Rollback: Sendable, Equatable {
     case done // “已经回到原来的主代理”
     case incomplete // “恢复原来的主代理没有完成，稍后会自动重试”
 
+    /// 只看代码（m5-plan v2.7 决定 0）。
     static func of(_ t: ErrorText) -> Rollback {
-        if t.raw.contains("已经回到原来的主代理") { return .done }
-        if t.raw.contains("恢复原来的主代理没有完成") { return .incomplete }
-        return .none
+        switch t.code {
+        case .switchRolledBack: return .done
+        case .switchRollbackIncomplete: return .incomplete
+        default: return .none
+        }
     }
 }
 
@@ -207,7 +210,7 @@ public final class MainProxyModel: ObservableObject {
             } catch {
                 notice = Notice(kind: .error, text: ErrorText(raw: L10n.tempFileFailed))
             }
-        case .invalid(let t) where t.raw.contains("via_host"):
+        case .invalid(let t) where t.code == .viaHostRequired:
             viaHostNeeded = true
             notice = Notice(kind: .info, text: ErrorText(raw: L10n.viaHostExplain))
         case let .invalid(t), let .failed(_, t), let .busy(t), let .unsupported(t):
@@ -255,7 +258,7 @@ public final class MainProxyModel: ObservableObject {
             notice = nil
             needsReselect = r.needsReselect ?? false
             await refresh()
-        case .invalid(let t) where t.raw.contains("via_host"):
+        case .invalid(let t) where t.code == .viaHostRequired:
             refreshNeedsViaHost = id
             notice = Notice(kind: .info, text: ErrorText(raw: L10n.viaHostExplain))
         case let .invalid(t), let .failed(_, t), let .busy(t), let .unsupported(t), let .needsAuthorization(t):
@@ -299,9 +302,9 @@ public final class MainProxyModel: ObservableObject {
             applyState = .idle
             guard let exit = selectedExit else { return }
             await authorize(.mainUse(node: exit, via: via), t, extra: [SensitiveOperation.mainApply.terminalCommand])
-        case .invalid(let t) where t.raw.contains("局域网"):
+        case .invalid(let t) where t.code == .lanUnconfirmed:
             applyState = .idle
-            if let hop = firstHop {
+            if let hop = t.node ?? firstHop { // 节点以后台给的为准
                 lanPrompt = LANPrompt(node: hop, name: nodes.first(where: { $0.id == hop })?.name ?? hop)
             }
         case let .invalid(t), let .failed(_, t), let .busy(t), let .unsupported(t):

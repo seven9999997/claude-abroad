@@ -5,6 +5,7 @@ package apiclient
 import (
 	"bufio"
 	"bytes"
+	"claude-abroad/internal/api"
 	"context"
 	"encoding/json"
 	"errors"
@@ -115,6 +116,15 @@ func ErrorText(b []byte) string {
 	}
 	_ = json.Unmarshal(b, &e)
 	return e.Error
+}
+
+// ErrorCodeOf 取应答里的错误代码（{"code": "…"}；没有时为空）。分支只看它，不看文字（m5-plan v2.7 决定 0）。
+func ErrorCodeOf(b []byte) api.ErrorCode {
+	var e struct {
+		Code api.ErrorCode `json:"code"`
+	}
+	_ = json.Unmarshal(b, &e)
+	return e.Code
 }
 
 // Event 是事件流里的一条。

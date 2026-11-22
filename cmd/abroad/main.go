@@ -184,37 +184,42 @@ func (a *app) connErr(err error) int {
 	return ExitNoDaemon
 }
 
+// codeOf 按错误应答里稳定的代码（不看文字，m5-plan v2.7 决定 0）映射成退出码；文字只用来打印。
+// 后台没给代码时（旧版本）按状态码取默认代码。
 func (a *app) codeOf(resp apiclient.Response) int {
-	switch {
-	case resp.Code >= 200 && resp.Code < 300:
+	if resp.Code >= 200 && resp.Code < 300 {
 		return ExitOK
-	case resp.Code == 403:
-		msg := apiclient.ErrorText(resp.Body)
+	}
+	code := apiclient.ErrorCodeOf(resp.Body)
+	if code == "" {
+		code = api.DefaultCode(resp.Code)
+	}
+	msg := apiclient.ErrorText(resp.Body)
+	switch code {
+	case api.CodeNeedsConfirm:
+		return ExitConfirm // 调用方走确认流程
+	case api.CodeNeedsAuthorization:
 		if routeLevel(a.route) == api.PerCall {
 			fmt.Fprintf(a.stderr, "这一次需要 sudo：%s\n", msg)
 		} else {
 			fmt.Fprintf(a.stderr, "被拒：%s\n", msg)
 		}
 		return ExitDenied
-	case resp.Code == 409:
-		if hasConfirm(resp.Body) {
-			return ExitConfirm // 调用方走确认流程
-		}
-		fmt.Fprintf(a.stderr, "忙：%s\n", apiclient.ErrorText(resp.Body))
+	case api.CodeConfirmInvalid:
+		fmt.Fprintf(a.stderr, "确认没有通过：%s\n", msg)
+		return ExitDenied
+	case api.CodeBusy:
+		fmt.Fprintf(a.stderr, "忙：%s\n", msg)
 		return ExitBusy
-	case resp.Code == 501:
-		fmt.Fprintf(a.stderr, "后台服务现在的模式不提供这项功能：%s\n", apiclient.ErrorText(resp.Body))
+	case api.CodeInUse:
+		fmt.Fprintf(a.stderr, "正在使用：%s\n", msg)
+		return ExitBusy
+	case api.CodeUnsupported:
+		fmt.Fprintf(a.stderr, "后台服务现在的模式不提供这项功能：%s\n", msg)
 		return ExitFail
 	}
-	fmt.Fprintln(a.stderr, apiclient.ErrorText(resp.Body))
+	fmt.Fprintln(a.stderr, msg)
 	return ExitFail
-}
-
-func hasConfirm(b []byte) bool {
-	var c struct {
-		Confirm string `json:"confirm"`
-	}
-	return json.Unmarshal(b, &c) == nil && len(c.Confirm) == 32
 }
 
 // confirmed 是两步确认：第一次调用回 409 带预览时打印预览；带 --yes 自动提交确认码，否则在终端里问；不是终端又没有

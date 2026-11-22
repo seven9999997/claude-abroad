@@ -160,6 +160,15 @@ func (d *Daemon) handleGetRules(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusRequestEntityTooLarge, errBody{"请求体超过 64 KiB"})
 		return
 	}
+	switch r.URL.Query().Get("format") {
+	case "", "yaml":
+	case "json": // M5-9：应用用（字段与 YAML 一一对应；JSON 是 YAML 的子集，可以原样 PUT 回来）
+		writeJSON(w, http.StatusOK, d.currentRules().ToFile())
+		return
+	default:
+		writeErr(w, http.StatusBadRequest, api.ErrorBody{Error: "format 只能是 yaml 或 json", Field: "format"})
+		return
+	}
 	b, err := d.currentRules().Marshal()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, errBody{err.Error()})
@@ -211,7 +220,15 @@ func (d *Daemon) handlePutRules(w http.ResponseWriter, r *http.Request) {
 		case errors.As(err, &ue):
 			code = http.StatusUnprocessableEntity
 		}
-		writeJSON(w, code, errBody{err.Error()})
+		b := api.ErrorBody{Error: err.Error()}
+		var fe FieldError
+		if errors.As(err, &fe) {
+			b.Field = fe.Field
+		}
+		if errors.Is(err, state.ErrBusy) {
+			b.Code = api.CodeBusy
+		}
+		writeErr(w, code, b)
 		return
 	}
 	writeJSON(w, http.StatusOK, d.Status())

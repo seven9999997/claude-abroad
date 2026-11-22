@@ -18,6 +18,7 @@ let package = Package(
         .target(name: "AbroadKit", dependencies: ["AbroadAPI"]),
         // 菜单栏和窗口（SwiftUI）。
         .executableTarget(name: "ClaudeAbroad", dependencies: ["AbroadKit", "AbroadAPI"]),
-        .testTarget(name: "AbroadKitTests", dependencies: ["AbroadKit", "AbroadAPI"]),
+        // appid-samples.json 由 Go 测试（internal/rules TestAppIDSamples）生成，测试按路径读，不作为资源打包。
+        .testTarget(name: "AbroadKitTests", dependencies: ["AbroadKit", "AbroadAPI"], exclude: ["appid-samples.json"]),
     ]
 )

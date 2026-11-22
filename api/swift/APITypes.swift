@@ -24,10 +24,37 @@ public enum JSONValue: Codable, Sendable, Equatable {
     }
 }
 
+/// 错误应答里稳定的代码（internal/api.ErrorCodes）。
+public enum ApiErrorCode: String, Codable, Sendable, CaseIterable {
+    case needsAuthorization = "needs_authorization"
+    case needsConfirm = "needs_confirm"
+    case confirmInvalid = "confirm_invalid"
+    case busy = "busy"
+    case inUse = "in_use"
+    case viaHostRequired = "via_host_required"
+    case lanUnconfirmed = "lan_unconfirmed"
+    case switchRolledBack = "switch_rolled_back"
+    case switchRollbackIncomplete = "switch_rollback_incomplete"
+    case noBaseline = "no_baseline"
+    case unsupported = "unsupported"
+    case invalid = "invalid"
+    case notFound = "not_found"
+    case tooLarge = "too_large"
+    case notEnabled = "not_enabled"
+    case unavailable = "unavailable"
+    case `internal` = "internal"
+}
+
 public struct ApiErrorBody: Codable, Sendable {
     public var error: String
+    public var code: String
+    public var node: String?
+    public var field: String?
     enum CodingKeys: String, CodingKey {
         case error = "error"
+        case code = "code"
+        case node = "node"
+        case field = "field"
     }
 }
 
@@ -122,12 +149,14 @@ public struct DaemonBaselineSummary: Codable, Sendable {
 
 public struct DaemonConfirmNeeded: Codable, Sendable {
     public var error: String
+    public var code: String
     public var confirm: String
     public var expiresInS: Int64
     public var preview: ClaudeprocPreview
     public var region: DaemonRegionChange?
     enum CodingKeys: String, CodingKey {
         case error = "error"
+        case code = "code"
         case confirm = "confirm"
         case expiresInS = "expires_in_s"
         case preview = "preview"
@@ -633,6 +662,32 @@ public struct RegionTarget: Codable, Sendable {
         case locale = "locale"
         case country = "country"
         case source = "source"
+    }
+}
+
+public struct RulesFile: Codable, Sendable {
+    public var `default`: String
+    public var rules: [RulesFileRule]?
+    public var offlineAllow: [String]?
+    public var localDomains: [String]?
+    public var pinnedExtra: [String]?
+    public var blockUdp443: Bool
+    enum CodingKeys: String, CodingKey {
+        case `default` = "default"
+        case rules = "rules"
+        case offlineAllow = "offline_allow"
+        case localDomains = "local_domains"
+        case pinnedExtra = "pinned_extra"
+        case blockUdp443 = "block_udp_443"
+    }
+}
+
+public struct RulesFileRule: Codable, Sendable {
+    public var app: String
+    public var action: String
+    enum CodingKeys: String, CodingKey {
+        case app = "app"
+        case action = "action"
     }
 }
 

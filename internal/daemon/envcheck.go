@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"claude-abroad/internal/api"
 	"context"
 	"crypto/x509"
 	"encoding/json"
@@ -310,7 +311,7 @@ func (d *Daemon) handleEnvRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if d.fileState() != state.Enabled {
-		writeJSON(w, http.StatusConflict, errBody{"只有在启用状态下才跑环境检测"})
+		writeErr(w, http.StatusConflict, api.ErrorBody{Code: api.CodeNotEnabled, Error: "只有在启用状态下才跑环境检测"})
 		return
 	}
 	rep := d.env.RunOnce(context.WithoutCancel(r.Context()))

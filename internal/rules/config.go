@@ -108,17 +108,42 @@ type Config struct {
 func DefaultConfig() *Config { return &Config{Default: ActMain} }
 
 type fileRule struct {
-	App    string `yaml:"app"`
-	Action string `yaml:"action"`
+	App    string `yaml:"app" json:"app"`
+	Action string `yaml:"action" json:"action"`
 }
 
 type file struct {
-	Default      string     `yaml:"default"`
-	Rules        []fileRule `yaml:"rules"`
-	OfflineAllow []string   `yaml:"offline_allow"`
-	LocalDomains []string   `yaml:"local_domains"`
-	PinnedExtra  []string   `yaml:"pinned_extra"`
-	BlockUDP443  bool       `yaml:"block_udp_443"`
+	Default      string     `yaml:"default" json:"default"`
+	Rules        []fileRule `yaml:"rules" json:"rules"`
+	OfflineAllow []string   `yaml:"offline_allow" json:"offline_allow"`
+	LocalDomains []string   `yaml:"local_domains" json:"local_domains"`
+	PinnedExtra  []string   `yaml:"pinned_extra" json:"pinned_extra"`
+	BlockUDP443  bool       `yaml:"block_udp_443" json:"block_udp_443"`
+}
+
+// FileRule、File 是规则文件的形式（GET /v1/rules?format=json 用；字段与 YAML 一一对应，JSON 也能直接 PUT 回去）。
+type (
+	FileRule = fileRule
+	File     = file
+)
+
+// ToFile 是 Marshal 之前的那一步（规则文件的结构）。
+func (c *Config) ToFile() File {
+	f := file{
+		Default:      c.Default.String(),
+		OfflineAllow: []string{},
+		LocalDomains: append([]string{}, c.LocalDomains...),
+		PinnedExtra:  append([]string{}, c.PinnedExtra...),
+		BlockUDP443:  c.BlockUDP443,
+		Rules:        []fileRule{},
+	}
+	for _, r := range c.Rules {
+		f.Rules = append(f.Rules, fileRule{App: string(r.App), Action: r.Action.String()})
+	}
+	for _, a := range c.OfflineAllow {
+		f.OfflineAllow = append(f.OfflineAllow, string(a))
+	}
+	return f
 }
 
 func invalid(item, reason string) error {
@@ -337,20 +362,7 @@ func checkDirectApp(id AppID) error {
 
 // Marshal 序列化成规则文件。Parse(Marshal(c)) 与 c 相等。
 func (c *Config) Marshal() ([]byte, error) {
-	f := file{
-		Default:      c.Default.String(),
-		OfflineAllow: []string{},
-		LocalDomains: append([]string{}, c.LocalDomains...),
-		PinnedExtra:  append([]string{}, c.PinnedExtra...),
-		BlockUDP443:  c.BlockUDP443,
-		Rules:        []fileRule{},
-	}
-	for _, r := range c.Rules {
-		f.Rules = append(f.Rules, fileRule{App: string(r.App), Action: r.Action.String()})
-	}
-	for _, a := range c.OfflineAllow {
-		f.OfflineAllow = append(f.OfflineAllow, string(a))
-	}
+	f := c.ToFile()
 	return yaml.Marshal(&f)
 }
 

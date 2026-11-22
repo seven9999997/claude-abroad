@@ -35,6 +35,12 @@ func abroadUsage() throws -> String {
         (.removeSource(id: "s1"), "sudo abroad main rm-source s1", "sudo abroad main rm-source <来源 ID>"),
         (.mainUse(node: "n1", via: ["n2", "n3"]), "sudo abroad main use n1 --via n2 --via n3", "sudo abroad main use <节点> [--via <中转节点>…]"),
         (.lanConfirm(node: "n9"), "sudo abroad main confirm-lan n9", "sudo abroad main confirm-lan <节点>"),
+        (.exitAdd(tag: "wg", kind: "wireguard", path: "/tmp/wg.conf"), "sudo abroad exit add wg --kind wireguard --file /tmp/wg.conf", "sudo abroad exit add <标签> --kind wireguard|openvpn|clash --file <配置文件>"),
+        (.exitRemove(tag: "wg"), "sudo abroad exit rm wg", "sudo abroad exit rm <标签>"),
+        (.appSet(app: "com.example.a", action: "proxy:main"), "sudo abroad app set com.example.a main", "set <应用> direct|block|main|proxy:<出口>"),
+        (.appSet(app: "path:/usr/bin/x", action: "direct"), "sudo abroad app set path:/usr/bin/x direct", "set <应用> direct|block|main|proxy:<出口>"),
+        (.appRemove(app: "com.example.a"), "sudo abroad app rm com.example.a", "| rm <应用>"),
+        (.appSet(app: "com.example.a", action: "proxy:wg"), "sudo abroad app set com.example.a proxy:wg", "set <应用> direct|block|main|proxy:<出口>"),
     ]
     for (op, cmd, inHelp) in table {
         #expect(op.terminalCommand == cmd)
@@ -89,6 +95,12 @@ func appSources() throws -> [(String, String)] {
         let ok = code.components(separatedBy: "FileManager.default.fileExists(atPath:").count - 1
         #expect(fm == ok, "\(name)：FileManager 只允许 fileExists")
         if fm > 0 { #expect(name == "Transport.swift", "\(name) 不该访问文件") }
+    }
+    // 不按错误文字分支（m5-plan v2.7 决定 0）：只看 ErrorText.code。
+    for (name, src) in files {
+        for bad in [".raw.contains(", ".reason.contains(", ".next.contains(", ".raw.hasPrefix(", ".raw ==", ".action.contains("] {
+            #expect((src.contains(bad)) == false, "\(name) 按错误文字分支：\(bad)")
+        }
     }
     // Package.swift 没有外部依赖。
     let pkg = try readRepo("app/Package.swift")

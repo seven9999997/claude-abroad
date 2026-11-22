@@ -13,6 +13,9 @@ struct HomeView: View {
             if let c = model.connectionText {
                 Banner(title: c, detail: L10n.backendDownDetail, symbol: "bolt.horizontal.circle")
             }
+            if !model.pendingRestore.isEmpty {
+                Banner(title: L10n.regionPending, detail: model.pendingRestore.joined(separator: L10n.listSeparator), symbol: "clock.arrow.circlepath")
+            }
             if let s = model.stalledNote {
                 Banner(title: model.phase.title, detail: s, symbol: "pause.circle")
             }

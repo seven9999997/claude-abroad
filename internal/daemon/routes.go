@@ -12,7 +12,9 @@ import (
 	"sync/atomic"
 
 	"claude-abroad/internal/api"
+	"claude-abroad/internal/claudeproc"
 	"claude-abroad/internal/envcheck"
+	"claude-abroad/internal/rules"
 )
 
 // 路由表（m5-plan v2.1 决定 4）：每个接口的路径、方法、级别（或按本次调用决定）、是否任务化、请求和应答类型都在这里；
@@ -30,13 +32,14 @@ func RouteTable() []api.Route {
 		{ID: "enable", Method: "POST", Path: "/v1/enable", Level: api.PerCall, Async: true, Req: ConfirmRequest{}, Resp: Status{}, Note: "启用；地区会变时两步确认，签名校验推迟期间按敏感处理"},
 		{ID: "disable", Method: "POST", Path: "/v1/disable", Level: api.Normal, Async: true, Resp: Status{}, Note: "停用"},
 		{ID: "restore", Method: "POST", Path: "/v1/restore", Level: api.Sensitive, Req: ConfirmRequest{}, Resp: Status{}, Note: "回国：一律两步确认"},
+		{ID: "restore-preview", Method: "GET", Path: "/v1/restore/preview", Level: api.Read, Resp: claudeproc.Preview{}, Note: "回国会结束的 Claude 进程清单（只查看：不签发确认码、不改任何状态；design 10.1）"},
 		{ID: "restore-alias", Method: "POST", Path: "/v1/actions/restore", Level: api.Sensitive, Req: ConfirmRequest{}, Resp: Status{}, Note: "回国的别名"},
 		{ID: "uninstall", Method: "POST", Path: "/v1/actions/uninstall", Level: api.Sensitive, Req: ConfirmRequest{}, Resp: UninstallSkeleton{}, Note: "卸载（骨架，回 501；真正的卸载随 M6 的安装包）"},
 		{ID: "exits-list", Method: "GET", Path: "/v1/exits", Level: api.Read, Note: "分流出口摘要（不含配置原文和密钥）"},
 		{ID: "exit-get", Method: "GET", Path: "/v1/exits/{tag}", Level: api.Read},
 		{ID: "exit-put", Method: "PUT", Path: "/v1/exits/{tag}", Level: api.Sensitive, Note: "增加或替换分流出口"},
 		{ID: "exit-delete", Method: "DELETE", Path: "/v1/exits/{tag}", Level: api.Sensitive},
-		{ID: "rules-get", Method: "GET", Path: "/v1/rules", Level: api.Read},
+		{ID: "rules-get", Method: "GET", Path: "/v1/rules", Level: api.Read, Resp: rules.File{}, Note: "当前规则：默认 YAML；?format=json 返回同样内容的 JSON（可原样 PUT 回来）"},
 		{ID: "rules-put", Method: "PUT", Path: "/v1/rules", Level: api.PerCall, Resp: Status{}, Note: "改规则；放松保护时是敏感（api.RulesLevel）"},
 		{ID: "main-get", Method: "GET", Path: "/v1/main-proxy", Level: api.Read, Resp: MainProxyView{}, Note: "主代理：保存的选择、是否已下发、是否需要重新选择、局域网节点是否待确认（不含服务器、密码、订阅地址）"},
 		{ID: "main-select", Method: "PUT", Path: "/v1/main-proxy", Level: api.Sensitive, Req: MainSelectRequest{}, Resp: MainProxyResult{}, Note: "选节点或链并应用（已启用时：关闸门、换第一跳、下发、检查、失败回滚）"},
@@ -74,6 +77,7 @@ func (d *Daemon) handlerFuncs() map[string]http.HandlerFunc {
 		"disable":               d.handleDisable,
 		"restore":               d.handleRestore,
 		"restore-alias":         d.handleRestore,
+		"restore-preview":       d.handleRestorePreview,
 		"uninstall":             d.handleUninstall,
 		"exits-list":            d.handleExitsList,
 		"exit-get":              d.handleExitGet,

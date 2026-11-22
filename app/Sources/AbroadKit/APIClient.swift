@@ -10,9 +10,16 @@ public struct ErrorText: Sendable, Equatable {
     public var reason: String
     public var next: String
     public var raw: String
+    /// 稳定的代码（m5-plan v2.7 决定 0）：界面的分支只看它，不看文字。后台没给或不认识时为 nil。
+    public var code: ApiErrorCode?
+    public var node: String? // 局域网待确认的节点 ID
+    public var field: String? // 校验不通过的是哪一项
 
-    public init(raw: String) {
+    public init(raw: String, code: ApiErrorCode? = nil, node: String? = nil, field: String? = nil) {
         self.raw = raw
+        self.code = code
+        self.node = node
+        self.field = field
         if let r = raw.range(of: "失败：") {
             action = String(raw[..<r.lowerBound]) + "失败"
             let rest = raw[r.upperBound...]
@@ -30,10 +37,28 @@ public struct ErrorText: Sendable, Equatable {
         }
     }
 
-    static func from(body: Data) -> ErrorText {
-        struct E: Decodable { var error: String? }
-        let s = (try? JSONDecoder().decode(E.self, from: body))?.error ?? ""
-        return ErrorText(raw: s)
+    static func from(body: Data, status: Int = 0) -> ErrorText {
+        struct E: Decodable { var error: String?; var code: String?; var node: String?; var field: String? }
+        let e = try? JSONDecoder().decode(E.self, from: body)
+        let code = e?.code.flatMap { ApiErrorCode(rawValue: $0) } ?? (e?.code == nil ? ApiErrorCode.defaultFor(status: status) : nil)
+        return ErrorText(raw: e?.error ?? "", code: code, node: e?.node, field: e?.field)
+    }
+}
+
+extension ApiErrorCode {
+    /// 后台没给代码时（旧版本）按状态码取默认代码（和 internal/api.DefaultCode 一致）。
+    static func defaultFor(status: Int) -> ApiErrorCode? {
+        switch status {
+        case 400, 422: return .invalid
+        case 403: return .needsAuthorization
+        case 404: return .notFound
+        case 409: return .busy
+        case 413: return .tooLarge
+        case 501: return .unsupported
+        case 503: return .unavailable
+        case 0: return nil
+        default: return .internal
+        }
     }
 }
 
@@ -148,15 +173,22 @@ public final class APIClient: Sendable {
             } catch {
                 return .failed(resp.status, ErrorText(raw: "读不懂后台服务的应答"))
             }
-        case 409:
-            if let c = try? JSONDecoder().decode(DaemonConfirmNeeded.self, from: resp.body), c.confirm.count == 32 {
+        default:
+            break
+        }
+        // 只看代码分支（文字原样带着，给界面三段显示）。
+        let t = ErrorText.from(body: resp.body, status: resp.status)
+        switch t.code {
+        case .needsConfirm:
+            if let c = try? JSONDecoder().decode(DaemonConfirmNeeded.self, from: resp.body) {
                 return .needsConfirm(ConfirmPrompt(needed: c, request: request))
             }
-            return .busy(ErrorText.from(body: resp.body))
-        case 403: return .needsAuthorization(ErrorText.from(body: resp.body))
-        case 400, 422: return .invalid(ErrorText.from(body: resp.body))
-        case 501: return .unsupported(ErrorText.from(body: resp.body))
-        default: return .failed(resp.status, ErrorText.from(body: resp.body))
+            return .failed(resp.status, t)
+        case .needsAuthorization: return .needsAuthorization(t)
+        case .busy, .inUse: return .busy(t)
+        case .invalid, .viaHostRequired, .lanUnconfirmed, .noBaseline, .notFound, .confirmInvalid, .tooLarge, .notEnabled: return .invalid(t)
+        case .unsupported: return .unsupported(t)
+        default: return .failed(resp.status, t)
         }
     }
 }

@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -75,7 +76,7 @@ func TestExitCodes(t *testing.T) {
 	})
 	confirm := stub(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusConflict)
-		fmt.Fprint(w, `{"error":"需要确认","confirm":"0123456789abcdef0123456789abcdef","preview":{"processes":[]}}`)
+		fmt.Fprint(w, `{"error":"需要确认","code":"needs_confirm","confirm":"0123456789abcdef0123456789abcdef","preview":{"processes":[]}}`)
 	})
 	cases := []struct {
 		name string
@@ -255,5 +256,51 @@ func TestSourceRules(t *testing.T) {
 	}
 	if strings.Count(all, "== api.Sensitive") != 1 || strings.Contains(all, "Level:") {
 		t.Fatal("需要 sudo 的判断只能来自路由表（只在 run 里和 api.Sensitive 比较一次）")
+	}
+}
+
+// m5-plan v2.7 验收 a：命令行不按错误文字分支。ErrorText 的结果只用来打印：它所在的行要么赋给 msg，要么是 fmt.Fprint；
+// msg 不参与任何判断；不出现对应答体的包含判断。
+func TestNoBranchOnErrorText(t *testing.T) {
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, _ := os.ReadFile(f)
+		for i, line := range strings.Split(string(b), "\n") {
+			l := strings.TrimSpace(line)
+			if strings.Contains(l, "ErrorText(") && !strings.HasPrefix(l, "msg := apiclient.ErrorText(") && !strings.HasPrefix(l, "fmt.Fprint") {
+				t.Errorf("%s:%d：错误文字只能用来打印：%s", f, i+1, l)
+			}
+			for _, bad := range []string{"strings.Contains(msg", "strings.HasPrefix(msg", "msg ==", "== msg", "strings.Contains(string(resp.Body)", "bytes.Contains(resp.Body"} {
+				if strings.Contains(l, bad) {
+					t.Errorf("%s:%d：按错误文字分支：%s", f, i+1, l)
+				}
+			}
+		}
+	}
+}
+
+// 后台的错误文字换成任意别的字符串，退出码不变（只看代码）。
+func TestExitCodeIgnoresText(t *testing.T) {
+	for _, c := range []struct {
+		status int
+		code   string
+		want   int
+	}{{403, "needs_authorization", ExitDenied}, {403, "confirm_invalid", ExitDenied}, {409, "busy", ExitBusy}, {409, "in_use", ExitBusy},
+		{501, "unsupported", ExitFail}, {422, "via_host_required", ExitFail}, {409, "needs_confirm", ExitConfirm}} {
+		for _, text := range []string{"随便什么文字", "needs_confirm busy 忙 sudo", ""} {
+			body := fmt.Sprintf(`{"error":%q,"code":%q}`, text, c.code)
+			a := &app{stderr: io.Discard}
+			if got := a.codeOf(apiclient.Response{Code: c.status, Body: []byte(body)}); got != c.want {
+				t.Errorf("%d %s %q：退出码 %d，应为 %d", c.status, c.code, text, got, c.want)
+			}
+		}
+	}
+	// 没有代码（旧版本的后台）：按状态码。
+	a := &app{stderr: io.Discard}
+	if a.codeOf(apiclient.Response{Code: 409, Body: []byte(`{"error":"x"}`)}) != ExitBusy {
+		t.Fatal("没有代码的 409 按忙处理")
 	}
 }

@@ -274,14 +274,23 @@ func RuleRefs(c *rules.Config, tag string) []int {
 	return out
 }
 
+// FieldError 是指明了哪一项的校验错误（错误应答的 field，m5-plan v2.7 决定 0）。
+type FieldError struct {
+	Field string
+	Err   error
+}
+
+func (e FieldError) Error() string { return e.Err.Error() }
+func (e FieldError) Unwrap() error { return e.Err }
+
 // UnknownExitRefs 检查规则里的分流出口都已配置：返回第一个不存在的出口的说明（指出是第几条），都存在时 nil。
 func UnknownExitRefs(c *rules.Config, has func(string) bool) error {
 	if c.Default.Kind == rules.Proxy && c.Default.Exit != guestabi.ExitMain && !has(c.Default.Exit) {
-		return fmt.Errorf("default：出口 %s 不存在", c.Default.Exit)
+		return FieldError{Field: "default", Err: fmt.Errorf("default：出口 %s 不存在", c.Default.Exit)}
 	}
 	for i, r := range c.Rules {
 		if r.Action.Kind == rules.Proxy && r.Action.Exit != guestabi.ExitMain && !has(r.Action.Exit) {
-			return fmt.Errorf("rules 第 %d 条（%s）：出口 %s 不存在，请先在“出口”里添加", i+1, r.App, r.Action.Exit)
+			return FieldError{Field: fmt.Sprintf("rules[%d]", i), Err: fmt.Errorf("rules 第 %d 条（%s）：出口 %s 不存在，请先在“出口”里添加", i+1, r.App, r.Action.Exit)}
 		}
 	}
 	return nil

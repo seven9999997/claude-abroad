@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"claude-abroad/internal/api"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -190,7 +191,7 @@ func (d *Daemon) handleSetupGet(w http.ResponseWriter, r *http.Request) {
 
 func (d *Daemon) handleSetupComplete(w http.ResponseWriter, r *http.Request) {
 	if !d.mainProxyApplied() {
-		writeJSON(w, http.StatusUnprocessableEntity, errBody{"还不能完成安装引导：还差一步“应用主代理”（选好主代理节点并应用，建立出口基准）"})
+		writeErr(w, http.StatusUnprocessableEntity, api.ErrorBody{Code: api.CodeNoBaseline, Error: "还不能完成安装引导：还差一步“应用主代理”（选好主代理节点并应用，建立出口基准）"})
 		return
 	}
 	f := setupFile{Completed: true, CompletedAt: d.now().Truncate(time.Second)}

@@ -142,6 +142,9 @@ public final class StatusModel: ObservableObject {
         return s
     }
 
+    /// 待还原的项（网络已恢复但时区或语言没还原；首页和地区页都显示）。
+    public var pendingRestore: [String] { status?.region?.pending ?? [] }
+
     /// 停在中间状态时的说明。
     public var stalledNote: String? { stalledState == nil ? nil : L10n.interrupted }
 
@@ -262,7 +265,11 @@ public final class StatusModel: ObservableObject {
         await perform(op) { await self.client.confirm(p, as: DaemonStatus.self) }
     }
 
-    public func dismissTerminal() { terminalCommand = nil }
+    /// 关掉终端退路的提示后刷新一次（用户可能刚在终端里执行了命令）。
+    public func dismissTerminal() {
+        terminalCommand = nil
+        Task { await refresh() }
+    }
 
     private func perform(_ op: SensitiveOperation?, _ call: @escaping () async -> Outcome<DaemonStatus>) async {
         guard !busy else { return }
@@ -289,7 +296,7 @@ public final class StatusModel: ObservableObject {
             }
         case .busy(let t):
             phase = before
-            daemonBusy = true
+            daemonBusy = t.code == .busy
             busyAtState = status?.state
             notice = Notice(kind: .error, text: t.raw.isEmpty ? ErrorText(raw: L10n.busy) : t)
         case let .invalid(t), let .failed(_, t):

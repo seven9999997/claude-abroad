@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"claude-abroad/internal/api"
 	"context"
 	"encoding/json"
 	"errors"
@@ -87,6 +88,18 @@ func (d *Daemon) handleSourcesList(w http.ResponseWriter, r *http.Request) {
 
 // fetchSource 抓取订阅（v2.2 决定 5）：启用时经主代理（abroadd 的流量和本机其他流量一样进虚拟网卡）；未启用时必须由调用方
 // 显式带 via_host，否则拒绝。错误里不带订阅地址（只给分类）。
+// ErrViaHostRequired 是未启用时抓取订阅、又没有显式选择经本机网络（代码 via_host_required）。
+var ErrViaHostRequired = errors.New("现在没有启用，没有主代理可走：要经本机网络抓取订阅，请明确选择（via_host）；否则先启用再更新")
+
+// fetchErr 写抓取订阅失败的应答（经本机网络的要求给特定代码）。
+func fetchErr(w http.ResponseWriter, code int, err error) {
+	b := api.ErrorBody{Error: err.Error()}
+	if errors.Is(err, ErrViaHostRequired) {
+		b.Code, b.Field = api.CodeViaHostRequired, "via_host"
+	}
+	writeErr(w, code, b)
+}
+
 func (d *Daemon) fetchSource(ctx context.Context, url string, viaHost bool) ([]byte, int, error) {
 	f := d.opts.Sys.FetchSource
 	if f == nil {
@@ -94,7 +107,7 @@ func (d *Daemon) fetchSource(ctx context.Context, url string, viaHost bool) ([]b
 	}
 	enabled := d.fileState() == state.Enabled
 	if !enabled && !viaHost {
-		return nil, http.StatusUnprocessableEntity, errors.New("现在没有启用，没有主代理可走：要经本机网络抓取订阅，请明确选择（via_host）；否则先启用再更新")
+		return nil, http.StatusUnprocessableEntity, ErrViaHostRequired
 	}
 	ctx, cancel := context.WithTimeout(ctx, SourceFetchTimeout)
 	defer cancel()
@@ -142,12 +155,12 @@ func (d *Daemon) handleSourceAdd(w http.ResponseWriter, r *http.Request) {
 	case "subscription":
 		u := strings.TrimSpace(req.URL)
 		if !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
-			writeJSON(w, http.StatusUnprocessableEntity, errBody{"订阅地址要以 http:// 或 https:// 开头"})
+			writeErr(w, http.StatusUnprocessableEntity, api.ErrorBody{Error: "订阅地址要以 http:// 或 https:// 开头", Field: "url"})
 			return
 		}
 		b, code, err := d.fetchSource(r.Context(), u, req.ViaHost)
 		if err != nil {
-			writeJSON(w, code, errBody{err.Error()})
+			fetchErr(w, code, err)
 			return
 		}
 		data, url = b, u
@@ -182,7 +195,7 @@ func (d *Daemon) handleSourceDelete(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, os.ErrNotExist):
 		writeJSON(w, http.StatusNotFound, errBody{"没有这个来源"})
 	case errors.Is(err, ErrMainInUse):
-		writeJSON(w, http.StatusConflict, errBody{err.Error()})
+		writeErr(w, http.StatusConflict, api.ErrorBody{Code: api.CodeInUse, Error: err.Error()})
 	case err != nil:
 		writeJSON(w, http.StatusInternalServerError, errBody{mainErr("删除主代理的来源", err, "请再试一次。").Error()})
 	default:
@@ -221,7 +234,7 @@ func (d *Daemon) handleSourceRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 	b, code, err := d.fetchSource(r.Context(), url, req.ViaHost)
 	if err != nil {
-		writeJSON(w, code, errBody{err.Error()})
+		fetchErr(w, code, err)
 		return
 	}
 	reselect, err := d.main.refreshSource(id, b)
@@ -288,7 +301,14 @@ func (d *Daemon) handleMainSelect(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := d.main.plan(cand)
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, errBody{mainErr("应用主代理", err, mainPlanHint(err)).Error()})
+		b := api.ErrorBody{Error: mainErr("应用主代理", err, mainPlanHint(err)).Error()}
+		if errors.Is(err, ErrMainLANPending) {
+			b.Code, b.Node = api.CodeLANUnconfirmed, cand.Selected // 第一跳：有链时是链的第一个
+			if len(cand.Chain) > 0 {
+				b.Node = cand.Chain[0]
+			}
+		}
+		writeErr(w, http.StatusUnprocessableEntity, b)
 		return
 	}
 	if d.fileState() != state.Enabled {
@@ -374,7 +394,11 @@ func (d *Daemon) switchMain(w http.ResponseWriter, r *http.Request, p mainPlan, 
 	fail := func(code int, what string, err error) {
 		restored := rollback()
 		d.events.Add("main_proxy", "switch_failed", what+"："+usererror.Reason(err))
-		writeJSON(w, code, errBody{mainErr(what, err, next(restored)).Error()})
+		c := api.CodeSwitchRolledBack
+		if !restored {
+			c = api.CodeSwitchRollbackIncomplete
+		}
+		writeErr(w, code, api.ErrorBody{Code: c, Error: mainErr(what, err, next(restored)).Error()})
 	}
 	hp0, hpErr := vm.HopPrivate(ctx)
 	if err := vm.PushMainHops(ctx, p.hops); err != nil {

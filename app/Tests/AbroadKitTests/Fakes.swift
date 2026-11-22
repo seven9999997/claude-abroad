@@ -69,7 +69,7 @@ func statusJSON(state: String, gate: Bool, protected: Bool = true, corrupt: Bool
 }
 
 let exitJSON = "{\"available\":true,\"ip\":\"203.0.113.7\",\"country\":\"US\",\"city\":\"Exampleville\",\"timezone\":\"America/Los_Angeles\"}"
-let confirmJSON = "{\"error\":\"启用需要确认：地区会变。确认后带上确认码再调用一次\",\"confirm\":\"0123456789abcdef0123456789abcdef\",\"expires_in_s\":60,\"preview\":{\"processes\":[{\"pid\":7100,\"app\":\"Claude 桌面版\",\"cmd\":\"/Applications/Claude.app\"}],\"will_kill\":true},\"region\":{\"from\":\"A\",\"to\":\"B\"}}"
+let confirmJSON = "{\"code\":\"needs_confirm\",\"error\":\"启用需要确认：地区会变。确认后带上确认码再调用一次\",\"confirm\":\"0123456789abcdef0123456789abcdef\",\"expires_in_s\":60,\"preview\":{\"processes\":[{\"pid\":7100,\"app\":\"Claude 桌面版\",\"cmd\":\"/Applications/Claude.app\"}],\"will_kill\":true},\"region\":{\"from\":\"A\",\"to\":\"B\"}}"
 
 /// 等到条件成立（主线程上的视图模型由事件触发的刷新是异步的）。
 @MainActor

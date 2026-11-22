@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bytes"
+	"claude-abroad/internal/api"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -124,6 +125,7 @@ type ConfirmRequest struct {
 // ConfirmNeeded 是不带确认码时的 409 应答：预览和确认码。
 type ConfirmNeeded struct {
 	Error      string             `json:"error"`
+	Code       api.ErrorCode      `json:"code"` // 固定是 needs_confirm（m5-plan v2.7 决定 0）
 	Confirm    string             `json:"confirm"`
 	ExpiresInS int                `json:"expires_in_s"`
 	Preview    claudeproc.Preview `json:"preview"`
@@ -167,6 +169,7 @@ func (d *Daemon) handleRestore(w http.ResponseWriter, r *http.Request) {
 		}
 		d.opts.logf("恢复本机网络的预览：要结束的 Claude 进程 %d 个，没能确认的 %d 个", len(pv.Processes), len(pv.Unverified))
 		writeJSON(w, http.StatusConflict, ConfirmNeeded{
+			Code:       api.CodeNeedsConfirm,
 			Error:      "恢复本机网络需要确认：会强制结束下面的 Claude 进程，未保存的内容会丢失。确认后带上确认码再调用一次（60 秒内有效）。",
 			Confirm:    d.confirms.issue(OpRestore, digest),
 			ExpiresInS: int(ConfirmTTL / time.Second),
@@ -176,10 +179,22 @@ func (d *Daemon) handleRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	held, err := d.confirms.take(req.Confirm, OpRestore, digest)
 	if err != nil {
-		writeJSON(w, http.StatusForbidden, errBody{usererror.New("恢复本机网络", "确认码无效、已过期或已经用过", "本机网络没有改动。请重新发起恢复，按新的预览确认。", err).Error()})
+		writeErr(w, http.StatusForbidden, api.ErrorBody{Code: api.CodeConfirmInvalid, Error: usererror.New("恢复本机网络", "确认码无效、已过期或已经用过", "本机网络没有改动。请重新发起恢复，按新的预览确认。", err).Error()})
 		return
 	}
 	if err := d.exec(w, r, d.m.Restore, true); errors.Is(err, state.ErrBusy) {
 		d.confirms.giveBack(req.Confirm, held)
 	}
+}
+
+// handleRestorePreview 是 GET /v1/restore/preview（只读）：回国会结束的 Claude 进程和没能确认的项，内容和回国第一步的预览相同，
+// 但不签发确认码、不改任何状态（design 10.1、11.1；M5-9 设置窗口的进程清单）。
+func (d *Daemon) handleRestorePreview(w http.ResponseWriter, r *http.Request) {
+	_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 64<<10))
+	pv, err := d.preview(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errBody{usererror.Wrap("列出要结束的 Claude 进程", err, "请再试一次。").Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, pv)
 }

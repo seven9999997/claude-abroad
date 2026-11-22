@@ -4,6 +4,7 @@ import (
 	"claude-abroad/internal/api"
 	"claude-abroad/internal/console"
 	"claude-abroad/internal/envcheck"
+	"claude-abroad/internal/exitcheck"
 	"claude-abroad/internal/gatesm"
 	"claude-abroad/internal/vmhost"
 	"context"
@@ -401,13 +402,36 @@ func (d *Daemon) Status() Status {
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
+	if e, ok := v.(errBody); ok { // 只有文字的错误：按状态码补上代码（m5-plan v2.7 决定 0）
+		v = api.ErrorBody{Error: e.Error, Code: api.DefaultCode(code)}
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// errBody 是只有文字的错误；writeJSON 按状态码补上代码。要特定的代码或结构化数据时用 writeErr。
 type errBody struct {
 	Error string `json:"error"`
+}
+
+// writeErr 写一个带特定代码的错误应答。
+func writeErr(w http.ResponseWriter, status int, b api.ErrorBody) {
+	if b.Code == "" {
+		b.Code = api.DefaultCode(status)
+	}
+	writeJSON(w, status, b)
+}
+
+// opErrCode 是操作出错时的代码（状态码见 errCode）。
+func opErrCode(err error, status int) api.ErrorCode {
+	switch {
+	case errors.Is(err, state.ErrBusy):
+		return api.CodeBusy
+	case errors.Is(err, exitcheck.ErrNoBaseline):
+		return api.CodeNoBaseline
+	}
+	return api.DefaultCode(status)
 }
 
 // errCode 把操作的错误映射成 HTTP 状态码（决定 6）。
@@ -445,7 +469,7 @@ func (d *Daemon) exec(w http.ResponseWriter, r *http.Request, fn func(ctx contex
 	}
 	// 操作不跟着请求的连接一起取消（回滚和恢复本来就脱离调用方的取消）。
 	if err := fn(context.WithoutCancel(r.Context())); err != nil {
-		writeJSON(w, errCode(err), errBody{err.Error()})
+		writeErr(w, errCode(err), api.ErrorBody{Error: err.Error(), Code: opErrCode(err, errCode(err))})
 		return err
 	}
 	writeJSON(w, http.StatusOK, d.Status())

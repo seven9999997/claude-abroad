@@ -27,12 +27,7 @@ import (
 )
 
 // extraRoots 是路由表之外还要生成的类型（两步确认的 409 应答、错误应答）。
-var extraRoots = []reflect.Type{reflect.TypeOf(daemon.ConfirmNeeded{}), reflect.TypeOf(errorBody{})}
-
-// errorBody 是所有出错应答的形式（{"error": "…"}）。
-type errorBody struct {
-	Error string `json:"error"`
-}
+var extraRoots = []reflect.Type{reflect.TypeOf(daemon.ConfirmNeeded{}), reflect.TypeOf(api.ErrorBody{})}
 
 var (
 	marshaler     = reflect.TypeOf((*json.Marshaler)(nil)).Elem()
@@ -205,6 +200,13 @@ public enum JSONValue: Codable, Sendable, Equatable {
 }
 
 `)
+	// 错误代码（api.ErrorCodes）：应用的分支只看它（m5-plan v2.7 决定 0）。字段本身照旧是 String，
+	// 以后后台新增的代码不会让旧版本解码失败；比较时用 ApiErrorCode(rawValue:)。
+	b.WriteString("/// 错误应答里稳定的代码（internal/api.ErrorCodes）。\npublic enum ApiErrorCode: String, Codable, Sendable, CaseIterable {\n")
+	for _, c := range api.ErrorCodes {
+		fmt.Fprintf(&b, "    case %s = %q\n", camel(string(c)), string(c))
+	}
+	b.WriteString("}\n\n")
 	names := append([]string(nil), g.order...)
 	sort.Strings(names)
 	for _, n := range names {
@@ -276,7 +278,7 @@ func (g *gen) openapi(routes []api.Route) map[string]any {
 		"openapi":    "3.1.0",
 		"info":       map[string]any{"title": "abroadd 本地接口", "version": "1"},
 		"paths":      paths,
-		"components": map[string]any{"schemas": schemas},
+		"components": map[string]any{"schemas": withErrorCodes(schemas)},
 	}
 }
 
@@ -332,4 +334,14 @@ func main() {
 		}
 	}
 	fmt.Println("接口描述和 Swift 类型", map[bool]string{true: "与入库的一致", false: "已重新生成"}[*check])
+}
+
+// withErrorCodes 把错误代码表加进接口描述（ApiErrorCode：字符串枚举）。
+func withErrorCodes(schemas map[string]any) map[string]any {
+	codes := make([]string, 0, len(api.ErrorCodes))
+	for _, c := range api.ErrorCodes {
+		codes = append(codes, string(c))
+	}
+	schemas["ApiErrorCode"] = map[string]any{"type": "string", "enum": codes}
+	return schemas
 }

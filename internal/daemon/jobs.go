@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"claude-abroad/internal/api"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -139,7 +140,7 @@ func (d *Daemon) run(w http.ResponseWriter, r *http.Request, op string, async bo
 		if giveBack != nil {
 			giveBack()
 		}
-		writeJSON(w, http.StatusConflict, errBody{"已经有一个任务在进行，请等它结束（GET /v1/jobs/{id}）"})
+		writeErr(w, http.StatusConflict, api.ErrorBody{Code: api.CodeBusy, Error: "已经有一个任务在进行，请等它结束（GET /v1/jobs/{id}）"})
 		return
 	}
 	go func() {

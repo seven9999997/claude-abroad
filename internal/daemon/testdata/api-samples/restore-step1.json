@@ -1,5 +1,6 @@
 409
 {
+  "code": "needs_confirm",
   "confirm": "\u003c变化\u003e",
   "error": "恢复本机网络需要确认：会强制结束下面的 Claude 进程，未保存的内容会丢失。确认后带上确认码再调用一次（60 秒内有效）。",
   "expires_in_s": "\u003c变化\u003e",

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bytes"
+	"claude-abroad/internal/api"
 	"context"
 	"encoding/json"
 	"errors"
@@ -220,6 +221,7 @@ func (d *Daemon) confirmGate(w http.ResponseWriter, r *http.Request, op string, 
 		}
 		d.opts.logf("%s 的预览：地区会变，要结束的 Claude 进程 %d 个", op, len(pv.Processes))
 		writeJSON(w, http.StatusConflict, ConfirmNeeded{
+			Code:       api.CodeNeedsConfirm,
 			Error:      "地区将从「" + ch.From + "」变为「" + ch.To + "」：会强制结束下面的 Claude 进程，未保存的内容会丢失。确认后带上确认码再调用一次（60 秒内有效）。",
 			Confirm:    d.confirms.issue(op, digest),
 			ExpiresInS: int(ConfirmTTL.Seconds()),
@@ -230,7 +232,7 @@ func (d *Daemon) confirmGate(w http.ResponseWriter, r *http.Request, op string, 
 	}
 	held, err := d.confirms.take(code, op, digest)
 	if err != nil {
-		writeJSON(w, http.StatusForbidden, errBody{usererror.New("确认", "确认码无效、已过期、已经用过，或地区目标变了", "什么都没有改动。请重新发起，按新的预览确认。", err).Error()})
+		writeErr(w, http.StatusForbidden, api.ErrorBody{Code: api.CodeConfirmInvalid, Error: usererror.New("确认", "确认码无效、已过期、已经用过，或地区目标变了", "什么都没有改动。请重新发起，按新的预览确认。", err).Error()})
 		return false, noop
 	}
 	return true, func() { d.confirms.giveBack(code, held) }

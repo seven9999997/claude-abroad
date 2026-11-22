@@ -1,0 +1,68 @@
+[
+  {
+    "raw": "com.Google.Chrome",
+    "normalized": "com.google.chrome",
+    "valid": true,
+    "proxy_app": false
+  },
+  {
+    "raw": "com.apple.Safari",
+    "normalized": "com.apple.safari",
+    "valid": true,
+    "proxy_app": false
+  },
+  {
+    "raw": "COM.TINYSPECK.SLACKMACAPP",
+    "normalized": "com.tinyspeck.slackmacapp",
+    "valid": true,
+    "proxy_app": false
+  },
+  {
+    "raw": "org.mozilla.firefox",
+    "normalized": "org.mozilla.firefox",
+    "valid": true,
+    "proxy_app": false
+  },
+  {
+    "raw": "com.anthropic.claudefordesktop",
+    "normalized": "com.anthropic.claudefordesktop",
+    "valid": true,
+    "proxy_app": false
+  },
+  {
+    "raw": "com.west2online.ClashXPro",
+    "normalized": "com.west2online.clashxpro",
+    "valid": true,
+    "proxy_app": true
+  },
+  {
+    "raw": "io.github.clash-verge-rev.clash-verge-rev",
+    "normalized": "io.github.clash-verge-rev.clash-verge-rev",
+    "valid": true,
+    "proxy_app": true
+  },
+  {
+    "raw": "path:/Applications/Foo.app/Contents/MacOS/Foo",
+    "normalized": "path:/Applications/Foo.app/Contents/MacOS/Foo",
+    "valid": true,
+    "proxy_app": false
+  },
+  {
+    "raw": "path:/usr/local/bin/MyTool",
+    "normalized": "path:/usr/local/bin/MyTool",
+    "valid": true,
+    "proxy_app": false
+  },
+  {
+    "raw": "system:mDNSResponder",
+    "normalized": "system:mDNSResponder",
+    "valid": true,
+    "proxy_app": false
+  },
+  {
+    "raw": "unknown",
+    "normalized": "unknown",
+    "valid": true,
+    "proxy_app": false
+  }
+]

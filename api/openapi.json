@@ -3,14 +3,46 @@
     "schemas": {
       "ApiErrorBody": {
         "properties": {
+          "code": {
+            "type": "string"
+          },
           "error": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "node": {
             "type": "string"
           }
         },
         "required": [
+          "code",
           "error"
         ],
         "type": "object"
+      },
+      "ApiErrorCode": {
+        "enum": [
+          "needs_authorization",
+          "needs_confirm",
+          "confirm_invalid",
+          "busy",
+          "in_use",
+          "via_host_required",
+          "lan_unconfirmed",
+          "switch_rolled_back",
+          "switch_rollback_incomplete",
+          "no_baseline",
+          "unsupported",
+          "invalid",
+          "not_found",
+          "too_large",
+          "not_enabled",
+          "unavailable",
+          "internal"
+        ],
+        "type": "string"
       },
       "ApiSecurity": {
         "properties": {
@@ -172,6 +204,9 @@
       },
       "DaemonConfirmNeeded": {
         "properties": {
+          "code": {
+            "type": "string"
+          },
           "confirm": {
             "type": "string"
           },
@@ -190,6 +225,7 @@
           }
         },
         "required": [
+          "code",
           "confirm",
           "error",
           "expires_in_s",
@@ -1079,6 +1115,60 @@
           "locale",
           "source",
           "timezone"
+        ],
+        "type": "object"
+      },
+      "RulesFile": {
+        "properties": {
+          "block_udp_443": {
+            "type": "boolean"
+          },
+          "default": {
+            "type": "string"
+          },
+          "local_domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "offline_allow": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pinned_extra": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RulesFileRule"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "block_udp_443",
+          "default"
+        ],
+        "type": "object"
+      },
+      "RulesFileRule": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "app": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "app"
         ],
         "type": "object"
       },
@@ -2195,12 +2285,48 @@
         "x-level": "sensitive"
       }
     },
+    "/v1/restore/preview": {
+      "get": {
+        "description": "回国会结束的 Claude 进程清单（只查看：不签发确认码、不改任何状态；design 10.1）",
+        "operationId": "restore-preview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaudeprocPreview"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      }
+    },
     "/v1/rules": {
       "get": {
-        "description": "",
+        "description": "当前规则：默认 YAML；?format=json 返回同样内容的 JSON（可原样 PUT 回来）",
         "operationId": "rules-get",
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulesFile"
+                }
+              }
+            },
             "description": "成功"
           },
           "default": {

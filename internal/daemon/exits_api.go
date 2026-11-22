@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"claude-abroad/internal/api"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -55,6 +56,7 @@ func (e errExitRefs) Error() string {
 type errUnknownExit struct{ err error }
 
 func (e errUnknownExit) Error() string { return e.err.Error() }
+func (e errUnknownExit) Unwrap() error { return e.err }
 
 func (d *Daemon) exitView(s ExitSummary) ExitView {
 	return ExitView{ExitSummary: s, Avail: d.exitAvail.View(s.Tag)}
@@ -89,7 +91,7 @@ func (d *Daemon) handleExitGet(w http.ResponseWriter, r *http.Request) {
 func (d *Daemon) handleExitPut(w http.ResponseWriter, r *http.Request) {
 	tag := r.PathValue("tag")
 	if !ValidTag(tag) {
-		writeJSON(w, http.StatusUnprocessableEntity, errBody{"出口标签不合法（小写字母开头，最多 32 位，只能有小写字母、数字和 -，不能叫 main）"})
+		writeErr(w, http.StatusUnprocessableEntity, api.ErrorBody{Field: "tag", Error: "出口标签不合法（小写字母开头，最多 32 位，只能有小写字母、数字和 -，不能叫 main）"})
 		return
 	}
 	var req exitPutReq
@@ -106,7 +108,7 @@ func (d *Daemon) handleExitPut(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := parseExit(req.Kind, req.Conf); err != nil {
 		// exitconf 的错误指出行号和指令，不回显配置里的值。
-		writeJSON(w, http.StatusUnprocessableEntity, errBody{"出口 " + tag + " 的配置：" + err.Error()})
+		writeErr(w, http.StatusUnprocessableEntity, api.ErrorBody{Field: "conf", Error: "出口 " + tag + " 的配置：" + err.Error()})
 		return
 	}
 	x := StoredExit{Tag: tag, Kind: req.Kind, Conf: req.Conf}
@@ -121,7 +123,7 @@ func (d *Daemon) handleExitPut(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil {
-		writeJSON(w, exitErrCode(err), errBody{err.Error()})
+		writeErr(w, exitErrCode(err), exitErrBody(err))
 		return
 	}
 	s, _ := d.exits.Summary(tag)
@@ -151,10 +153,22 @@ func (d *Daemon) handleExitDelete(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil {
-		writeJSON(w, exitErrCode(err), errBody{err.Error()})
+		writeErr(w, exitErrCode(err), exitErrBody(err))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// exitErrBody：被规则引用时代码是 in_use，其余按状态码。
+func exitErrBody(err error) api.ErrorBody {
+	b := api.ErrorBody{Error: err.Error()}
+	var refs errExitRefs
+	if errors.As(err, &refs) {
+		b.Code = api.CodeInUse
+	} else if errors.Is(err, state.ErrBusy) {
+		b.Code = api.CodeBusy
+	}
+	return b
 }
 
 func exitErrCode(err error) int {

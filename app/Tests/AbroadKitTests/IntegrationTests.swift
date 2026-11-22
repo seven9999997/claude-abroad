@@ -130,6 +130,37 @@ struct IntegrationTests {
         #expect(n > 0, "状态变化时应收到事件")
     }
 
+    /// M5-9 验收 h：其余页面的视图模型对假系统 abroadd。假系统没有环境检测：页面是“这个模式不提供”。
+    @MainActor
+    @Test func otherPages() async throws {
+        let apps = AppsModel(client: client)
+        await apps.load()
+        #expect(apps.state == .loaded)
+        await apps.setRule(app: "com.example.integration", action: "block") // 收紧：直接提交
+        #expect(apps.notice == nil, "收紧的规则：\(String(describing: apps.notice))")
+        let again = AppsModel(client: client)
+        await again.load()
+        #expect(again.rules?.rules.contains(RulesDoc.Rule(app: "com.example.integration", action: "block")) == true, "读回规则")
+        await again.removeRule(app: "com.example.integration")
+
+        let env = EnvModel(client: client)
+        await env.load()
+        guard case .unsupported(let t) = env.state else { Issue.record("假系统没有环境检测，应是“这个模式不提供”：\(env.state)"); return }
+        #expect(t.code == .unsupported)
+
+        let region = RegionModel(client: client)
+        await region.load()
+        #expect(region.state == .loaded)
+
+        let engines = EnginesModel(client: client)
+        await engines.load()
+        #expect(engines.state == .loaded && engines.view?.reachable == true, "假虚拟机（--fake-main-proxy）答得上")
+
+        let exits = ExitsModel(client: client)
+        await exits.load()
+        #expect(exits.state == .loaded && exits.emptyText == L10n.noExits)
+    }
+
     @Test func unreachableKinds() async throws {
         let c = APIClient(transport: UnixTransport(path: integrationSocket + ".nope", timeout: 5))
         guard case .unreachable(.notRunning) = await c.status() else { Issue.record("不存在的 socket 应是 notRunning"); return }
