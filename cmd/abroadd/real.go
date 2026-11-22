@@ -33,8 +33,8 @@ import (
 const DefaultRealStateDir = "/Library/Application Support/claude-abroad"
 
 type realFlags struct {
-	stateDir, vmDir, pfUser, mainStore, exitHost string
-	skipKill, skipRegion                         bool
+	stateDir, vmDir, pfUser, mainStore, exitHost, socketDir string
+	skipKill, skipRegion                                    bool
 }
 
 // checkRealFlags 是真实模式参数的检查（纯函数，M2-9b-2 决定 7、8）。
@@ -145,7 +145,7 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)
 		return 1
 	}
-	d, err := daemon.Start(context.Background(), daemon.Options{StateDir: f.stateDir, Sys: sys, Log: logger})
+	d, err := daemon.Start(context.Background(), daemon.Options{StateDir: f.stateDir, Sys: sys, Log: logger, SocketDir: f.socketDir})
 	if err != nil {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)
 		return 1

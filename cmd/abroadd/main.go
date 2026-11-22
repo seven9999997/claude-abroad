@@ -44,6 +44,7 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 	exitHost := fs.String("exit-check-host", "", "真实模式：出口检查里 HTTPS 探测的主机（经主代理 GET https://<主机>/generate_204，要 204）")
 	skipKill := fs.Bool("dev-skip-claude-kill", false, "开发用：恢复本机网络时不结束 Claude 进程（预览照常列出；发布构建不能带）")
 	skipRegion := fs.Bool("dev-skip-region", false, "开发用：不同步时区和语言（发布构建不能带）")
+	sockDir := fs.String("socket-dir", "", "真实模式：本地接口 socket 的目录（目录属主 root、组和其他人不能写；socket 0666，级别按对端 uid 判）；空时放在状态目录里、只认属主")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -57,7 +58,7 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 			return code
 		}
 		return runReal(realFlags{stateDir: *stateDir, vmDir: *vmDir, pfUser: *pfUser, mainStore: *mainStore,
-			exitHost: *exitHost, skipKill: *skipKill, skipRegion: *skipRegion}, stderr, ready)
+			exitHost: *exitHost, skipKill: *skipKill, skipRegion: *skipRegion, socketDir: *sockDir}, stderr, ready)
 	}
 	if *stateDir == "" {
 		fmt.Fprintln(stderr, "abroadd：需要 --state-dir")

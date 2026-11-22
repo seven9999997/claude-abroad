@@ -89,3 +89,62 @@ func TestListenPrivateUnixRejectsDir(t *testing.T) {
 		t.Fatal("临时名字上有普通文件时应拒绝")
 	}
 }
+
+// m5-plan v2.1 验收 j：真实模式共享 socket 的目录检查和权限——目录属主本人、组和其他人不能写；socket 0666。
+func TestSharedSocket(t *testing.T) {
+	base := t.TempDir()
+	uid := os.Getuid()
+	mk := func(name string, mode os.FileMode) string {
+		d := filepath.Join(base, name)
+		if err := os.Mkdir(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(d, mode); err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	ok := mk("ok", 0o755)
+	if err := CheckSharedDir(ok, uid); err != nil {
+		t.Fatalf("0755 应通过：%v", err)
+	}
+	if err := CheckSharedDir(mk("priv", 0o700), uid); err != nil {
+		t.Fatalf("0700 也安全（只是别人连不上）：%v", err)
+	}
+	for name, mode := range map[string]os.FileMode{"gw": 0o775, "ow": 0o757, "all": 0o777, "sticky": 0o755 | os.ModeSticky} {
+		d := mk(name, mode&os.ModePerm)
+		if mode&os.ModeSticky != 0 {
+			_ = os.Chmod(d, mode)
+		}
+		if err := CheckSharedDir(d, uid); !errors.Is(err, ErrSharedDir) {
+			t.Errorf("%s（%v）应被拒：%v", name, mode, err)
+		}
+	}
+	if err := CheckSharedDir(ok, uid+1); !errors.Is(err, ErrSharedDir) {
+		t.Error("属主不对应被拒")
+	}
+	link := filepath.Join(base, "link")
+	_ = os.Symlink(ok, link)
+	if err := CheckSharedDir(link, uid); !errors.Is(err, ErrSharedDir) {
+		t.Error("符号链接应被拒")
+	}
+	p := filepath.Join(ok, "api.sock")
+	l, err := ListenSharedUnix(p, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Lstat(p)
+	if err != nil || fi.Mode()&os.ModeSocket == 0 || fi.Mode().Perm() != 0o666 {
+		t.Fatalf("socket 应是 0666：%v %v", fi.Mode(), err)
+	}
+	if _, err := os.Lstat(p + "~"); err == nil {
+		t.Fatal("临时名字不应留下")
+	}
+	l.Close()
+	if _, err := os.Lstat(p); err == nil {
+		t.Fatal("关闭后应删除 socket")
+	}
+	if _, err := ListenSharedUnix(filepath.Join(mk("bad", 0o777), "api.sock"), uid); !errors.Is(err, ErrSharedDir) {
+		t.Fatal("目录不对时不能监听")
+	}
+}

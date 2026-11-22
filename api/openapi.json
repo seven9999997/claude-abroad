@@ -1,0 +1,1460 @@
+{
+  "components": {
+    "schemas": {
+      "ApiErrorBody": {
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "ApiSecurity": {
+        "properties": {
+          "caller": {
+            "type": "string"
+          },
+          "caller_verification": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "caller",
+          "caller_verification",
+          "note"
+        ],
+        "type": "object"
+      },
+      "ClaudeprocPreview": {
+        "properties": {
+          "notice": {
+            "type": "string"
+          },
+          "processes": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudeprocTarget"
+            },
+            "type": "array"
+          },
+          "unverified": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudeprocTarget"
+            },
+            "type": "array"
+          },
+          "will_kill": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "will_kill"
+        ],
+        "type": "object"
+      },
+      "ClaudeprocTarget": {
+        "properties": {
+          "app": {
+            "type": "string"
+          },
+          "cmd": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "pid": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "app",
+          "cmd",
+          "pid"
+        ],
+        "type": "object"
+      },
+      "DaemonBaselineSummary": {
+        "properties": {
+          "country": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "country",
+          "rule"
+        ],
+        "type": "object"
+      },
+      "DaemonConfirmNeeded": {
+        "properties": {
+          "confirm": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "expires_in_s": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/ClaudeprocPreview"
+          },
+          "region": {
+            "$ref": "#/components/schemas/DaemonRegionChange"
+          }
+        },
+        "required": [
+          "confirm",
+          "error",
+          "expires_in_s",
+          "preview"
+        ],
+        "type": "object"
+      },
+      "DaemonConfirmRequest": {
+        "properties": {
+          "confirm": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DaemonDirectStatus": {
+        "properties": {
+          "attached": {
+            "type": "boolean"
+          },
+          "configured": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "attached",
+          "configured"
+        ],
+        "type": "object"
+      },
+      "DaemonEnvSettingsRequest": {
+        "properties": {
+          "disabled": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "DaemonEventRecord": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "time": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "source",
+          "time"
+        ],
+        "type": "object"
+      },
+      "DaemonExitCounts": {
+        "properties": {
+          "failed": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "tcp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "udp": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "failed",
+          "tcp",
+          "udp"
+        ],
+        "type": "object"
+      },
+      "DaemonExitStatus": {
+        "properties": {
+          "avail": {
+            "$ref": "#/components/schemas/GatesmExitView"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "avail",
+          "tag"
+        ],
+        "type": "object"
+      },
+      "DaemonHint": {
+        "properties": {
+          "fix": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fix",
+          "id",
+          "title"
+        ],
+        "type": "object"
+      },
+      "DaemonJob": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "finished": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "op": {
+            "type": "string"
+          },
+          "started": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "op",
+          "started",
+          "state"
+        ],
+        "type": "object"
+      },
+      "DaemonMainProxyRequest": {
+        "properties": {
+          "confirm": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DaemonMainProxyResult": {
+        "properties": {
+          "baseline": {
+            "$ref": "#/components/schemas/DaemonBaselineSummary"
+          },
+          "note": {
+            "type": "string"
+          },
+          "region": {
+            "$ref": "#/components/schemas/RegionTarget"
+          },
+          "synced": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "baseline",
+          "synced"
+        ],
+        "type": "object"
+      },
+      "DaemonRegionChange": {
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "type": "object"
+      },
+      "DaemonRegionRequest": {
+        "properties": {
+          "confirm": {
+            "type": "string"
+          },
+          "lang": {
+            "type": "string"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "DaemonRegionStatus": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "notice": {
+            "type": "string"
+          },
+          "pending": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "target": {
+            "$ref": "#/components/schemas/RegionTarget"
+          }
+        },
+        "type": "object"
+      },
+      "DaemonRulesSummary": {
+        "properties": {
+          "block": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "block_udp_443": {
+            "type": "boolean"
+          },
+          "default": {
+            "type": "string"
+          },
+          "direct": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "local_domains": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "offline_allow": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "pinned_extra": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "proxy": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "block",
+          "block_udp_443",
+          "default",
+          "direct",
+          "local_domains",
+          "offline_allow",
+          "pinned_extra",
+          "proxy"
+        ],
+        "type": "object"
+      },
+      "DaemonStatus": {
+        "properties": {
+          "corrupt": {
+            "type": "boolean"
+          },
+          "direct": {
+            "$ref": "#/components/schemas/DaemonDirectStatus"
+          },
+          "envcheck": {
+            "$ref": "#/components/schemas/EnvcheckReport"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonEventRecord"
+            },
+            "type": "array"
+          },
+          "exits": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonExitStatus"
+            },
+            "type": "array"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/GatesmStatus"
+          },
+          "gate_open": {
+            "type": "boolean"
+          },
+          "hints": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonHint"
+            },
+            "type": "array"
+          },
+          "opens": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DaemonExitCounts"
+            },
+            "type": "object"
+          },
+          "protected": {
+            "type": "boolean"
+          },
+          "region": {
+            "$ref": "#/components/schemas/DaemonRegionStatus"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/DaemonRulesSummary"
+          },
+          "security": {
+            "$ref": "#/components/schemas/ApiSecurity"
+          },
+          "stack": {
+            "$ref": "#/components/schemas/StackProxyStats"
+          },
+          "state": {
+            "type": "string"
+          },
+          "utun": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "gate",
+          "gate_open",
+          "protected",
+          "state"
+        ],
+        "type": "object"
+      },
+      "DaemonStreamEvent": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "dropped": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "time": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "seq",
+          "source",
+          "time"
+        ],
+        "type": "object"
+      },
+      "DaemonUninstallSkeleton": {
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "EnvcheckItemResult": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "fix": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "level",
+          "name",
+          "result"
+        ],
+        "type": "object"
+      },
+      "EnvcheckReport": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "hard": {
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EnvcheckItemResult"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "at",
+          "hard"
+        ],
+        "type": "object"
+      },
+      "GatesmExitView": {
+        "properties": {
+          "agent_up": {
+            "type": "boolean"
+          },
+          "check": {
+            "type": "string"
+          },
+          "checked_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "dev": {
+            "type": "boolean"
+          },
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "pushed": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "udp": {
+            "type": "string"
+          },
+          "up": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "agent_up",
+          "pushed",
+          "up"
+        ],
+        "type": "object"
+      },
+      "GatesmStatus": {
+        "properties": {
+          "lease_left_ms": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "open": {
+            "type": "boolean"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "lease_left_ms",
+          "open"
+        ],
+        "type": "object"
+      },
+      "RegionTarget": {
+        "properties": {
+          "country": {
+            "type": "string"
+          },
+          "lang": {
+            "type": "string"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "lang",
+          "locale",
+          "source",
+          "timezone"
+        ],
+        "type": "object"
+      },
+      "StackProxyStats": {
+        "properties": {
+          "bad_dst": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "dial_failed": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "direct_dropped": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "direct_fail": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "direct_ok": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "dns_tcp_rejected": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "dns_udp_dropped": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "dropped": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "exit_down": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "gate_closed": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "no_mapping": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "open_failed_other": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "probe_proxied": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "probe_refused": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "reasons": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "rechecked_dropped": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "sniff": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "object"
+          },
+          "tcp_proxied": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "udp_pending_dropped": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "udp_proxied": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "udp_unsupported": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "unknown_exit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "zero_eof": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bad_dst",
+          "dial_failed",
+          "direct_dropped",
+          "direct_ok",
+          "dns_tcp_rejected",
+          "dns_udp_dropped",
+          "dropped",
+          "exit_down",
+          "gate_closed",
+          "no_mapping",
+          "open_failed_other",
+          "probe_proxied",
+          "probe_refused",
+          "rechecked_dropped",
+          "tcp_proxied",
+          "udp_pending_dropped",
+          "udp_proxied",
+          "udp_unsupported",
+          "unknown_exit",
+          "zero_eof"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "abroadd 本地接口",
+    "version": "1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/actions/restore": {
+      "post": {
+        "description": "回国的别名",
+        "operationId": "restore-alias",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonConfirmRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonStatus"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "sensitive"
+      }
+    },
+    "/v1/actions/uninstall": {
+      "post": {
+        "description": "卸载（骨架，回 501；真正的卸载随 M6 的安装包）",
+        "operationId": "uninstall",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonConfirmRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonUninstallSkeleton"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "sensitive"
+      }
+    },
+    "/v1/baseline": {
+      "post": {
+        "description": "已过时：应用主代理的别名，保留到 M6",
+        "operationId": "baseline",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonMainProxyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonMainProxyResult"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "sensitive"
+      }
+    },
+    "/v1/disable": {
+      "post": {
+        "description": "停用",
+        "operationId": "disable",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonStatus"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-async": true,
+        "x-level": "normal"
+      }
+    },
+    "/v1/enable": {
+      "post": {
+        "description": "启用；地区会变时两步确认，签名校验推迟期间按敏感处理",
+        "operationId": "enable",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonConfirmRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonStatus"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-async": true,
+        "x-level": "per_call"
+      }
+    },
+    "/v1/envcheck": {
+      "get": {
+        "description": "",
+        "operationId": "envcheck-get",
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      }
+    },
+    "/v1/envcheck/run": {
+      "post": {
+        "description": "",
+        "operationId": "envcheck-run",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvcheckReport"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "normal"
+      }
+    },
+    "/v1/envcheck/settings": {
+      "get": {
+        "description": "",
+        "operationId": "envcheck-settings-get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonEnvSettingsRequest"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      },
+      "put": {
+        "description": "",
+        "operationId": "envcheck-settings-put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonEnvSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonEnvSettingsRequest"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "normal"
+      }
+    },
+    "/v1/events": {
+      "get": {
+        "description": "事件推送（Server-Sent Events）",
+        "operationId": "events",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonStreamEvent"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      }
+    },
+    "/v1/exits": {
+      "get": {
+        "description": "分流出口摘要（不含配置原文和密钥）",
+        "operationId": "exits-list",
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      }
+    },
+    "/v1/exits/{tag}": {
+      "delete": {
+        "description": "",
+        "operationId": "exit-delete",
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "sensitive"
+      },
+      "get": {
+        "description": "",
+        "operationId": "exit-get",
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      },
+      "put": {
+        "description": "增加或替换分流出口",
+        "operationId": "exit-put",
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "sensitive"
+      }
+    },
+    "/v1/jobs/{id}": {
+      "get": {
+        "description": "任务的状态和结果（只在内存里，保留最近 16 个）",
+        "operationId": "job-get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonJob"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      }
+    },
+    "/v1/main-proxy/apply": {
+      "post": {
+        "description": "应用主代理",
+        "operationId": "main-proxy-apply",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonMainProxyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonMainProxyResult"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "sensitive"
+      }
+    },
+    "/v1/region": {
+      "get": {
+        "description": "",
+        "operationId": "region-get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonRegionStatus"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      },
+      "put": {
+        "description": "切换地区；地区会变时两步确认，签名校验推迟期间按敏感处理",
+        "operationId": "region-put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonRegionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonStatus"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "per_call"
+      }
+    },
+    "/v1/restore": {
+      "post": {
+        "description": "回国：一律两步确认",
+        "operationId": "restore",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonConfirmRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonStatus"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "sensitive"
+      }
+    },
+    "/v1/rules": {
+      "get": {
+        "description": "",
+        "operationId": "rules-get",
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      },
+      "put": {
+        "description": "改规则；放松保护时是敏感（api.RulesLevel）",
+        "operationId": "rules-put",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonStatus"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "per_call"
+      }
+    },
+    "/v1/status": {
+      "get": {
+        "description": "状态机、闸门、出口、计数、地区、环境检测摘要；带 security",
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonStatus"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      }
+    }
+  }
+}

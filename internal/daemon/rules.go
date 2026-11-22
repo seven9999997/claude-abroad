@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"claude-abroad/internal/api"
 	"errors"
 	"io"
 	"io/fs"
@@ -8,6 +9,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"claude-abroad/internal/rules"
 	"claude-abroad/internal/state"
@@ -188,6 +190,10 @@ func (d *Daemon) handlePutRules(w http.ResponseWriter, r *http.Request) {
 	next, err := rules.Parse(body)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, errBody{err.Error()})
+		return
+	}
+	// 按内容分级（m5-plan v2.1 决定 3）：放松保护的改动是敏感。
+	if lv, why := api.RulesLevel(d.currentRules(), next); lv == api.Sensitive && !requireSensitive(w, r, strings.Join(why, "；")) {
 		return
 	}
 	if err := d.m.Exclusive(func() error {

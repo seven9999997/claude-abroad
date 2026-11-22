@@ -19,3 +19,8 @@ func CheckPrivateDir(string, int) error { return platform.Unsupported("检查目
 func ListenPrivateUnix(string, int) (net.Listener, error) {
 	return nil, platform.Unsupported("监听私有的本地 socket")
 }
+
+// ListenSharedUnix 在 Windows 上没有（本地接口在 Windows 上用命名管道，W 系列另做）。
+func ListenSharedUnix(path string, uid int) (net.Listener, error) {
+	return nil, platform.Unsupported("unix socket 的共享监听")
+}

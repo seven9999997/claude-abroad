@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"claude-abroad/internal/api"
+	"claude-abroad/internal/console"
 	"claude-abroad/internal/envcheck"
 	"claude-abroad/internal/gatesm"
 	"claude-abroad/internal/vmhost"
@@ -15,7 +17,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,9 +54,15 @@ type Options struct {
 	Log               *log.Logger                      // 可为 nil
 	PeerUID           func(*net.UnixConn) (int, error) // 取对端 uid（nil 用系统调用；测试注入）
 	OnReject          func()                           // 对端 uid 不对、连接被断开时调用（测试用）
-	Clock             gatesm.Clock                     // 闸门和复查的时钟（nil 用真实时钟）
-	RecheckInterval   time.Duration                    // 出口复查的间隔（0 用默认 60 秒）
-	EnvInterval       time.Duration                    // 环境检测的间隔（0 用默认 10 分钟）
+	ConsoleUID        func() (int, error)              // 取当前控制台用户（nil 用 console.UID；测试注入）
+	MaxConns          int                              // 同时连接数上限（0 用 DefaultMaxConns）
+	ReadHeaderTimeout time.Duration                    // 每个连接读请求头的时限（0 用 10 秒；只连不发的连接到时被关）
+	// SocketDir 是真实模式本地接口 socket 的目录（m5-plan v2.1、design 11.1 v0.22）：给了就在这里按“目录属主本人、
+	// 组和其他人不能写，socket 0666”监听，级别只按对端 uid 判；空时沿用状态目录里的私有 socket（目录 0700、socket 0600）。
+	SocketDir       string
+	Clock           gatesm.Clock  // 闸门和复查的时钟（nil 用真实时钟）
+	RecheckInterval time.Duration // 出口复查的间隔（0 用默认 60 秒）
+	EnvInterval     time.Duration // 环境检测的间隔（0 用默认 10 分钟）
 	// DevExits 是开发用的多出口（M3 的 /v1/dev-exits 建的，指向本机应答的开发上游）：沿用“除非开流明确失败，
 	// 否则可用”，规则也可以引用它们。只有开发工具（daemon-sim、测试）在构造时给；没有任何接口能打这个标记
 	// （m4-plan v2.12 决定 4）。
@@ -87,6 +94,7 @@ type Daemon struct {
 	envDone      chan struct{}
 	realIP       *envcheck.RealIP // 本机真实公网 IP（只在内存，M4-6b）
 
+	jobs    jobs // 任务（M5-2）
 	srv     *http.Server
 	ln      net.Listener
 	supStop context.CancelFunc
@@ -148,7 +156,7 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 		case <-time.After(retry):
 		}
 	}
-	sock := filepath.Join(o.StateDir, SocketName)
+	sock := d.SocketPath()
 	if info, err := os.Lstat(sock); err == nil {
 		if info.Mode()&fs.ModeSymlink != 0 || !(info.Mode()&fs.ModeSocket != 0) {
 			d.release()
@@ -243,7 +251,11 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 
 	// 状态目录必须是属主本人、0700（store 建目录时已保证，这里在监听前再查一次）；先用临时名字监听、改成 0600 再改名，
 	// 没有权限更宽的窗口（architect 判 W-2a 时指出）。
-	ln, err := vmhost.ListenPrivateUnix(sock, d.store.UID)
+	listen := vmhost.ListenPrivateUnix
+	if o.SocketDir != "" {
+		listen = vmhost.ListenSharedUnix
+	}
+	ln, err := listen(sock, d.store.UID)
 	if err != nil {
 		d.stopInternals(false)
 		return nil, err
@@ -252,8 +264,20 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	if peer == nil {
 		peer = peerUID
 	}
-	d.ln = &peerListener{Listener: ln, uid: d.store.UID, peer: peer, onReject: o.OnReject}
-	d.srv = &http.Server{Handler: d.handler(), ReadHeaderTimeout: 10 * time.Second}
+	cons := o.ConsoleUID
+	if cons == nil {
+		cons = console.UID
+	}
+	maxc := o.MaxConns
+	if maxc <= 0 {
+		maxc = DefaultMaxConns
+	}
+	rht := o.ReadHeaderTimeout
+	if rht <= 0 {
+		rht = 10 * time.Second
+	}
+	d.ln = &peerListener{Listener: ln, uid: d.store.UID, peer: peer, console: cons, onReject: o.OnReject, max: int64(maxc)}
+	d.srv = &http.Server{Handler: d.handler(), ReadHeaderTimeout: rht, ConnContext: connContext}
 	go func() { _ = d.srv.Serve(d.ln) }()
 	o.logf("abroadd 已启动，本地接口 %s", sock)
 	return d, nil
@@ -310,34 +334,6 @@ func (d *Daemon) abandon() {
 	})
 }
 
-// peerListener 只接受对端 uid 等于属主的连接，其余直接断开（不交给 HTTP）。
-type peerListener struct {
-	net.Listener
-	uid      int
-	peer     func(*net.UnixConn) (int, error)
-	onReject func()
-}
-
-func (l *peerListener) Accept() (net.Conn, error) {
-	for {
-		c, err := l.Listener.Accept()
-		if err != nil {
-			return nil, err
-		}
-		uc, ok := c.(*net.UnixConn)
-		if ok {
-			if id, err := l.peer(uc); err == nil && id == l.uid {
-				return c, nil
-			}
-		}
-		// 先记拒绝再关：对端看到连接被关时，计数已经加上（测试据此断言，不会读到旧值）。
-		if l.onReject != nil {
-			l.onReject()
-		}
-		c.Close()
-	}
-}
-
 // ---- 本地接口 ----
 
 // Status 是 GET /v1/status 的内容。不含出口 IP、节点地址、token。
@@ -363,6 +359,8 @@ type Status struct {
 	Region *regionStatus `json:"region,omitempty"`
 	// M4-6a：最近一轮环境检测（每项的结果、说明、修复办法；不含地址）。
 	Env *envcheck.Report `json:"envcheck,omitempty"`
+	// M5-2：只在 GET /v1/status 里给（调用方签名校验未启用的说明、这次调用方的身份）；别的接口返回的状态不带它。
+	Security *api.Security `json:"security,omitempty"`
 }
 
 // Status 返回当前状态。
@@ -438,46 +436,13 @@ func (d *Daemon) exec(w http.ResponseWriter, r *http.Request, fn func(ctx contex
 	return nil
 }
 
-func (d *Daemon) handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/enable", d.handleEnable) // 地区会变时两步（m4-plan v2 必须改 2）
-	mux.Handle("POST /v1/disable", d.op(func(ctx context.Context) error { return d.m.Disable(ctx, false) }, false))
-	mux.HandleFunc("POST /v1/restore", d.handleRestore) // 两步（m4-plan v2.3 决定 5）
-	mux.HandleFunc("GET /v1/exits", d.handleExitsList)  // 分流出口（M4-8）
-	mux.HandleFunc("GET /v1/exits/{tag}", d.handleExitGet)
-	mux.HandleFunc("PUT /v1/exits/{tag}", d.handleExitPut)
-	mux.HandleFunc("DELETE /v1/exits/{tag}", d.handleExitDelete)
-	mux.HandleFunc("GET /v1/rules", d.handleGetRules)
-	mux.HandleFunc("PUT /v1/rules", d.handlePutRules)
-	mux.HandleFunc("POST /v1/main-proxy/apply", d.handleApplyMainProxy) // 应用主代理（m4-plan v2.4 决定 4）
-	mux.HandleFunc("POST /v1/baseline", d.handleApplyMainProxy)         // 别名（M4-3 的建立基准）
-	mux.HandleFunc("PUT /v1/region", d.handleSwitchRegion)              // 切换地区（决定 5）
-	mux.HandleFunc("GET /v1/envcheck", d.handleEnvGet)                  // 环境检测（M4-6a）
-	mux.HandleFunc("POST /v1/envcheck/run", d.handleEnvRun)
-	mux.HandleFunc("PUT /v1/envcheck/settings", d.handleEnvSettings)
-	mux.HandleFunc("GET /v1/status", func(w http.ResponseWriter, r *http.Request) {
-		if _, err := io.ReadAll(r.Body); err != nil {
-			writeJSON(w, http.StatusRequestEntityTooLarge, errBody{"请求体超过 64 KiB"})
-			return
-		}
-		writeJSON(w, http.StatusOK, d.Status())
-	})
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		limit := int64(MaxBody)
-		if r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/v1/exits/") {
-			limit = MaxExitBody // 出口的配置（订阅最大 1 MiB）
-		}
-		if r.ContentLength > limit {
-			writeJSON(w, http.StatusRequestEntityTooLarge, errBody{"请求体太大"})
-			return
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, limit)
-		mux.ServeHTTP(w, r)
-	})
-}
-
 // SocketPath 是本地接口的 socket 路径。
-func (d *Daemon) SocketPath() string { return filepath.Join(d.opts.StateDir, SocketName) }
+func (d *Daemon) SocketPath() string {
+	if d.opts.SocketDir != "" {
+		return filepath.Join(d.opts.SocketDir, SocketName)
+	}
+	return filepath.Join(d.opts.StateDir, SocketName)
+}
 
 // String 便于日志。
 func (d *Daemon) String() string { return fmt.Sprintf("abroadd(%s)", d.opts.StateDir) }

@@ -206,6 +206,11 @@ func (d *Daemon) confirmGate(w http.ResponseWriter, r *http.Request, op string, 
 	if ch == nil {
 		return true, noop
 	}
+	// 签名校验推迟期间的临时加严（m5-plan v2、v2.1 决定 2）：本次调用需要两步确认（地区会变、要结束 Claude）就按敏感处理，
+	// 用的是同一个判断（ch != nil）。不够格时在签发确认码之前拒绝。
+	if !requireSensitive(w, r, "地区会变：要结束 Claude 进程并改 Mac 的时区和语言") {
+		return false, noop
+	}
 	digest := targetDigest(op, t)
 	if strings.TrimSpace(code) == "" {
 		pv, err := d.preview(r.Context())
@@ -259,6 +264,10 @@ func (d *Daemon) fileState() state.State {
 
 // handleEnable 是启用（m4-plan v2 必须改 2）：地区会变时两步确认，不会变时一步。
 func (d *Daemon) handleEnable(w http.ResponseWriter, r *http.Request) {
+	async, aok := wantAsync(w, r)
+	if !aok {
+		return
+	}
 	var req ConfirmRequest
 	if !readConfirmBody(w, r, &req) {
 		return
@@ -279,13 +288,11 @@ func (d *Daemon) handleEnable(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if err := d.exec(w, r, d.m.Enable, false); errors.Is(err, state.ErrBusy) {
-				giveBack()
-			}
+			d.run(w, r, "enable", async, d.m.Enable, giveBack)
 			return
 		}
 	}
-	_ = d.exec(w, r, d.m.Enable, false)
+	d.run(w, r, "enable", async, d.m.Enable, nil)
 }
 
 // MainProxyRequest 是应用主代理的请求体。

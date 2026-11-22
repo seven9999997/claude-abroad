@@ -5,6 +5,7 @@ import APITypes
 import Foundation
 import UDSHTTP
 
+setvbuf(stdout, nil, _IOLBF, 0) // 重定向到文件时也逐行写出
 let args = CommandLine.arguments
 guard args.count == 3 else {
     FileHandle.standardError.write(Data("用法：UDSClient status|events <socket>\n".utf8))
@@ -30,8 +31,8 @@ case "events":
     }, onBody: { chunk in
         for ev in s.parser.feed(chunk) {
             s.n += 1
-            if let d = ev.data.data(using: .utf8), let pe = try? JSONDecoder().decode(ProbeProbeEvent.self, from: d) {
-                print("事件 \(ev.id ?? "-") \(ev.event)：seq \(pe.seq) 状态 \(pe.state ?? "")")
+            if let d = ev.data.data(using: .utf8), let pe = try? JSONDecoder().decode(DaemonStreamEvent.self, from: d) {
+                print("事件 \(ev.id ?? "-") \(ev.event)：seq \(pe.seq) \(pe.source)/\(pe.kind)")
             } else {
                 print("事件 \(ev.id ?? "-") \(ev.event)：解不出数据"); s.failed = true
             }

@@ -1,0 +1,53 @@
+200
+{
+  "events": [
+    {
+      "kind": "enabled",
+      "source": "patrol",
+      "time": "\u003c变化\u003e"
+    },
+    {
+      "kind": "reloaded",
+      "source": "patrol",
+      "time": "\u003c变化\u003e"
+    },
+    {
+      "kind": "reloaded",
+      "source": "patrol",
+      "time": "\u003c变化\u003e"
+    },
+    {
+      "kind": "gate_opened",
+      "source": "gate",
+      "time": "\u003c变化\u003e"
+    },
+    {
+      "detail": "state：停用",
+      "kind": "gate_closed",
+      "source": "gate",
+      "time": "\u003c变化\u003e"
+    }
+  ],
+  "gate": {
+    "lease_left_ms": "\u003c变化\u003e",
+    "open": false,
+    "reasons": [
+      "state"
+    ]
+  },
+  "gate_open": false,
+  "hints": [],
+  "protected": false,
+  "region": {},
+  "rules": {
+    "block": 1,
+    "block_udp_443": false,
+    "default": "proxy:main",
+    "direct": 0,
+    "local_domains": 0,
+    "offline_allow": 0,
+    "pinned_extra": 0,
+    "proxy": 0
+  },
+  "state": "RESTORED"
+}

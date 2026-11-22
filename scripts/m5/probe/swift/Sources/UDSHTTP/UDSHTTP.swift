@@ -156,6 +156,14 @@ public final class UnixHTTPClient: @unchecked Sendable {
                        onBody: @escaping @Sendable (Data) -> Void,
                        done: @escaping @Sendable (Error?) -> Void) {
         let conn = NWConnection(to: .unix(path: self.path), using: .tcp)
+        // done 只回调一次：连接取消之后 NWConnection 还可能再报一次失败（实测会再来一个 ENETDOWN）。
+        final class Once: @unchecked Sendable { var fired = false }
+        let once = Once()
+        let done: @Sendable (Error?) -> Void = { err in
+            if once.fired { return }
+            once.fired = true
+            done(err)
+        }
         var parser = HTTPParser()
         var headSent = false
         func receive() {
