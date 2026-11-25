@@ -34,6 +34,8 @@ struct MenuContent: View {
             .disabled(!model.menu.disable)
         Button(L10n.restore) { Task { await model.restore(); showIfNeeded() } }
             .disabled(!model.menu.restore)
+        Button(L10n.openClaudeButton) { Task { await model.openClaude() } }
+            .disabled(!model.canOpenClaude)
         Divider()
         Button(L10n.openWindow) { openMain() }
         Button(L10n.quit) { NSApplication.shared.terminate(nil) }

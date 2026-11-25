@@ -148,18 +148,20 @@ func lookupUser(name string) (string, string, error) {
 // claudeService 选结束 Claude 的实现（m4-plan v2.3 决定 6）：
 //   - 不带 --dev-skip-claude-kill：真实的信号发送器（要 root；这里是整个仓库唯一构造它的地方，源码检查）；
 //   - 带：不结束任何进程的实现，预览照常如实列出，每次结束时打醒目日志（参数保留到 M6 的发布检查）。
-func claudeService(skip bool, logger *log.Logger) (*claudeproc.Service, error) {
+//
+// 同一个信号发送器也给启动管控的第三层（M6-4b）；带 --dev-skip-claude-kill 时第三层不接（不结束任何进程）。
+func claudeService(skip bool, logger *log.Logger) (*claudeproc.Service, *claudeproc.LaunchGuard, error) {
 	logf := func(format string, a ...any) { logger.Printf(format, a...) }
 	if skip {
 		svc := claudeproc.NewSystemService(nil, logf)
 		_ = svc.KillClaude(context.Background()) // 启动时打一条醒目日志
-		return svc, nil
+		return svc, nil, nil
 	}
 	sig, err := claudeproc.NewRealSignaler()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return claudeproc.NewSystemService(sig, logf), nil
+	return claudeproc.NewSystemService(sig, logf), claudeproc.NewSystemLaunchGuard(sig), nil
 }
 
 // regionVM 选地区同步的虚拟机一侧：带 --dev-skip-region 时返回 nil，地区同步的依赖都不接（启用、应用主代理都不读
@@ -187,7 +189,7 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		f.stateDir = DefaultRealStateDir
 	}
 	logger := log.New(&redact.Writer{W: stderr}, "abroadd ", log.LstdFlags)
-	claude, err := claudeService(f.skipKill, logger)
+	claude, launchGuard, err := claudeService(f.skipKill, logger)
 	if err != nil {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)
 		return 1
@@ -246,6 +248,8 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		ResolverLock: resolverLock(f),
 		// 第四层（M6-3b）：Claude Code 的托管设置（状态和冲突检查读它）。
 		ClaudeSettings: claudeSettings(f),
+		// 启动管控的第三层（M6-4b）：不允许启动时每 200 毫秒扫描、结束确认过的 Claude 进程。
+		LaunchGuard: launchGuard,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)

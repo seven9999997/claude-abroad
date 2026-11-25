@@ -310,7 +310,8 @@ let envJSON = "{\"at\":\"2026-11-22T00:00:00Z\",\"hard\":\"fail\",\"items\":[{\"
     let s = SettingsModel(client: APIClient(transport: t))
     await s.load()
     #expect(s.signatureText == L10n.signatureDisabled + "：签名校验推迟期间")
-    #expect(s.launchControlText == L10n.laterVersion && s.uninstallText == L10n.uninstallInInstaller && s.diagnosticsText == L10n.diagnosticsNone)
+    // M6-4b 起启动管控显示后台给的状态（这个假后台没有 /v1/launchguard：如实说没报告）
+    #expect(s.launchControlText == L10n.launchGuardUnknown && s.uninstallText == L10n.uninstallInInstaller && s.diagnosticsText == L10n.diagnosticsNone)
     #expect(s.cliUsage == L10n.cliUsage)
     #expect(s.env.warnRows.count == 2)
     // 进程清单（只读预览）

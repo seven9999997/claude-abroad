@@ -98,6 +98,8 @@ extension APIClient {
 
     // 引擎与虚拟机
     public func engines() async -> Outcome<DaemonEnginesView> { await get("/v1/engines") }
+    /// 启动管控（M6-4b）：现在是否允许启动 Claude、四层、覆盖范围、最近的拦截。
+    public func launchGuard() async -> Outcome<DaemonLaunchGuardView> { await get("/v1/launchguard") }
 }
 
 extension Outcome {

@@ -125,6 +125,8 @@ public final class StatusModel: ObservableObject {
     public let flow: ConfirmFlow
     /// 通知（触发来源只有事件流和操作的结果）。
     public let notifier: Notifier
+    /// 环境检测超过这么久（秒）就先补跑一轮再打开（设计 10.2）。
+    public static let openRecheckAfter: TimeInterval = 600
     /// 刚连上或重连后的第一次状态只建立基线、不通知。
     private var baselinePending = true
 
@@ -136,6 +138,42 @@ public final class StatusModel: ObservableObject {
         self.flow = flow ?? ConfirmFlow(client: client)
         self.notifier = notifier ?? Notifier()
     }
+
+    /// “打开 Claude”按钮可用：已启用、闸门开着、最近一次环境检测的硬性项全部通过（设计 10.2：从不自动打开，只由用户点）。
+    public var canOpenClaude: Bool {
+        guard reachable, let st = status, st.state == "ENABLED", st.gateOpen, st.envcheck?.hard == "pass" else { return false }
+        return true
+    }
+
+    /// 按钮不可用时的原因（置灰时显示）。
+    public var openClaudeHint: String? {
+        guard !canOpenClaude else { return nil }
+        guard reachable, let st = status else { return L10n.backendDown }
+        if st.state != "ENABLED" { return L10n.openClaudeNotEnabled }
+        if st.envcheck?.hard != "pass" { return L10n.openClaudeEnvNotPassed }
+        return L10n.openClaudeGateClosed
+    }
+
+    /// 用户点了“打开 Claude”：最近一次环境检测超过 10 分钟就先补跑一轮，通过了才打开。
+    public func openClaude(now: Date = Date()) async {
+        guard canOpenClaude else { return }
+        if let at = status?.envcheck?.at, let t = ISO8601DateFormatter().date(from: at) ?? Self.fracISO.date(from: at),
+           now.timeIntervalSince(t) > Self.openRecheckAfter {
+            _ = await client.runEnvcheck()
+            _ = await refresh()
+            guard canOpenClaude else {
+                notice = Notice(kind: .error, text: ErrorText(raw: L10n.openClaudeEnvNotPassed))
+                return
+            }
+        }
+        notifier.opener.openClaude() // 和通知上的按钮同一个打开实现（应用里接系统的；测试用假的）
+    }
+
+    private static let fracISO: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
 
     /// 有确认框时，其他会触发确认的按钮不可用。
     public var menu: MenuAvailability { MenuAvailability.from(phase, reachable: reachable, busy: busy || daemonBusy || flow.isActive, stalled: stalledState) }

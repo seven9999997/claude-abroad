@@ -41,6 +41,8 @@ type System struct {
 	ResolverLock *resolverlock.Lock
 	// ClaudeSettings 是 Claude Code 的托管设置分片（M6-3b；nil 时不报告）。目录由组装方给出。
 	ClaudeSettings *claudecfg.Settings
+	// LaunchGuard 是启动管控的第三层（M6-4b；nil 时不扫描、不结束）。真实的信号发送只在 cmd/abroadd 构造。
+	LaunchGuard *claudeproc.LaunchGuard
 	// Data 是数据面（可为 nil：假系统没有数据面）。daemon 启动时绑定闸门和监护的 Kick，闸门由开变关时断开连接。
 	Data *DataPlane
 	// Env 是环境检测的依赖（M4-6a）：nil 时不做环境检测。

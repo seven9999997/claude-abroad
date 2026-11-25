@@ -1,6 +1,7 @@
 // 系统服务的实现（m5-plan v2.9 决定 3）：系统通知和“打开 Claude”。会话和测试里不用它们（测试用 AbroadKit 里的空实现和假实现）。
 // - 系统通知只有进程是打包的应用时才用（没有应用包的进程调用通知中心会直接崩溃）；
-// - 打开 Claude 只在用户点了通知上的按钮时调用（这里是打开应用的系统调用的唯一位置，源码检查固定）。
+// - 打开 Claude 只在用户点了按钮时调用：通知上的按钮，或首页、菜单的“打开 Claude”（M6-4b；条件由状态给出）。
+//   这里是打开应用的系统调用的唯一位置（源码检查固定）。
 import AbroadKit
 import AppKit
 import UserNotifications
@@ -17,7 +18,7 @@ enum SystemServices {
     }
 }
 
-/// 打开 Claude 桌面版（只在用户点了通知上的按钮时调用）。
+/// 打开 Claude 桌面版（只在用户点了按钮时调用）。
 struct WorkspaceClaudeOpener: ClaudeOpener {
     static let bundleID = "com.anthropic.claudefordesktop"
     func openClaude() {

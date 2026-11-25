@@ -89,6 +89,9 @@ struct HomeView: View {
         HStack {
             Button(L10n.enable) { Task { await model.enable() } }.disabled(!model.menu.enable)
             Button(L10n.disable) { Task { await model.disable() } }.disabled(!model.menu.disable)
+            Button(L10n.openClaudeButton) { Task { await model.openClaude() } }
+                .disabled(!model.canOpenClaude)
+                .help(model.openClaudeHint ?? "")
             Spacer()
             Button(L10n.restore) { Task { await model.restore() } }.disabled(!model.menu.restore)
         }

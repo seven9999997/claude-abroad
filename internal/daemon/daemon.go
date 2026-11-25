@@ -89,7 +89,11 @@ type Daemon struct {
 	vmStop func()
 	vmDone chan struct{}
 	// M6-3b：第四层的本机代理端口（Options.ClaudeProxyAddr 非空时）。
-	cproxy       *claudeProxy
+	cproxy *claudeProxy
+	// M6-4b：启动管控的第三层（Sys.LaunchGuard 非空时）。
+	gs           *guardState
+	lgStop       func()
+	lgDone       chan struct{}
 	resolverLast string // 上一次解析锁自检的摘要（变化时才记事件）
 	resolverMu   sync.Mutex
 	// 地区待还原重试循环跑完的轮数（startupSettled 用）。
@@ -294,6 +298,7 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	}()
 
 	d.startClaudeProxy() // 第四层的本机代理端口（M6-3b；没配置时什么都不做）
+	d.startLaunchGuard() // 启动管控的第三层（M6-4b；没配置时什么都不做）
 	if chk := preflightChecker(s.Preflight); chk != nil && d.cproxy != nil {
 		chk.ClaudeProxyDown = d.claudeProxyDown // 端口被占用：冲突检查的“必须处理”项
 	}
@@ -349,6 +354,10 @@ func (d *Daemon) stopInternals(closeGate bool) {
 	}
 	if closeGate {
 		d.gate.AddReason(gatesm.ReasonState, "abroadd 退出")
+	}
+	if d.lgStop != nil { // 启动管控的第三层
+		d.lgStop()
+		<-d.lgDone
 	}
 	d.cproxy.stop()      // 第四层的本机代理端口（没配置时为 nil，stop 什么都不做）
 	if d.vmStop != nil { // 由 abroadd 管理的虚拟机：关掉自己拉起的（先请它退出，超时强制结束）

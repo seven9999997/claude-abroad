@@ -373,6 +373,8 @@ public final class SettingsModel: PageModel {
     @Published public private(set) var resolverLock: ResolverlockStatus?
     /// 第四层（Claude Code 的托管设置和本机代理端口，M6-3b）的状态；后台没接时为 nil。
     @Published public private(set) var claudeCode: DaemonClaudeProxyStatus?
+    /// 启动管控（M6-4b）；后台没给时为 nil。
+    @Published public private(set) var launchGuard: DaemonLaunchGuardView?
     public let env: EnvModel
 
     public let preference: NotificationPreference
@@ -402,6 +404,7 @@ public final class SettingsModel: PageModel {
         case let other:
             previewError = other.errorText?.raw ?? L10n.loadFailed
         }
+        if case .ok(let lg) = await client.launchGuard() { launchGuard = lg }
         await env.load()
     }
 
@@ -418,7 +421,16 @@ public final class SettingsModel: PageModel {
     }
     public var cliPath: String { L10n.cliPath }
     public var cliUsage: String { L10n.cliUsage }
-    public var launchControlText: String { L10n.laterVersion }
+    /// 启动管控的文字：现在允许与否、四层各自是否生效、第三层的覆盖范围、最近拦截；总带“登录时打开”的提示。
+    public var launchControlText: String {
+        guard let g = launchGuard else { return L10n.launchGuardUnknown }
+        var lines = [g.allowed ? L10n.launchGuardAllowed : L10n.launchGuardBlocked]
+        for l in g.layers ?? [] { lines.append(L10n.launchGuardLayer(l.name, l.effective) + ((l.note ?? "").isEmpty ? "" : "（" + (l.note ?? "") + "）")) }
+        for c in g.coverage ?? [] { lines.append(L10n.launchGuardCoverage(c.name, c.reason)) }
+        if let r = g.recent, !r.isEmpty { lines.append(L10n.launchGuardRecent(r.count)) }
+        lines.append(L10n.loginItemHint)
+        return lines.joined(separator: "\n")
+    }
     /// 第一层（域名解析锁）的状态文字：生效、未写入、未生效（哪些域名什么问题）、有冲突。
     public var resolverLockText: String {
         guard let l = resolverLock else { return L10n.resolverLockUnknown }

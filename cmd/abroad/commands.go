@@ -54,6 +54,7 @@ var commands = []command{
 	{path: []string{"region", "set"}, route: "region-put", run: cmdRegionSet},
 	{path: []string{"region", "auto"}, route: "region-put", run: cmdRegionAuto},
 	{path: []string{"engine", "ls"}, route: "engines", run: cmdEngineLs},
+	{path: []string{"launchguard"}, route: "launchguard", run: cmdLaunchGuard},
 	{path: []string{"engine", "install"}, later: "引擎的安装和升级随更新机制提供"},
 	{path: []string{"engine", "rollback"}, later: "引擎的回滚随更新机制提供"},
 }
@@ -929,6 +930,55 @@ func regionPut(a *app, body map[string]any) int {
 }
 
 // ---- 引擎 ----
+
+// cmdLaunchGuard 显示启动管控（M6-4b）：现在是否允许启动 Claude、四层各自是否生效、第三层的覆盖范围、最近拦截。
+func cmdLaunchGuard(a *app, args []string) int {
+	resp, code := a.call("GET", "/v1/launchguard", nil)
+	if code != ExitOK {
+		return code
+	}
+	return a.out(resp, func() {
+		var v struct {
+			Allowed bool `json:"allowed"`
+			Layers  []struct {
+				Layer     int
+				Name      string
+				Effective bool
+				Note      string
+			} `json:"layers"`
+			Coverage []struct {
+				Name    string
+				Covered bool
+				Reason  string
+			} `json:"coverage"`
+			Recent []struct{} `json:"recent"`
+		}
+		_ = json.Unmarshal(resp.Body, &v)
+		if v.Allowed {
+			fmt.Fprintln(a.stdout, "现在允许启动 Claude")
+		} else {
+			fmt.Fprintln(a.stdout, "现在不允许启动 Claude：打开后会被马上结束")
+		}
+		for _, l := range v.Layers {
+			st := "未生效"
+			if l.Effective {
+				st = "生效"
+			}
+			note := ""
+			if l.Note != "" {
+				note = "（" + l.Note + "）"
+			}
+			fmt.Fprintf(a.stdout, "  第%d层 %s：%s%s\n", l.Layer, l.Name, st, note)
+		}
+		fmt.Fprintln(a.stdout, "第三层的覆盖范围：")
+		for _, c := range v.Coverage {
+			fmt.Fprintf(a.stdout, "  %s：%s\n", c.Name, c.Reason)
+		}
+		if len(v.Recent) > 0 {
+			fmt.Fprintf(a.stdout, "最近拦下 %d 次\n", len(v.Recent))
+		}
+	})
+}
 
 func cmdEngineLs(a *app, args []string) int {
 	resp, code := a.call("GET", "/v1/engines", nil)

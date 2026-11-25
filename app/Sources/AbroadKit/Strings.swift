@@ -220,6 +220,18 @@ public enum L10n {
         }
     }
     // M6-3b：第四层（Claude Code 的托管设置和本机代理端口）
+    // M6-4b：打开 Claude、启动管控
+    public static let openClaudeButton = "打开 Claude"
+    public static let openClaudeNotEnabled = "已启用之后才能打开 Claude"
+    public static let openClaudeEnvNotPassed = "环境检测的硬性项还没有全部通过"
+    public static let openClaudeGateClosed = "现在代理流量关着（出口检查或接管有问题）"
+    public static let launchGuardUnknown = "后台没有报告启动管控的状态"
+    public static let launchGuardAllowed = "现在允许启动 Claude"
+    public static let launchGuardBlocked = "现在不允许启动 Claude：打开后会被马上结束"
+    public static func launchGuardLayer(_ name: String, _ on: Bool) -> String { name + "：" + (on ? "生效" : "未生效") }
+    public static func launchGuardCoverage(_ name: String, _ reason: String) -> String { "· " + name + "：" + reason }
+    public static func launchGuardRecent(_ n: Int) -> String { "最近拦下 \(n) 次" }
+    public static let loginItemHint = "如果 Claude 设了“登录时打开”，请在 Claude 的设置里关掉：开机时它会比 Claude 出国先起来，会被拦下"
     public static let claudeCodeTitle = "第四层：Claude Code 的本机代理"
     public static let claudeCodeUnknown = "后台没有报告第四层的状态"
     public static let claudeCodeNotWritten = "托管设置还没有写入（首次准备时写入）"

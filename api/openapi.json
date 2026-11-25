@@ -102,6 +102,54 @@
         ],
         "type": "object"
       },
+      "ClaudeprocCoverageRow": {
+        "properties": {
+          "covered": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "covered",
+          "kind",
+          "name",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "ClaudeprocGuardRecord": {
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pid": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "time": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "pid",
+          "time"
+        ],
+        "type": "object"
+      },
       "ClaudeprocPreview": {
         "properties": {
           "notice": {
@@ -532,6 +580,64 @@
         },
         "required": [
           "node"
+        ],
+        "type": "object"
+      },
+      "DaemonLaunchGuardLayer": {
+        "properties": {
+          "effective": {
+            "type": "boolean"
+          },
+          "layer": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "effective",
+          "layer",
+          "name"
+        ],
+        "type": "object"
+      },
+      "DaemonLaunchGuardView": {
+        "properties": {
+          "allowed": {
+            "type": "boolean"
+          },
+          "cover_all": {
+            "type": "boolean"
+          },
+          "coverage": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudeprocCoverageRow"
+            },
+            "type": "array"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonLaunchGuardLayer"
+            },
+            "type": "array"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudeprocGuardRecord"
+            },
+            "type": "array"
+          },
+          "since": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "allowed"
         ],
         "type": "object"
       },
@@ -1935,6 +2041,35 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DaemonJob"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      }
+    },
+    "/v1/launchguard": {
+      "get": {
+        "description": "启动管控：现在是否允许启动 Claude、四层各自是否生效、第三层的覆盖范围、最近的拦截（不含命令行和路径）",
+        "operationId": "launchguard",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonLaunchGuardView"
                 }
               }
             },

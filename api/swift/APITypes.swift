@@ -91,6 +91,32 @@ public struct ClaudecfgStatus: Codable, Sendable {
     }
 }
 
+public struct ClaudeprocCoverageRow: Codable, Sendable {
+    public var kind: String
+    public var name: String
+    public var covered: Bool
+    public var reason: String
+    enum CodingKeys: String, CodingKey {
+        case kind = "kind"
+        case name = "name"
+        case covered = "covered"
+        case reason = "reason"
+    }
+}
+
+public struct ClaudeprocGuardRecord: Codable, Sendable {
+    public var time: String
+    public var pid: Int64
+    public var kind: String
+    public var name: String
+    enum CodingKeys: String, CodingKey {
+        case time = "time"
+        case pid = "pid"
+        case kind = "kind"
+        case name = "name"
+    }
+}
+
 public struct ClaudeprocPreview: Codable, Sendable {
     public var processes: [ClaudeprocTarget]?
     public var unverified: [ClaudeprocTarget]?
@@ -336,6 +362,36 @@ public struct DaemonLANConfirmRequest: Codable, Sendable {
     public var node: String
     enum CodingKeys: String, CodingKey {
         case node = "node"
+    }
+}
+
+public struct DaemonLaunchGuardLayer: Codable, Sendable {
+    public var layer: Int64
+    public var name: String
+    public var effective: Bool
+    public var note: String?
+    enum CodingKeys: String, CodingKey {
+        case layer = "layer"
+        case name = "name"
+        case effective = "effective"
+        case note = "note"
+    }
+}
+
+public struct DaemonLaunchGuardView: Codable, Sendable {
+    public var allowed: Bool
+    public var since: String?
+    public var coverAll: Bool?
+    public var layers: [DaemonLaunchGuardLayer]?
+    public var coverage: [ClaudeprocCoverageRow]?
+    public var recent: [ClaudeprocGuardRecord]?
+    enum CodingKeys: String, CodingKey {
+        case allowed = "allowed"
+        case since = "since"
+        case coverAll = "cover_all"
+        case layers = "layers"
+        case coverage = "coverage"
+        case recent = "recent"
     }
 }
 
