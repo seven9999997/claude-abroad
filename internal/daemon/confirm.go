@@ -120,6 +120,8 @@ type ClaudePreviewer interface {
 // ConfirmRequest 是需要确认的操作的请求体（可为空）。
 type ConfirmRequest struct {
 	Confirm string `json:"confirm,omitempty"`
+	// KillBrowsers：回国时同时结束确认过的浏览器（用户显式选择，M6-4b-3；只对 /v1/restore 有意义）。
+	KillBrowsers bool `json:"kill_browsers,omitempty"`
 }
 
 // ConfirmNeeded 是不带确认码时的 409 应答：预览和确认码。
@@ -181,6 +183,9 @@ func (d *Daemon) handleRestore(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, http.StatusForbidden, api.ErrorBody{Code: api.CodeConfirmInvalid, Error: usererror.New("恢复本机网络", "确认码无效、已过期或已经用过", "本机网络没有改动。请重新发起恢复，按新的预览确认。", err).Error()})
 		return
+	}
+	if req.KillBrowsers { // 带进恢复流程：结束 Claude 之后结束确认过的浏览器
+		r = r.WithContext(claudeproc.WithKillBrowsers(r.Context()))
 	}
 	if err := d.exec(w, r, d.m.Restore, true); errors.Is(err, state.ErrBusy) {
 		d.confirms.giveBack(req.Confirm, held)

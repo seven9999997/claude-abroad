@@ -94,3 +94,26 @@ final class Counter: @unchecked Sendable {
     #expect(text.contains(L10n.launchGuardRecent(1)))
     #expect(text.hasSuffix(L10n.loginItemHint))
 }
+
+// M6-4b-3：回国确认框里“同时强制退出浏览器”默认不勾；勾了，带确认码的请求里才有 kill_browsers；每次新的确认框复位。
+@MainActor
+@Test func killBrowsersOption() async {
+    for tick in [false, true] {
+        let b = ConfirmBackend()
+        b.previews = ["{\"code\":\"needs_confirm\",\"error\":\"恢复本机网络需要确认\",\"confirm\":\"0123456789abcdef0123456789abcdef\",\"expires_in_s\":60,\"preview\":{\"processes\":[],\"will_kill\":true,\"browsers\":[{\"pid\":500,\"app\":\"Google Chrome\",\"cmd\":\"\"}],\"browser_note\":\"请自行关闭\"}}"]
+        let (m, flow, _, t) = confirmRig(b)
+        _ = await m.refresh()
+        await m.restore()
+        #expect(flow.killBrowsers == false, "默认不勾")
+        #expect(flow.prompt?.preview.browsers?.first?.app == "Google Chrome")
+        flow.killBrowsers = tick
+        await confirmNow(flow)
+        let body = t.requests.last(where: { $0.path == "/v1/restore" })?.body.map { String(decoding: $0, as: UTF8.self) } ?? ""
+        #expect(body.contains("\"confirm\""))
+        #expect(body.contains("kill_browsers") == tick, "勾了才带：\(body)")
+        // 新的确认框：复位成不勾
+        await m.restore()
+        #expect(flow.killBrowsers == false)
+        flow.cancel()
+    }
+}

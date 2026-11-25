@@ -225,6 +225,8 @@ public enum L10n {
     public static let openClaudeNotEnabled = "已启用之后才能打开 Claude"
     public static let openClaudeEnvNotPassed = "环境检测的硬性项还没有全部通过"
     public static let openClaudeGateClosed = "现在代理流量关着（出口检查或接管有问题）"
+    public static let browsersRunning = "正在运行的浏览器（其中打开的 Claude 页面请自行关闭）"
+    public static let killBrowsersOption = "同时强制退出下面确认过的浏览器（未保存的表单内容会丢失）"
     public static let launchGuardUnknown = "后台没有报告启动管控的状态"
     public static let launchGuardAllowed = "现在允许启动 Claude"
     public static let launchGuardBlocked = "现在不允许启动 Claude：打开后会被马上结束"

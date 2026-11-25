@@ -308,11 +308,11 @@ func cmdRestore(a *app, args []string) int {
 		fmt.Fprintln(a.stdout, "restore --force：在以后的版本提供（M6 的应急路径；现在不做任何事）。请按各份脚本的 README 执行 restore.sh")
 		return ExitLater
 	}
-	if f.bools["--kill-browsers"] {
-		fmt.Fprintln(a.stdout, "restore --kill-browsers：在以后的版本提供")
-		return ExitLater
+	var body map[string]any
+	if f.bools["--kill-browsers"] { // 用户显式选择：同时结束确认过的浏览器（M6-4b-3）
+		body = map[string]any{"kill_browsers": true}
 	}
-	resp, code := a.confirmed("POST", "/v1/restore", nil)
+	resp, code := a.confirmed("POST", "/v1/restore", body)
 	if code != ExitOK {
 		return code
 	}

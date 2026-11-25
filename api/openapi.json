@@ -152,6 +152,15 @@
       },
       "ClaudeprocPreview": {
         "properties": {
+          "browser_note": {
+            "type": "string"
+          },
+          "browsers": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudeprocTarget"
+            },
+            "type": "array"
+          },
           "notice": {
             "type": "string"
           },
@@ -349,6 +358,9 @@
         "properties": {
           "confirm": {
             "type": "string"
+          },
+          "kill_browsers": {
+            "type": "boolean"
           }
         },
         "type": "object"

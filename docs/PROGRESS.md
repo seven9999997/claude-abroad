@@ -25,7 +25,7 @@
   - 需要用户（不阻塞）：R17 真机抽查放进 M6-9。原有各项照旧。
   ```
 - **等用户的任务**：无（W-2a-3 第 3 步“正式执行 Windows 第一级探查”随 Windows 暂停撤下，2026-11-25）。
-- 设计文档：v0.39；Windows 平台层 design-windows v0.5。
+- 设计文档：v0.40；Windows 平台层 design-windows v0.5。
 - **构建与测试备忘（W-1 起）**：每个任务的验收都加 `GOOS=windows GOARCH=amd64 go build ./...` 和 `GOOS=windows GOARCH=amd64 go vet ./...`（Mac 的任务也一样）；Windows 上没实现的功能一律返回 `platform.Unsupported`，源码检查 `internal/srccheck` 的 `TestRepoWindowsPlaceholdersFail` 会抓“假装成功”的占位。
 - M0：不再单独做 demo（2026-11-17 用户决定）。`docs/m0-plan.md` 作废，只保留 R2 脚本（`cmd/m0-r2-probe/`、`scripts/m0/`）。
 
@@ -169,7 +169,7 @@ M5 开工前的 7 条前提：
 | M6-3 | Claude 域名解析锁 | |
 | M6-4b-1 | 启动管控的后台部分：口径 A–D、第三层扫描和结束、GET /v1/launchguard | **完成，待顾问补审**（2026-11-25） |
 | M6-4b-2 | 启动管控的应用部分：首页和菜单的“打开 Claude”按钮（超过 10 分钟先补跑检测）、设置页显示启动管控、“登录时打开”的提示（只提示） | **完成，待顾问补审**（2026-11-25） |
-| M6-4b-3 | `--kill-browsers`：回国预览总列出正在运行的浏览器；用户显式选择时结束确认过的浏览器（应用标识清单加签名，先 TERM 后 KILL） | 待开始 |
+| M6-4b-3 | `--kill-browsers`：回国预览总列出正在运行的浏览器；用户显式选择时结束确认过的浏览器（应用标识清单加签名，先 TERM 后 KILL） | **完成，待顾问补审**（2026-11-25） |
 | M6-4a | Claude 进程的识别规则（启动管控用，只认签名） | **完成，待顾问补审**（2026-11-25；第一轮复审的必须改已改——原生安装文件名是版本号、Homebrew 由签名决定；返工后顾问因额度上限没审成，用户决定先不复审、继续开发；claudeproc 的 AutoJudge、签名缓存、Coverage、集中清单 idlist.go） |
 | M6-4b | 启动管控（第三层，10.2 口径 A–D）、“打开 Claude”、--kill-browsers | |
 | M6-5 | 一键卸载与应急恢复（restore --force 先结束 Claude） | |

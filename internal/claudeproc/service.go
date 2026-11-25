@@ -13,6 +13,9 @@ type Preview struct {
 	Unverified []Target `json:"unverified,omitempty"` // 看起来像 Claude 但没能确认、不会结束的
 	WillKill   bool     `json:"will_kill"`
 	Notice     string   `json:"notice,omitempty"`
+	// M6-4b-3：正在运行的浏览器（每个浏览器一行；确认不了的带 Note）。默认不结束，用户显式选择时才结束确认过的。
+	Browsers    []Target `json:"browsers,omitempty"`
+	BrowserNote string   `json:"browser_note,omitempty"`
 }
 
 // Service 是 daemon 用的“预览 + 结束”（实现 state.Killer）。三种实现（决定 6）：
@@ -22,10 +25,11 @@ type Preview struct {
 //
 // 日志只记数量，不记命令行。
 type Service struct {
-	Scanner *Scanner
-	Killer  *Killer // Skip 时可为 nil
-	Skip    bool
-	Logf    func(format string, args ...any)
+	Scanner  *Scanner
+	Killer   *Killer   // Skip 时可为 nil
+	Browsers *Browsers // 回国时的浏览器（可为 nil）
+	Skip     bool
+	Logf     func(format string, args ...any)
 }
 
 // SkipNotice 是不结束进程时预览里的说明。
@@ -50,6 +54,9 @@ func (s *Service) Preview(context.Context) (Preview, error) {
 	if s.Skip {
 		p.Notice = SkipNotice
 	}
+	if bs, err := s.Browsers.Preview(); err == nil && len(bs) > 0 {
+		p.Browsers, p.BrowserNote = bs, BrowserNote
+	}
 	return p, nil
 }
 
@@ -72,5 +79,14 @@ func (s *Service) KillClaude(ctx context.Context) error {
 		return err
 	}
 	s.logf("Claude 进程已全部结束")
+	if KillBrowsersRequested(ctx) && s.Browsers != nil {
+		// 用户显式选择：结束确认过的浏览器。结束不了的只记日志，不中止回国（浏览器不是不泄漏的依据，网络恢复靠的是 Claude 进程已结束）。
+		left, err := s.Browsers.Kill(ctx, s.Killer)
+		if err != nil || len(left) > 0 {
+			s.logf("结束浏览器：残留 %d 个", len(left))
+		} else {
+			s.logf("确认过的浏览器已结束")
+		}
+	}
 	return nil
 }

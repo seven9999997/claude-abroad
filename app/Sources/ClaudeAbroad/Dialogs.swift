@@ -26,6 +26,13 @@ struct ConfirmSheet: View {
                         Text("\(p.pid)  \(p.app)  \(p.note ?? "")").font(.callout.monospaced()).foregroundStyle(.secondary)
                     }
                 }
+                if let bs = prompt.preview.browsers, !bs.isEmpty { // 回国：浏览器总是列出；勾了才结束确认过的（M6-4b-3）
+                    Text(L10n.browsersRunning)
+                    ForEach(bs, id: \.pid) { b in
+                        Text("\(b.pid)  \(b.app)  \(b.note ?? "")").font(.callout.monospaced())
+                    }
+                    Toggle(L10n.killBrowsersOption, isOn: $flow.killBrowsers).disabled(flow.submitting)
+                }
                 status
             }
             if let n = flow.notice { ErrorBlock(text: n) }

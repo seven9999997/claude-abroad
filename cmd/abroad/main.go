@@ -245,6 +245,11 @@ func (a *app) confirmed(method, path string, body map[string]any) (apiclient.Res
 				PID       int
 				App, Note string
 			} `json:"unverified"`
+			Browsers []struct {
+				PID       int
+				App, Note string
+			} `json:"browsers"`
+			BrowserNote string `json:"browser_note"`
 		} `json:"preview"`
 		Region *struct{ From, To string } `json:"region"`
 	}
@@ -263,6 +268,20 @@ func (a *app) confirmed(method, path string, body map[string]any) (apiclient.Res
 	}
 	for _, p := range cn.Preview.Unverified {
 		fmt.Fprintf(pw, "  （没能确认、不会结束）%d  %s  %s\n", p.PID, p.App, p.Note)
+	}
+	if len(cn.Preview.Browsers) > 0 {
+		fmt.Fprintf(pw, "正在运行的浏览器：%s\n", cn.Preview.BrowserNote)
+		kill := body != nil && body["kill_browsers"] == true
+		for _, p := range cn.Preview.Browsers {
+			switch {
+			case p.Note != "":
+				fmt.Fprintf(pw, "  %d  %s（%s）\n", p.PID, p.App, p.Note)
+			case kill:
+				fmt.Fprintf(pw, "  %d  %s（会被结束）\n", p.PID, p.App)
+			default:
+				fmt.Fprintf(pw, "  %d  %s（不会结束；要结束请加 --kill-browsers）\n", p.PID, p.App)
+			}
+		}
 	}
 	if !a.yes {
 		if !a.isTerminal() {

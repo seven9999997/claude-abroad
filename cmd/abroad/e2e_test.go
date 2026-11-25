@@ -298,7 +298,7 @@ func TestLater(t *testing.T) {
 	r := newRig(t, rigOpt{})
 	for _, args := range [][]string{
 		{"engine", "install", "sing-box"}, {"engine", "rollback", "sing-box"}, {"check", "--device"},
-		{"restore", "--force"}, {"restore", "--kill-browsers"}, {"uninstall"},
+		{"restore", "--force"}, {"uninstall"}, // --kill-browsers 在 M6-4b-3 提供了
 	} {
 		x := r.run(args...)
 		if x.code != ExitLater || x.reqs != 0 || !strings.Contains(x.out, "以后的版本") {

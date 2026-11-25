@@ -11,7 +11,8 @@ import (
 func NewSystemService(sig Signaler, logf func(string, ...any)) *Service {
 	procs := procinfo.SysProcs{}
 	sc := &Scanner{Procs: procs, Signer: CodesignSigner{}, Bundle: (&procinfo.FileBundles{}).Read, Self: os.Getpid()}
-	s := &Service{Scanner: sc, Logf: logf, Skip: sig == nil}
+	s := &Service{Scanner: sc, Logf: logf, Skip: sig == nil,
+		Browsers: &Browsers{Procs: procs, Bundle: (&procinfo.FileBundles{}).Read, Signer: CodesignSigner{}, Self: os.Getpid()}}
 	if sig != nil {
 		s.Killer = &Killer{Scanner: sc, Info: procs.Info, Sig: sig}
 	}

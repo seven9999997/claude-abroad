@@ -42,6 +42,8 @@ public final class ConfirmFlow: ObservableObject {
     /// 已过期（确认码作废，只能关掉重新发起）。
     @Published public private(set) var expired = false
     @Published public private(set) var submitting = false
+    /// 回国时“同时强制退出浏览器”（M6-4b-3）：默认不勾，每次弹出新的确认框都复位；只有预览里有浏览器时界面才显示。
+    @Published public var killBrowsers = false
     /// 刷新界面用的“现在”（视图每秒调一次 tick）。
     @Published public private(set) var now: Date
     /// 重新发起第一步失败时的原因。
@@ -96,8 +98,9 @@ public final class ConfirmFlow: ObservableObject {
                                                  onResult: @escaping (Outcome<T>) async -> Void) -> Bool {
         guard prompt == nil else { p.discard(); return false } // 同一时间只有一个确认框
         let client = self.client
-        submitter = { p in
-            let o = await client.confirm(p, as: T.self)
+        submitter = { [weak self] p in
+            let extra: [String: Bool] = (self?.killBrowsers ?? false) ? ["kill_browsers": true] : [:]
+            let o = await client.confirm(p, as: T.self, extra: extra)
             if case .invalid(let t) = o, t.code == .confirmInvalid { return true }
             await onResult(o)
             return false
@@ -109,7 +112,7 @@ public final class ConfirmFlow: ObservableObject {
 
     private func show(_ p: ConfirmPrompt, refreshed r: Bool) {
         generation += 1
-        if !r { completedNote = nil }
+        if !r { completedNote = nil; killBrowsers = false }
         prompt = p
         shownAt = clock.now()
         now = clock.now()

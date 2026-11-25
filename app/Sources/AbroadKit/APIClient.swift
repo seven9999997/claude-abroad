@@ -130,7 +130,8 @@ public final class APIClient: Sendable {
     public func restore() async -> Outcome<DaemonStatus> { await call(HTTPRequest(method: "POST", path: "/v1/restore")) }
 
     /// 用户确认后带上确认码再发一次第一次的请求。确认码取出即作废，同一个提示不能用第二次。
-    public func confirm<T: Decodable & Sendable>(_ prompt: ConfirmPrompt, as: T.Type = T.self) async -> Outcome<T> {
+    /// extra 是确认时用户在确认框里另选的字段（例如回国时“同时强制退出浏览器”，M6-4b-3），并进请求体。
+    public func confirm<T: Decodable & Sendable>(_ prompt: ConfirmPrompt, as: T.Type = T.self, extra: [String: Bool] = [:]) async -> Outcome<T> {
         guard let code = prompt.take() else {
             return .invalid(ErrorText(raw: "确认已经用过或已取消：请重新操作"))
         }
@@ -138,6 +139,7 @@ public final class APIClient: Sendable {
         var obj: [String: Any] = [:]
         if let b = req.body, let o = try? JSONSerialization.jsonObject(with: b) as? [String: Any] { obj = o }
         obj["confirm"] = code
+        for (k, v) in extra { obj[k] = v }
         req.body = try? JSONSerialization.data(withJSONObject: obj)
         req.contentType = "application/json"
         return await call(req)

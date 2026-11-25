@@ -122,11 +122,15 @@ public struct ClaudeprocPreview: Codable, Sendable {
     public var unverified: [ClaudeprocTarget]?
     public var willKill: Bool
     public var notice: String?
+    public var browsers: [ClaudeprocTarget]?
+    public var browserNote: String?
     enum CodingKeys: String, CodingKey {
         case processes = "processes"
         case unverified = "unverified"
         case willKill = "will_kill"
         case notice = "notice"
+        case browsers = "browsers"
+        case browserNote = "browser_note"
     }
 }
 
@@ -229,8 +233,10 @@ public struct DaemonConfirmNeeded: Codable, Sendable {
 
 public struct DaemonConfirmRequest: Codable, Sendable {
     public var confirm: String?
+    public var killBrowsers: Bool?
     enum CodingKeys: String, CodingKey {
         case confirm = "confirm"
+        case killBrowsers = "kill_browsers"
     }
 }
 
