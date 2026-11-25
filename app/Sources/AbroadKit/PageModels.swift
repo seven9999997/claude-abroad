@@ -369,6 +369,8 @@ public final class EnginesModel: PageModel {
 @MainActor
 public final class SettingsModel: PageModel {
     @Published public private(set) var security: ApiSecurity?
+    /// Claude 域名解析锁（第一层，M6-3）的状态；后台没接时为 nil。
+    @Published public private(set) var resolverLock: ResolverlockStatus?
     public let env: EnvModel
 
     public let preference: NotificationPreference
@@ -387,7 +389,7 @@ public final class SettingsModel: PageModel {
     override public func load() async {
         let o = await client.status()
         state = LoadState.from(o)
-        if case .ok(let st) = o { security = st.security }
+        if case .ok(let st) = o { security = st.security; resolverLock = st.resolverLock }
         switch await client.restorePreview() {
         case .ok(let pv):
             processes = pv.processes ?? []
@@ -415,6 +417,26 @@ public final class SettingsModel: PageModel {
     public var cliPath: String { L10n.cliPath }
     public var cliUsage: String { L10n.cliUsage }
     public var launchControlText: String { L10n.laterVersion }
+    /// 第一层（域名解析锁）的状态文字：生效、未写入、未生效（哪些域名什么问题）、有冲突。
+    public var resolverLockText: String {
+        guard let l = resolverLock else { return L10n.resolverLockUnknown }
+        var parts: [String] = []
+        if !l.written {
+            parts.append(L10n.resolverLockNotWritten)
+        } else if l.effective {
+            parts.append(L10n.resolverLockEffective(l.domains ?? []))
+        } else {
+            let ps = (l.problems ?? []).map { L10n.resolverLockProblem($0.domain, $0.kind) }
+            parts.append(L10n.resolverLockNotEffective + "：" + ps.joined(separator: "；"))
+        }
+        if let c = l.conflicts, !c.isEmpty { parts.append(L10n.resolverLockConflicts(c)) }
+        return parts.joined(separator: "\n")
+    }
+    /// 第一层是否有问题（界面标成警告色）。
+    public var resolverLockWarn: Bool {
+        guard let l = resolverLock else { return false }
+        return (l.written && !l.effective) || !(l.conflicts ?? []).isEmpty
+    }
     /// 进程清单的说明：读不到时是原因，没有进程时说明“没有”，有进程时为空（列表本身显示）。
     public var processListText: String? {
         if let e = previewError { return e }

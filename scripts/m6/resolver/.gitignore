@@ -1,0 +1,2 @@
+# 真机脚本的证据和日志（根目录 .gitignore 的 /scripts/*/out/ 只管一层，管不到这里）
+out/

@@ -152,6 +152,9 @@ func TestEngineBackoffAndStableReset(t *testing.T) {
 	r := newFakeRunner()
 	r.ready.Store(true)
 	e := newTestEngine(r)
+	// 稳定期放长到 1 秒（只这个测试）：“立即崩溃”的 4 个进程在 -race、负载高时实际存活可能超过 100 毫秒而被判成稳定、
+	// 退避提前复位（2026-11-25 全量 -race 出现过“20 40 80 20 20”）。和“稳定运行”之间留足余量。
+	e.Timing.StableFor = time.Second
 	// 断言引擎“要求”的退避时长（日志里的值），墙钟只核对下限：上限受调度抖动影响，
 	// 负载高时会偶发超出（2026-11-18 -count=50 复现过一次 195ms）。
 	var mu sync.Mutex
@@ -172,7 +175,7 @@ func TestEngineBackoffAndStableReset(t *testing.T) {
 		p.quit(errors.New("crash"))
 	}
 	p := nextProc(t, r)
-	time.Sleep(testEngineTiming.StableFor + 20*time.Millisecond) // 稳定运行
+	time.Sleep(e.Timing.StableFor + 200*time.Millisecond) // 稳定运行
 	p.quit(errors.New("crash"))
 	nextProc(t, r)
 	mu.Lock()

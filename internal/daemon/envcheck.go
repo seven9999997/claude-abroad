@@ -215,7 +215,10 @@ func (d *Daemon) setupEnv() {
 		AfterPass:    d.re.Kick, // 全部通过：补一轮出口复查重新放行
 		Clock:        d.opts.Clock,
 		Interval:     d.opts.EnvInterval,
-		OnEvent:      func(kind, detail string) { d.events.Add("envcheck", kind, detail) },
+		OnEvent: func(kind, detail string) {
+			d.events.Add("envcheck", kind, detail)
+			d.checkResolverLock() // 环境检测时顺带做解析锁自检（M6-3；只读）
+		},
 	}
 	d.m.D.Env = d.env
 }

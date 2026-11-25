@@ -25,6 +25,7 @@ import (
 
 	"claude-abroad/internal/daemon"
 	"claude-abroad/internal/redact"
+	"claude-abroad/internal/resolverlock"
 	"claude-abroad/internal/state"
 	"claude-abroad/internal/vmmgr"
 	"claude-abroad/internal/wire"
@@ -36,6 +37,7 @@ const DefaultRealStateDir = "/Library/Application Support/claude-abroad"
 type realFlags struct {
 	stateDir, vmDir, pfUser, mainStore, exitHost, socketDir string
 	skipKill, skipRegion                                    bool
+	resolverTest                                            bool     // 只有开发构建能设（--dev-resolver-test-domain）
 	vmExec, vmUser                                          string   // M6-2a：由 abroadd 管理虚拟机
 	vmArgs                                                  []string // 传给 abroad-vm run 的其他参数
 }
@@ -108,6 +110,19 @@ func vmLifecycle(f realFlags, lookup lookupFunc, out io.Writer) (state.VM, error
 		Launcher: &vmmgr.ExecLauncher{Path: f.vmExec, Args: args, RunAs: cred, Output: out},
 		Health:   ext.Probe,
 	}, nil
+}
+
+// RealResolverDir 是系统的按域名解析配置目录（resolver(5)）。真实路径只在这里出现（源码检查）。
+const RealResolverDir = "/etc/resolver"
+
+// resolverLock 组装 Claude 域名解析锁（M6-3）：真实目录 /etc/resolver，记录放在状态目录；开发构建带
+// --dev-resolver-test-domain 时只管保留的测试域名。这里只组装，写入在首次准备（M6-8）、删除在卸载（M6-5）。
+func resolverLock(f realFlags) *resolverlock.Lock {
+	l := &resolverlock.Lock{Dir: RealResolverDir, RecordDir: f.stateDir}
+	if f.resolverTest {
+		l.Domains = []string{resolverlock.TestDomain}
+	}
+	return l
 }
 
 func lookupUser(name string) (string, string, error) {
@@ -215,6 +230,8 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		Teardown: dp, Killer: claude, Claude: claude,
 		VMRegion: regionVM(f, logger),         // 地区（M4-5）：Mac 一侧经 netR 执行，登录用户读 /dev/console 的属主
 		Env:      realEnvDeps(claude, direct), // 环境检测（M4-6a、6b）
+		// Claude 域名解析锁（M6-3）：状态接口和冲突检查读它；写入和删除不在这里。
+		ResolverLock: resolverLock(f),
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)

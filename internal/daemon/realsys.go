@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"claude-abroad/internal/region"
+	"claude-abroad/internal/resolverlock"
 	"context"
 	"errors"
 	"fmt"
@@ -66,6 +67,8 @@ type RealParams struct {
 	MainProfile string
 	MainVM      MainProxyVM
 	FetchSource func(ctx context.Context, url string, viaHost bool) ([]byte, error)
+	// ResolverLock 是 Claude 域名解析锁（M6-3；nil 时不报告、冲突检查跳过这一项）。
+	ResolverLock *resolverlock.Lock
 }
 
 // ErrNoAllowUser 是查不到放行用户。
@@ -128,6 +131,9 @@ func NewRealSystem(p RealParams) (System, error) {
 	}
 	routes := sysnet.MacRoutes{R: p.Net, Iface: h.name}
 	chk := &preflight.Checker{R: p.Net, Root: p.RootFS, Home: p.HomeFS, OurUtun: h.name, FirstHop: p.FirstHop}
+	if lk := p.ResolverLock; lk != nil {
+		chk.ResolverConflicts = func() []string { return lk.Check().Conflicts }
+	}
 	if p.Env != nil && p.Env.Conflicts == nil { // 第 11 项复用冲突检查（带上我们自己的 utun 名）
 		env := *p.Env
 		env.Conflicts = chk.TakeoverConflicts
@@ -158,7 +164,7 @@ func NewRealSystem(p RealParams) (System, error) {
 		ExitVM: p.ExitVM, CheckExit: p.CheckExit,
 		MainProfile: p.MainProfile, MainVM: p.MainVM, FetchSource: p.FetchSource,
 		Preflight: realPreflight{PreflightHints{C: chk}, p.FirstHop != nil},
-		Data:      p.Data,
+		Data:      p.Data, ResolverLock: p.ResolverLock,
 	}, nil
 }
 

@@ -13,6 +13,7 @@ import (
 	"claude-abroad/internal/pf"
 	"claude-abroad/internal/preflight"
 	"claude-abroad/internal/region"
+	"claude-abroad/internal/resolverlock"
 	"claude-abroad/internal/state"
 	"claude-abroad/internal/sysnet"
 )
@@ -35,6 +36,8 @@ type System struct {
 	Claude ClaudePreviewer
 	// Preflight 是启用前的冲突检查；实现了 Hinter 时，status 里给出最近一次的提示项。
 	Preflight state.Preflight
+	// ResolverLock 是 Claude 域名解析锁（M6-3；nil 时不报告）。目录由组装方给出：真实模式 /etc/resolver，测试用临时目录。
+	ResolverLock *resolverlock.Lock
 	// Data 是数据面（可为 nil：假系统没有数据面）。daemon 启动时绑定闸门和监护的 Kick，闸门由开变关时断开连接。
 	Data *DataPlane
 	// Env 是环境检测的依赖（M4-6a）：nil 时不做环境检测。

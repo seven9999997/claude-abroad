@@ -137,10 +137,12 @@ struct IntegrationTests {
         await apps.load()
         #expect(apps.state == .loaded)
         await apps.setRule(app: "com.example.integration", action: "block") // 收紧：直接提交
-        #expect(apps.notice == nil, "收紧的规则：\(String(describing: apps.notice))")
+        // 失败时打出当时的提示（代码和全文），任何一次失败都能直接看到原因（architect 判 M6-3）。
+        #expect(apps.notice == nil, "收紧的规则：代码 \(String(describing: apps.notice?.text.code))，提示 \(apps.notice?.text.raw ?? "")")
         let again = AppsModel(client: client)
         await again.load()
-        #expect(again.rules?.rules.contains(RulesDoc.Rule(app: "com.example.integration", action: "block")) == true, "读回规则")
+        #expect(again.rules?.rules.contains(RulesDoc.Rule(app: "com.example.integration", action: "block")) == true,
+                "读回规则：\(String(describing: again.rules?.rules))；读取状态 \(again.state)；提示 \(again.notice?.text.raw ?? "")")
         await again.removeRule(app: "com.example.integration")
 
         let env = EnvModel(client: client)

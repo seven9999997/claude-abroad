@@ -28,7 +28,7 @@ func TestDevFlagsPresent(t *testing.T) {
 	}
 	if os.Geteuid() != 0 {
 		stderr.Reset()
-		args := []string{"--state-dir", dir, "--vm-dir", dir, "--main-proxy-store", dir, "--exit-check-host", "x.test", "--dev-skip-claude-kill", "--dev-skip-region"}
+		args := []string{"--state-dir", dir, "--vm-dir", dir, "--main-proxy-store", dir, "--exit-check-host", "x.test", "--dev-skip-claude-kill", "--dev-skip-region", "--dev-resolver-test-domain"}
 		if rc := run(args, &stderr, nil); rc == 0 || !strings.Contains(stderr.String(), "root") || strings.Contains(stderr.String(), "not defined") {
 			t.Fatalf("开发构建认识开发参数，走到真实模式的 root 检查：%d %s", rc, stderr.String())
 		}

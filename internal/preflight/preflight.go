@@ -35,7 +35,7 @@ const (
 
 // Finding 是一条检查结果。文字里不含地址、端口、值和完整路径。
 type Finding struct {
-	ID       string   // 检查项（system_proxy、pac、auto_discovery、takeover_route、ipv6_only、loopback_hop、proxy_app、shell_env、sharing）
+	ID       string   // 检查项（system_proxy、pac、auto_discovery、takeover_route、ipv6_only、loopback_hop、proxy_app、shell_env、sharing、resolver_lock）
 	Severity Severity //
 	Title    string   // 发现了什么
 	Fix      string   // 怎么处理
@@ -74,6 +74,8 @@ type Checker struct {
 	OurUtun func() string
 	// FirstHop 返回主代理的第一跳主机（域名或地址）；nil 表示还没有主代理，跳过这一项。
 	FirstHop func() (string, error)
+	// ResolverConflicts 返回 Claude 域名解析锁有别人同名文件的域名（M6-3，设计 10.4）；nil 时跳过这一项。
+	ResolverConflicts func() []string
 
 	mu   sync.Mutex
 	last Report
@@ -101,6 +103,7 @@ func (c *Checker) Run(ctx context.Context) Report {
 	r.Findings = append(r.Findings, c.checkProxyApps(ctx)...)
 	r.Findings = append(r.Findings, c.checkShell()...)
 	r.Findings = append(r.Findings, c.checkSharing()...)
+	r.Findings = append(r.Findings, c.checkResolverLock()...)
 	c.mu.Lock()
 	c.last = r
 	c.mu.Unlock()
@@ -130,6 +133,22 @@ func (c *Checker) Check(ctx context.Context) error {
 		next = append(next, fmt.Sprintf("%d. %s", i+1, f.Fix))
 	}
 	return usererror.New("启用前的冲突检查", strings.Join(reason, "；"), "请按下面处理后再启用："+strings.Join(next, " "), ErrBlocked)
+}
+
+// ---- Claude 域名解析锁的冲突（M6-3）----
+
+// checkResolverLock：/etc/resolver 下已有别人写的、和解析锁同名的文件（只提示：不影响启用，影响的是回国后的第一层）。
+func (c *Checker) checkResolverLock() []Finding {
+	if c.ResolverConflicts == nil {
+		return nil
+	}
+	doms := c.ResolverConflicts()
+	if len(doms) == 0 {
+		return nil
+	}
+	return []Finding{{ID: "resolver_lock", Severity: Warn,
+		Title: "Claude 域名解析锁有别的软件写的同名文件（" + strings.Join(doms, "、") + "）",
+		Fix:   "回国后“Claude 连不上”的第一层对这些域名不生效。请确认这些文件是哪个软件写的；不再需要时移走它们，再在设置里重新写入解析锁。"}}
 }
 
 // ---- 系统代理、PAC、自动发现 ----

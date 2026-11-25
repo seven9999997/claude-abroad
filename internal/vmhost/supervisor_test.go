@@ -3,9 +3,12 @@ package vmhost
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -119,50 +122,75 @@ func TestWatchdogWithHangingDial(t *testing.T) {
 	waitErr(t, done, testTiming.ShutdownTimeout+2*testTiming.StopWait+time.Second)
 }
 
+// 断言监护器决定的退避值（日志“X 后重启虚拟机”），不按实际经过的毫秒数判（-race、负载高时会偶发失败）。
 func TestBackoffDoublesAndCaps(t *testing.T) {
 	// 每台启动后立刻退出（没通过 health）：退避 20、40、80、80 毫秒。
 	f := newFleet(func(m *fakeMachine) { go m.stop(errors.New("crash")) })
-	s := &Supervisor{Factory: f.factory, Timing: testTiming, Health: healthNever}
+	var mu sync.Mutex
+	var backoffs []time.Duration
+	s := &Supervisor{Factory: f.factory, Timing: testTiming, Health: healthNever, Log: func(format string, a ...any) {
+		if d, ok := strings.CutSuffix(fmt.Sprintf(format, a...), " 后重启虚拟机"); ok {
+			if v, err := time.ParseDuration(d); err == nil {
+				mu.Lock()
+				backoffs = append(backoffs, v)
+				mu.Unlock()
+			}
+		}
+	}}
 	cancel, _ := runSup(t, s)
 	for i := 0; i < 5; i++ {
 		next(t, f)
 	}
 	cancel()
-	want := []time.Duration{20, 40, 80, 80}
-	for i, g := range f.gaps()[:4] {
-		lo := want[i] * time.Millisecond
-		if g < lo || g > lo+60*time.Millisecond {
-			t.Errorf("第 %d 次退避 %s，应约为 %s", i+1, g, lo)
-		}
+	mu.Lock()
+	defer mu.Unlock()
+	want := []time.Duration{20 * time.Millisecond, 40 * time.Millisecond, 80 * time.Millisecond, 80 * time.Millisecond}
+	if len(backoffs) < 4 || !slices.Equal(backoffs[:4], want) {
+		t.Errorf("退避应为 %v（翻倍、到上限为止），得到 %v", want, backoffs)
 	}
 }
 
+// 断言的是监护器决定的退避值（从“X 后重启虚拟机”的日志读出），不是实际经过的毫秒数：
+// 带 -race、负载高时调度延迟会让实测间隔偏大，按毫秒阈值判会偶发失败（architect 判 M6-2b）。
+// 存活时长离 StableFor 留足余量（短的远小于、长的远大于），“稳定与否”不受调度延迟影响。
 func TestBackoffResetsOnlyAfterStable(t *testing.T) {
 	run := func(lifetime time.Duration) []time.Duration {
 		f := newFleet(func(m *fakeMachine) {
 			go func() { time.Sleep(lifetime); m.stop(errors.New("crash")) }()
 		})
-		s := &Supervisor{Factory: f.factory, Timing: testTiming, Health: healthOK}
+		var mu sync.Mutex
+		var backoffs []time.Duration
+		s := &Supervisor{Factory: f.factory, Timing: testTiming, Health: healthOK, Log: func(format string, a ...any) {
+			msg := fmt.Sprintf(format, a...)
+			if d, ok := strings.CutSuffix(msg, " 后重启虚拟机"); ok {
+				if v, err := time.ParseDuration(d); err == nil {
+					mu.Lock()
+					backoffs = append(backoffs, v)
+					mu.Unlock()
+				}
+			}
+		}}
 		cancel, _ := runSup(t, s)
 		for i := 0; i < 4; i++ {
 			next(t, f)
 		}
 		cancel()
-		var backoffs []time.Duration
-		for _, g := range f.gaps()[:3] {
-			backoffs = append(backoffs, g-lifetime)
+		mu.Lock()
+		defer mu.Unlock()
+		if len(backoffs) < 3 {
+			t.Fatalf("退避日志只有 %d 条：%v", len(backoffs), backoffs)
 		}
-		return backoffs
+		return backoffs[:3]
 	}
-	// health 通后只活 30 毫秒（< StableFor）：退避继续翻倍。
+	// health 通后只活 30 毫秒（远小于 StableFor）：退避按 20、40、80 翻倍。
 	short := run(30 * time.Millisecond)
-	if short[2] < 70*time.Millisecond {
-		t.Errorf("不稳定时退避应翻倍：%v", short)
+	if want := []time.Duration{20 * time.Millisecond, 40 * time.Millisecond, 80 * time.Millisecond}; !slices.Equal(short, want) {
+		t.Errorf("不稳定时退避应翻倍：%v，应为 %v", short, want)
 	}
-	// 活过 StableFor：每次都复位为 BackoffMin。
-	long := run(testTiming.StableFor + 30*time.Millisecond)
+	// 活过 StableFor（再多 150 毫秒余量）：每次都复位为 BackoffMin。
+	long := run(testTiming.StableFor + 150*time.Millisecond)
 	for i, b := range long {
-		if b > 60*time.Millisecond {
+		if b != testTiming.BackoffMin {
 			t.Errorf("稳定运行后退避应复位：第 %d 次 %s（%v）", i+1, b, long)
 		}
 	}

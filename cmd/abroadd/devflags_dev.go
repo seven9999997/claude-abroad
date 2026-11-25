@@ -20,13 +20,15 @@ import (
 //   - --fake-system：整套系统（pf、路由、DNS、IPv6、utun、虚拟机）都是内存里的假实现，不碰本机；
 //   - --fake-main-proxy（只和 --fake-system 一起）：接上假的出口检查和假虚拟机（应用的集成测试、第一级走查用）；
 //   - --dev-skip-claude-kill：真实模式下恢复本机网络时不结束 Claude 进程（预览照常列出）；
-//   - --dev-skip-region：真实模式下不同步时区和语言（M2、M3 的真机脚本带它）。
+//   - --dev-skip-region：真实模式下不同步时区和语言（M2、M3 的真机脚本带它）；
+//   - --dev-resolver-test-domain：真实模式下 Claude 域名解析锁只管一个保留的测试域名（M6-3，M6-9 默认用；不影响 Claude）。
 func init() {
 	addDevFlags = func(fs *flag.FlagSet, o *devOptions) {
 		fs.BoolVar(&o.fake, "fake-system", false, "开发构建：整套系统用内存里的假实现，不碰本机")
 		fs.BoolVar(&o.fakeMain, "fake-main-proxy", false, "开发构建（只和 --fake-system 一起）：接上假的出口检查和假虚拟机，可以走完应用主代理、完成引导、启用")
 		fs.BoolVar(&o.skipKill, "dev-skip-claude-kill", false, "开发构建：恢复本机网络时不结束 Claude 进程（预览照常列出）")
 		fs.BoolVar(&o.skipRegion, "dev-skip-region", false, "开发构建：不同步时区和语言")
+		fs.BoolVar(&o.resolverTest, "dev-resolver-test-domain", false, "开发构建：Claude 域名解析锁只管一个保留的测试域名（不影响 Claude）")
 	}
 	runDev = func(o devOptions, stateDir string, stderr io.Writer, ready func(sock string, stop func())) (int, bool) {
 		if o.fakeMain && !o.fake {

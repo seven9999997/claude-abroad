@@ -37,6 +37,11 @@
 // --udp-target：UDP 那一步改发往这个真实 IP（主代理答不了 DoH 时用，见 internal/tunsim.Config.UDPTarget）。
 // 退出码：0 全部通过；1 有一步失败或连不上 data.sock；2 参数错。
 //
+//	abroad-dev resolver-lock domains|content|test-domain [--form default|loopback] [--port 15353]
+//
+// resolver-lock 打印解析锁的域名清单或锁文件内容（internal/resolverlock，M6-3）：给 scripts/m6/resolver 的真机脚本用，
+// 脚本和 abroadd 写的内容同一来源。只打印，不写任何文件。
+//
 //	abroad-dev pf-render [--user nobody] [--utun utun9] [--lan 192.168.1.0/24]… [--vmif bridge100]… [--lockdown]
 //
 // pf-render 把 internal/pf.Render 生成的规则打到标准输出（给 scripts/dev/pf-syntax.sh 做 pfctl -n 语法检查；
@@ -70,6 +75,7 @@ import (
 	"claude-abroad/internal/fakedns"
 	"claude-abroad/internal/managedproxy"
 	"claude-abroad/internal/pf"
+	"claude-abroad/internal/resolverlock"
 	"claude-abroad/internal/procinfo"
 	"claude-abroad/internal/r3"
 	"claude-abroad/internal/tunsim"
@@ -94,6 +100,8 @@ func main() {
 			os.Exit(applyMainProxy(context.Background(), os.Args[2:], os.Stdout, os.Stderr))
 		case "pf-render":
 			os.Exit(pfRender(os.Args[2:], os.Stdout, os.Stderr))
+		case "resolver-lock":
+			os.Exit(resolverLockCmd(os.Args[2:], os.Stdout, os.Stderr))
 		case "tunsim":
 			os.Exit(tunsimCmd(context.Background(), os.Args[2:], os.Stdout, os.Stderr))
 		case "daemon-sim":
@@ -762,4 +770,52 @@ func ifaceOf(a net.Addr) string {
 		}
 	}
 	return ""
+}
+
+func resolverLockCmd(args []string, stdout, stderr io.Writer) int {
+	if len(args) < 1 {
+		fmt.Fprintln(stderr, "用法：abroad-dev resolver-lock domains|content|test-domain [--form default|loopback] [--port 15353]")
+		return 2
+	}
+	what := args[0]
+	fs := flag.NewFlagSet("resolver-lock", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	form := fs.String("form", "default", "写法：default（nameserver 198.18.0.2）或 loopback（127.0.0.1 加端口）")
+	port := fs.Uint("port", 15353, "loopback 写法的端口（不用 5353：那是 mDNS 的端口）")
+	if err := fs.Parse(args[1:]); err != nil || fs.NArg() > 0 {
+		return 2
+	}
+	switch what {
+	case "test-domain":
+		fmt.Fprintln(stdout, resolverlock.TestDomain)
+		return 0
+	case "domains":
+		for _, d := range resolverlock.Domains() {
+			fmt.Fprintln(stdout, d)
+		}
+		return 0
+	case "content":
+		f := resolverlock.Default()
+		switch *form {
+		case "default":
+		case "loopback":
+			if *port == 0 || *port > 65535 {
+				fmt.Fprintln(stderr, "端口不对")
+				return 2
+			}
+			f = resolverlock.Loopback(uint16(*port))
+		default:
+			fmt.Fprintln(stderr, "写法只能是 default 或 loopback")
+			return 2
+		}
+		b, err := resolverlock.Content(f)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		_, _ = stdout.Write(b)
+		return 0
+	}
+	fmt.Fprintln(stderr, "只支持 domains、content、test-domain")
+	return 2
 }

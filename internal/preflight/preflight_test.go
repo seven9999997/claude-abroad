@@ -351,3 +351,18 @@ func TestCheckError(t *testing.T) {
 		t.Fatalf("%+v", w)
 	}
 }
+
+// M6-3：解析锁有别人的同名文件：只提示（不阻断启用），写明域名；没有冲突或没接时没有这一项。
+func TestResolverLockConflictFinding(t *testing.T) {
+	c := &Checker{ResolverConflicts: func() []string { return []string{"claude.com"} }}
+	f := c.checkResolverLock()
+	if len(f) != 1 || f[0].ID != "resolver_lock" || f[0].Severity != Warn || !strings.Contains(f[0].Title, "claude.com") {
+		t.Fatalf("%+v", f)
+	}
+	if got := (&Checker{ResolverConflicts: func() []string { return nil }}).checkResolverLock(); len(got) != 0 {
+		t.Fatal("没有冲突时不应有这一项")
+	}
+	if got := (&Checker{}).checkResolverLock(); len(got) != 0 {
+		t.Fatal("没接时不应有这一项")
+	}
+}

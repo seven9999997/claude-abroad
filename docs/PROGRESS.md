@@ -19,13 +19,13 @@
   - 建议改 2（S4 的“主代理一侧有新连接”改为 main 的按出口计数）留到 M4 做出口检查时一起改。
 - **当前任务**：
   ```
-  下一步：M6-3 Claude 域名解析锁（architect 2026-11-25；8 条决定写进 m6-plan v2.4）
-  - 要做什么：0 提交 M6-2b；guard 回国时不建运行时目录（加测试）；internal/vmhost 的 TestBackoffResetsOnlyAfterStable 改成不依赖真实毫秒数（注入时钟或不依赖具体毫秒的判断，不只是放宽阈值）；m6-plan 标 v2.4。1 新增 internal/resolverlock：按参数生成文件内容（默认 198.18.0.2；备选回环加固定端口），写入、删除、自检、冲突判断，记下自己写入的内容；Windows 占位。2 abroadd：自检接进启动和环境检测；状态接口加锁的状态；冲突检查加一项；写入、删除先做成内部函数（M6-5、M6-8 调用），不注册新的可写接口。3 scripts/m6/resolver：R9、R18 的真机脚本、恢复脚本、空跑、自测、README。4 应用：设置“回国与 Claude”里显示第一层的状态。
-  - 验收标准：a 两种写法逐字期望；域名清单等于内置置顶域名、和规则引擎同一来源（有测试）；pinned_extra 不影响输出。b 写入后文件齐全权限对；重复写入相同；别人的同名文件不覆盖并报告域名；删除只删自己写的；写到一半失败可由再次写入或删除收拾。c 自检：缺失、被改、权限不对各一条，自检不写文件。d 回国、停用、启用全流程不碰锁目录（内容和修改时间不变）。e 状态接口四个字段（是否写入、哪些域名、哪种写法、自检结果），无敏感内容；应用显示有视图模型测试（含未生效、有冲突）。f 源码检查：真实 /etc/resolver 只在真实模式入口；测试域名开关只在 abroaddev 文件；resolverlock 无网络、不执行外部命令。g 真机脚本：空跑、自测通过；命令清单只写删自己的锁文件和只读查询，不含 pfctl、networksetup、route、ifconfig，不启动不结束进程；出错、中断、死人开关都删掉自己写的文件（自测有反例）；会话里不执行真实模式。h 两种构建 build、vet、linux/arm64、windows/amd64 build 和 vet；带标签全量 -race、不带标签全量完整跑；vmhost 修过的测试 -race 连跑不再失败；apigen -check；app-test.sh（重跑次数如实写）；M2–M5 自测；隐私检查零命中。i 回写 design 10.2、10.4、11.1、12、16。
-  - 需要用户（不阻塞）：脚本写好后新增“执行 scripts/m6/resolver 的真机脚本给出 R9、R18 结论”（要 sudo、不改网络不断网，但期间本机 Claude 可能连不上，要在不依赖 Claude Code 会话时做或在另一台 Mac 上做）。原有各项照旧。
+  下一步：M6-3b 第四层：Claude Code 的托管设置和本机代理端口（architect 2026-11-25；8 条决定见 m6-plan v2.5，以 docs/fallback-plan.md v1.1 为准）
+  - 要做什么：0 第 0 步（经代理也要确认出口、集成测试失败时打出提示、提交 M6-3、m6-plan v2.5）已做。1 新增托管设置的包（内容生成、写入、删除、自检、冲突判断、记录）。2 abroadd 的本机代理端口（监听、请求解析、对端进程识别、按状态表和规则引擎决定去向、登记进连接表）。3 状态接口、冲突检查、应用里的显示。
+  - 验收标准：a 托管设置内容逐字、六个变量齐全、合法 JSON；b 写入删除自检（原子、普通用户可读、重复相同、主文件和别人的分片逐字节不变、冲突写明文件和变量、只删自己的；自检覆盖缺失、被改、读不到、有冲突，不写文件）；c 状态表每格一个用例（未启用 403 且无向外拨号；已启用闸门开按规则）；d 已启用的规则各一个用例（Claude 进程、置顶域名、本机网络、阻止、分流出口、本地域名、识别不出按 Claude），并证明和接管流量同一个判定函数；e 闸门由开变关时经端口的走代理连接被断开、新连接 403、本机网络连接不受影响；f 超大请求头、慢速握手、不认识的方法、目标是端口自己、连接数超限都拒绝并释放资源，无协程泄漏；g 端口被占用时照常启动、状态未生效、冲突检查必须处理；h 源码检查（真实托管设置路径只在真实入口、假系统不监听固定端口、托管设置包无网络无外部命令、代理端口无直接拨号）；i 状态字段齐全无敏感内容，应用显示四种情况有视图模型测试，覆盖范围那句来自文字表；j 会话里没有写真实路径、没有启动真实 Claude Code、没有 root；k 两种构建全套、两种全量测试、apigen、app-test.sh（轮数和重跑次数）、M2–M5 和 m6/resolver 自测、隐私检查；l 回写 design 4、10.2、10.4、11.1、12、16，fallback-plan 标出已实现。
+  - 需要用户（不阻塞）：执行 scripts/m6/resolver 的真机脚本（见 LOCAL）。原有各项照旧。
   ```
 - **等用户的任务**：无（W-2a-3 第 3 步“正式执行 Windows 第一级探查”随 Windows 暂停撤下，2026-11-25）。
-- 设计文档：v0.35；Windows 平台层 design-windows v0.5。
+- 设计文档：v0.36；Windows 平台层 design-windows v0.5。
 - **构建与测试备忘（W-1 起）**：每个任务的验收都加 `GOOS=windows GOARCH=amd64 go build ./...` 和 `GOOS=windows GOARCH=amd64 go vet ./...`（Mac 的任务也一样）；Windows 上没实现的功能一律返回 `platform.Unsupported`，源码检查 `internal/srccheck` 的 `TestRepoWindowsPlaceholdersFail` 会抓“假装成功”的占位。
 - M0：不再单独做 demo（2026-11-17 用户决定）。`docs/m0-plan.md` 作废，只保留 R2 脚本（`cmd/m0-r2-probe/`、`scripts/m0/`）。
 
@@ -162,6 +162,7 @@ M5 开工前的 7 条前提：
 | M6-F0 | 回国后的兜底方案设计稿（只写文档，docs/fallback-plan.md） | **完成**（2026-11-25 architect 判定；5 处修正并入 v1.1；design 回写 v0.33；caibao_vps 的只读克隆已从会话临时目录删除） |
 | M6-2a | abroadd 管理虚拟机的生命周期（internal/vmmgr；abroadd --vm-exec、abroad-vm --parent-watch；闸门原因 vm；状态字段 vm_manager） | **完成**（2026-11-25 architect 判定；复审 2 处必须改已改：附加组只留主组、vm 只在闸门原来开着时通知。偶发失败记录：internal/stack 的 TestGateClosedModes“走代理的应在接受后被重置：EOF”、cmd/abroad-dev 的 TestUpstreamPIDFile“PID 文件内容为空”，各在一次全量 -race 里失败、单独重跑通过；再出现就单独排查） |
 | M6-2b | guard：开机时按状态文件加载断网规则（cmd/abroad-guard、internal/guard；abroadd 另存参数、写开机标记、收养启用引用） | **完成**（2026-11-25 architect 判定，无必须改；建议改并入 M6-3 第 0 步） |
+| M6-3 | Claude 域名解析锁（internal/resolverlock；状态 resolver_lock；冲突检查一项；scripts/m6/resolver 真机脚本 R9、R18） | **完成**（2026-11-25 architect 判定；复审 2 处必须改已改：断开识别（命令行、应用）、真机脚本的反方向风险；第 0 步补：经代理也要确认出口、集成测试失败时打出提示） |
 | M6-3b | 第四层：Claude Code 的本机代理（fallback-plan v1.1：托管设置分片、端口在已启用时按连接方走规则、其他状态一律拒绝） | 待开始（排在 M6-3 之后） |
 | M6-2a | abroadd 管理虚拟机的生命周期 | |
 | M6-2b | guard（开机时加载断网规则） | |

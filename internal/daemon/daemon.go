@@ -7,6 +7,7 @@ import (
 	"claude-abroad/internal/exitcheck"
 	"claude-abroad/internal/gatesm"
 	"claude-abroad/internal/vmhost"
+	"claude-abroad/internal/resolverlock"
 	"claude-abroad/internal/vmmgr"
 	"context"
 	"encoding/json"
@@ -81,6 +82,8 @@ type Daemon struct {
 	vmm    *vmmgr.Manager
 	vmStop func()
 	vmDone chan struct{}
+	resolverLast string // 上一次解析锁自检的摘要（变化时才记事件）
+	resolverMu   sync.Mutex
 	// 地区待还原重试循环跑完的轮数（startupSettled 用）。
 	regionRounds atomic.Int64
 
@@ -244,7 +247,8 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	d.wireExitAvail()
 	d.wireExits()      // 出口要在规则之前：规则引用的出口要能查到
 	d.wireRules()      // 规则要在 Recover 之前接上：Recover 到 ENABLED 时会通知数据面启用（重新计算直连配置）
-	d.wireGuard()      // 要在 Recover 之前：Recover 到 ENABLED、DISABLED 时会应用 pf
+	d.checkResolverLock() // 解析锁自检（只读；不在或被改了记事件，不自动重写）
+	d.wireGuard()         // 要在 Recover 之前：Recover 到 ENABLED、DISABLED 时会应用 pf
 	d.startVMManager() // 要在 Recover 之前：Recover 里可能调用虚拟机的启停
 	if err := d.m.Recover(ctx); err != nil {
 		o.logf("恢复上次的状态：%v", err)
@@ -400,6 +404,8 @@ type Status struct {
 	Gate gatesm.Status `json:"gate"`
 	// M6-2a：由 abroadd 管理虚拟机时的管理器状态（阶段、重启次数、最近一次失败的原因）；虚拟机由外部启动时没有。
 	VMManager *vmmgr.Status `json:"vm_manager,omitempty"`
+	// M6-3：Claude 域名解析锁（第一层）的状态：是否写入、锁的域名、写法、自检结果、冲突（没有接上时没有这一项）。
+	ResolverLock *resolverlock.Status `json:"resolver_lock,omitempty"`
 	// M4-8：分流出口（正式的和开发用的）的摘要、可用状态、最近一次检查；各出口（含 main）的开流计数。
 	// 不含出口 IP、端点地址、配置。
 	Exits []ExitStatus          `json:"exits,omitempty"`
@@ -419,6 +425,10 @@ func (d *Daemon) Status() Status {
 	if d.vmm != nil {
 		vs := d.vmm.Status()
 		st.VMManager = &vs
+	}
+	if lk := d.opts.Sys.ResolverLock; lk != nil {
+		ls := lk.Check()
+		st.ResolverLock = &ls
 	}
 	if f, err := d.store.Load(); err != nil {
 		st.State, st.Corrupt = "UNKNOWN", true

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"claude-abroad/internal/daemon"
+	"claude-abroad/internal/resolverlock"
 	"claude-abroad/internal/vmmgr"
 )
 
@@ -82,5 +83,17 @@ func TestVMLifecycle(t *testing.T) {
 	}
 	if _, err := vmCredential("x", func(string) (string, string, error) { return "a", "1", nil }); err == nil {
 		t.Fatal("uid 不是数字应报错")
+	}
+}
+
+// M6-3：真实模式的解析锁指向 /etc/resolver、记录在状态目录、默认锁内置置顶域名；这里只组装，不写任何文件。
+func TestResolverLockWiring(t *testing.T) {
+	l := resolverLock(realFlags{stateDir: "/st"})
+	if l.Dir != "/etc/resolver" || l.RecordDir != "/st" || len(l.Domains) != 0 {
+		t.Fatalf("%+v", l)
+	}
+	l = resolverLock(realFlags{stateDir: "/st", resolverTest: true})
+	if len(l.Domains) != 1 || l.Domains[0] != resolverlock.TestDomain {
+		t.Fatalf("测试域名：%+v", l)
 	}
 }

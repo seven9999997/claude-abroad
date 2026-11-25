@@ -915,6 +915,9 @@
           "region": {
             "$ref": "#/components/schemas/DaemonRegionStatus"
           },
+          "resolver_lock": {
+            "$ref": "#/components/schemas/ResolverlockStatus"
+          },
           "rules": {
             "$ref": "#/components/schemas/DaemonRulesSummary"
           },
@@ -1121,6 +1124,58 @@
           "locale",
           "source",
           "timezone"
+        ],
+        "type": "object"
+      },
+      "ResolverlockProblem": {
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "ResolverlockStatus": {
+        "properties": {
+          "conflicts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "effective": {
+            "type": "boolean"
+          },
+          "form": {
+            "type": "string"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/ResolverlockProblem"
+            },
+            "type": "array"
+          },
+          "written": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "effective",
+          "form",
+          "written"
         ],
         "type": "object"
       },

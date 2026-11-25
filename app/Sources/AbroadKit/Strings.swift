@@ -205,6 +205,21 @@ public enum L10n {
     public static let processListNone = "现在没有要结束的 Claude 进程"
     public static func actionExit(_ tag: String) -> String { "分流出口 " + tag }
     public static let launchControl = "启动管控"
+    // M6-3：第一层（Claude 域名解析锁）
+    public static let resolverLockTitle = "第一层：Claude 域名解析锁"
+    public static let resolverLockUnknown = "后台没有报告解析锁的状态"
+    public static let resolverLockNotWritten = "还没有写入（首次准备时写入）"
+    public static func resolverLockEffective(_ doms: [String]) -> String { "生效中：" + doms.joined(separator: "、") + "（只锁内置的 Claude 域名；你在规则里追加的置顶域名不在锁里）" }
+    public static let resolverLockNotEffective = "未生效"
+    public static func resolverLockProblem(_ domain: String, _ kind: String) -> String {
+        switch kind {
+        case "missing": return domain + " 的锁文件不在了"
+        case "modified": return domain + " 的锁文件被改过"
+        case "permission": return domain + " 的锁文件权限不对"
+        default: return domain + " " + kind
+        }
+    }
+    public static func resolverLockConflicts(_ doms: [String]) -> String { "有别的软件写的同名文件：" + doms.joined(separator: "、") + "（这些域名不受锁保护）" }
     public static let uninstall = "卸载"
     public static let uninstallInInstaller = "在正式安装包里提供"
     public static let diagnostics = "诊断包"

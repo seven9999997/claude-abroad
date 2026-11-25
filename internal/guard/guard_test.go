@@ -327,3 +327,21 @@ func TestTokens(t *testing.T) {
 		t.Fatal("收养后应删除")
 	}
 }
+
+// 回国、全新安装时 guard 不留下任何东西（运行时目录也不建）；要加载时才建目录、写引用。
+func TestRunDirOnlyWhenLoading(t *testing.T) {
+	r := newRig(t)
+	r.runDir = filepath.Join(filepath.Dir(r.runDir), "run-absent")
+	r.setState(t, state.Restored)
+	r.run(t)
+	if _, err := os.Stat(r.runDir); !os.IsNotExist(err) {
+		t.Fatal("回国时不应建运行时目录")
+	}
+	r.setState(t, state.Enabled)
+	if o := r.run(t); o != Loaded {
+		t.Fatalf("%v", o)
+	}
+	if toks, err := TakeTokens(r.runDir); err != nil || len(toks) != 1 {
+		t.Fatalf("要加载时应建目录并写引用：%v %v", toks, err)
+	}
+}

@@ -157,7 +157,11 @@ func markerMatches(runDir, bootID string) bool {
 }
 
 // AppendToken 把 guard 取得的启用引用追加进运行时目录的文件（guard 调用）。
+// 运行时目录不存在时在这里才建（只在确实加载了规则、要写引用时；回国时 guard 不留下任何东西）。
 func AppendToken(runDir, tok string) error {
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		return err
+	}
 	path := filepath.Join(runDir, TokenFile)
 	var old []byte
 	if b, err := readSmall(path, 4096); err == nil {

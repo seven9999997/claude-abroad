@@ -67,6 +67,11 @@ func (c *Client) classify(err error) error {
 		return ErrRejected
 	case errors.Is(err, syscall.EACCES), errors.Is(err, fs.ErrPermission):
 		return ErrRejected
+	// 还没写完请求就被后台断开（architect 判 M6-3：以前漏了这一类，提示时对时错）：
+	// 连接已被关闭、套接字没有连接、管道已断、连接被中止。客户端只连本机的 unix socket，这些都只能是后台断开的。
+	case errors.Is(err, net.ErrClosed), errors.Is(err, syscall.ENOTCONN), errors.Is(err, syscall.EPIPE), errors.Is(err, syscall.ECONNABORTED),
+		strings.Contains(err.Error(), "use of closed network connection"), strings.Contains(err.Error(), "socket is not connected"):
+		return ErrRejected
 	}
 	return err
 }

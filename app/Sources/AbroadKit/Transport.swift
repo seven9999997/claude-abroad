@@ -142,7 +142,9 @@ public final class UnixTransport: Transport, @unchecked Sendable {
                 switch code {
                 case .ENOENT: return ConnectionError.notRunning
                 case .ECONNREFUSED: return ConnectionError.noListener
-                case .ECONNRESET, .EPIPE, .ENOTCONN: return ConnectionError.rejected
+                // 连上后被断开（M6-3 复审：接受后立刻断开时 Network.framework 报的是 ENETDOWN；只连本机 unix socket，
+                // 这几种都只能是后台断开的）。没有进程在听是 ECONNREFUSED，不在这里。
+                case .ECONNRESET, .EPIPE, .ENOTCONN, .ECONNABORTED, .ENETDOWN: return ConnectionError.rejected
                 default: break
                 }
             }

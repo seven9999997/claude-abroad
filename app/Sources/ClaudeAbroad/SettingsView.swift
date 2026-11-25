@@ -33,6 +33,9 @@ struct SettingsView: View {
                     }
                 }
                 LabeledContent(L10n.launchControl) { Text(model.launchControlText) }
+                LabeledContent(L10n.resolverLockTitle) {
+                    Text(model.resolverLockText).foregroundStyle(model.resolverLockWarn ? .orange : .primary)
+                }
             }
             .tabItem { Text(L10n.settingsClaude) }
             Form {

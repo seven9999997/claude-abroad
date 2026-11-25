@@ -73,9 +73,6 @@ func run(args []string, stderr io.Writer, root bool, goos string) int {
 
 func runReal(o options, stderr io.Writer) int {
 	lg := log.New(stderr, "abroad-guard: ", log.LstdFlags)
-	if err := os.MkdirAll(o.runDir, 0o755); err != nil {
-		lg.Printf("建运行时目录失败：%v", errors.Unwrap(err))
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	out, err := guard.Run(ctx, guard.Deps{

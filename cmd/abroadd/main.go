@@ -59,13 +59,14 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 		return code
 	}
 	return runReal(realFlags{stateDir: *stateDir, vmDir: *vmDir, pfUser: *pfUser, mainStore: *mainStore,
-		exitHost: *exitHost, skipKill: dev.skipKill, skipRegion: dev.skipRegion, socketDir: *sockDir,
+		exitHost: *exitHost, skipKill: dev.skipKill, skipRegion: dev.skipRegion, socketDir: *sockDir, resolverTest: dev.resolverTest,
 		vmExec: *vmExec, vmUser: *vmUser, vmArgs: vmArgs}, stderr, ready)
 }
 
 // devOptions 是开发构建的参数（默认构建里全是零值）。
 type devOptions struct {
 	fake, fakeMain, skipKill, skipRegion bool
+	resolverTest                         bool // 解析锁只管测试域名（M6-3）
 }
 
 // addDevFlags、runDev 由带 abroaddev 构建标签的 devflags_dev.go 设置；默认（发布）构建里为 nil。

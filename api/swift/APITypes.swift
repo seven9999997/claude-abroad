@@ -542,6 +542,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var direct: DaemonDirectStatus?
     public var gate: GatesmStatus
     public var vmManager: VmmgrStatus?
+    public var resolverLock: ResolverlockStatus?
     public var exits: [DaemonExitStatus]?
     public var opens: [String: DaemonExitCounts]?
     public var region: DaemonRegionStatus?
@@ -560,6 +561,7 @@ public struct DaemonStatus: Codable, Sendable {
         case direct = "direct"
         case gate = "gate"
         case vmManager = "vm_manager"
+        case resolverLock = "resolver_lock"
         case exits = "exits"
         case opens = "opens"
         case region = "region"
@@ -666,6 +668,32 @@ public struct RegionTarget: Codable, Sendable {
         case locale = "locale"
         case country = "country"
         case source = "source"
+    }
+}
+
+public struct ResolverlockProblem: Codable, Sendable {
+    public var domain: String
+    public var kind: String
+    enum CodingKeys: String, CodingKey {
+        case domain = "domain"
+        case kind = "kind"
+    }
+}
+
+public struct ResolverlockStatus: Codable, Sendable {
+    public var written: Bool
+    public var domains: [String]?
+    public var form: String
+    public var effective: Bool
+    public var problems: [ResolverlockProblem]?
+    public var conflicts: [String]?
+    enum CodingKeys: String, CodingKey {
+        case written = "written"
+        case domains = "domains"
+        case form = "form"
+        case effective = "effective"
+        case problems = "problems"
+        case conflicts = "conflicts"
     }
 }
 

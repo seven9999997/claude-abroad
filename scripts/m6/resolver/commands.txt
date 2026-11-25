@@ -1,0 +1,23 @@
+# scripts/m6/resolver 的 run.sh、restore.sh 会执行的全部命令（扩展正则，每行一条）。check-commands.sh 用它核对空跑的输出。
+# “CHANGE ” 开头的是改动类命令：只写入、删除自己的锁文件（/etc/resolver 下那三个域名和测试域名），建、删空的 /etc/resolver 目录，
+# 以及脚本自己的状态目录和死人开关。“QUERY ” 开头的是只读查询。
+# 不允许出现：pfctl、networksetup、route、ifconfig、launchctl、kill、pkill、killall、open、dscacheutil -flushcache、scutil 的写操作。
+# 域名清单的唯一来源是 internal/resolverlock（rules.BuiltinPinnedBases）；这里只是允许名单，域名清单变了这里要跟着改，核对会报出来。
+CHANGE ^mkdir -p /Library/Application Support/claude-abroad-m6r$
+CHANGE ^chmod 700 /Library/Application Support/claude-abroad-m6r$
+CHANGE ^死人开关 [0-9]+ 秒后执行 <仓库>/scripts/m6/resolver/restore\.sh（第 [0-9]+ 轮）$
+CHANGE ^取消死人开关（第 [0-9]+ 轮）$
+CHANGE ^mkdir -m 755 /etc/resolver$
+CHANGE ^install -m 644 /Library/Application Support/claude-abroad-m6r/lock\.(claude\.ai|claude\.com|anthropic\.com|lock-test\.claude-abroad\.invalid) /etc/resolver/(claude\.ai|claude\.com|anthropic\.com|lock-test\.claude-abroad\.invalid)$
+CHANGE ^rm -f /etc/resolver/(claude\.ai|claude\.com|anthropic\.com|lock-test\.claude-abroad\.invalid)$
+CHANGE ^rm -f /etc/resolver/<记录里的域名>（只删内容和记录一致的）$
+CHANGE ^rm -f /Library/Application Support/claude-abroad-m6r/lock\.(claude\.ai|claude\.com|anthropic\.com|lock-test\.claude-abroad\.invalid|<记录里的域名>)$
+CHANGE ^rm -f /Library/Application Support/claude-abroad-m6r/(deadman_gen|created_dir|deadman\.log)$
+CHANGE ^rmdir /etc/resolver（是 run\.sh 建的、并且已经空了才删）$
+CHANGE ^rmdir /Library/Application Support/claude-abroad-m6r$
+QUERY ^scutil --proxy$
+QUERY ^scutil --dns$
+QUERY ^netstat -rn -f inet$
+QUERY ^dscacheutil -q host -a name [a-z0-9.-]+$
+QUERY ^dig \+time=1 \+tries=1 @(198\.18\.0\.2|127\.0\.0\.1)( -p [0-9]+)? [a-z0-9.-]+ A$
+QUERY ^curl -sS -m 10 -o /dev/null -w '%\{http_code\} %\{remote_ip\}' https://(claude\.ai|api\.anthropic\.com)/$
