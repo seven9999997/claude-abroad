@@ -73,7 +73,7 @@ func claudeService(skip bool, logger *log.Logger) (*claudeproc.Service, error) {
 // 也不写 Mac 的时区和语言），启动时打醒目日志（m4-plan v2.5 建议改 3；参数保留到 M6 的发布检查）。
 func regionVM(f realFlags, logger *log.Logger) state.VMRegion {
 	if f.skipRegion {
-		logger.Printf("!!!!!!!! --dev-skip-region：不同步时区和语言（开发用；发布构建不能带这个参数）!!!!!!!!")
+		logger.Printf("!!!!!!!! 开发构建：不同步时区和语言（只在开发构建里能打开）!!!!!!!!")
 		return nil
 	}
 	return daemon.ExternalVM{Dir: f.vmDir}

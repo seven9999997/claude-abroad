@@ -62,7 +62,6 @@ var commands = []command{
 var notInCLI = map[string]string{
 	"restore-alias":         "回国的别名，命令行用 restore",
 	"restore-preview":       "设置窗口用；命令行的 restore 在确认前已经打印同样的清单",
-	"baseline":              "应用主代理的旧别名",
 	"exit-get":              "单个出口的摘要，exit ls 已包含",
 	"envcheck-get":          "最近一轮的结果，status 已包含",
 	"envcheck-settings-get": "设置窗口用",

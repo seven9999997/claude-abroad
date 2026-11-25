@@ -107,4 +107,8 @@ sed 's/swift:pageLoadStates/swift:noSuchTestXYZ/; s/^| D6 |.*/| D6 | 诊断包 |
 out=$(M5_CRITERIA_DOC="${TMP}/crit-evil.md" scripts/m5/check-criteria.sh 2>&1); rc=$?
 [ $rc != 0 ] && printf '%s' "$out" | grep -q 'noSuchTestXYZ' && printf '%s' "$out" | grep -q 'D6 没有着落' && ok "h. 反例：不存在的测试名、没有着落的一行都被拦下" || bad "h. 反例没拦下：$out"
 
+# ---- M6-1：二进制认识要传的开发参数（正式构建在改动之前被拦下的反例）----
+devout=$(scripts/lib/devflags-selftest.sh m5 --dev-skip-claude-kill 2>&1)
+while IFS= read -r l; do case "$l" in ✓*) ok "M6-1 ${l#✓ }" ;; ✗*) bad "M6-1 ${l#✗ }" ;; esac; done <<<"$devout"
+
 [ $fails = 0 ] && echo "✓ 自测全部通过" || { echo "✗ 自测有 ${fails} 处不通过"; exit 1; }

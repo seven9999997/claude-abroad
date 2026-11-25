@@ -103,6 +103,11 @@ precheck() {
   for f in abroad-vm abroadd abroad; do
     [ -x "${BIN}/${f}" ] || reasons+=("缺少 ${BIN}/${f}：见 README 的准备步骤")
   done
+  miss=""
+  [ "${REAL_KILL}" != 1 ] && [ -x "${BIN}/abroadd" ] && miss=$(m5_dev_flags_missing "${BIN}/abroadd" --dev-skip-claude-kill)
+  if [ -n "${miss}" ]; then
+    reasons+=("${BIN}/abroadd 认不出 --dev-skip-claude-kill：请按 README 用 go build -tags abroaddev 重新编出（开发参数只在开发构建里有）（或设 M5_REAL_KILL=1 用正式构建）")
+  fi
   [ -x "${APP}/Contents/MacOS/ClaudeAbroad" ] || reasons+=("缺少应用包 ${APP}：先执行 scripts/dev/app-bundle.sh")
   [ -f guest/out/Image ] || reasons+=("缺少虚拟机镜像 guest/out：先跑一次 scripts/dev/vm-up.sh --no-panic")
   m5_log "回国时 Claude 进程：$([ "${REAL_KILL}" = 1 ] && echo "M5_REAL_KILL=1：会被强制结束，未保存的内容会丢" || echo "默认只预览，不结束")"

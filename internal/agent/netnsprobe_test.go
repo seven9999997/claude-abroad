@@ -1,3 +1,5 @@
+//go:build abroaddev
+
 package agent
 
 import (
@@ -264,7 +266,7 @@ func TestNetnsProbeHTTP(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("没有开发标记时应是 404：%d", rec.Code)
 	}
-	h = (&API{State: &State{}, NetnsProbe: &NetnsProbe{Ops: newFakeProbe()}}).Handler()
+	h = (&API{State: &State{}, Dev: map[string]http.Handler{"/v1/dev/netns-probe": &NetnsProbe{Ops: newFakeProbe()}}}).Handler()
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/dev/netns-probe", nil))
 	if rec.Code != http.StatusMethodNotAllowed {

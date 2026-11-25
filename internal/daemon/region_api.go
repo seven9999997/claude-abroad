@@ -321,7 +321,7 @@ type MainProxyResult struct {
 
 // handleApplyMainProxy 是“应用主代理”（m4-plan v2.4 决定 4）：经主代理跑一轮带位置查询的检查 → 保存基准 →
 // 按基准确定目标地区（手动指定的目标保持不变）并锁定 → 已在启用状态时同步地区（会变时两步确认）。
-// 主代理配置下发给虚拟机仍由开发工具在此之前完成。POST /v1/baseline 是它的别名（规则从查询参数 rule 取）。
+// 主代理配置下发给虚拟机仍由开发工具在此之前完成。规则也可以从查询参数 rule 取）。
 func (d *Daemon) handleApplyMainProxy(w http.ResponseWriter, r *http.Request) {
 	var req MainProxyRequest
 	if !readConfirmBody(w, r, &req) {

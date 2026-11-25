@@ -49,7 +49,7 @@ trap cleanup EXIT
 log "# M4-8 分流出口经 daemon 的真实虚拟机阶段，macOS $(sw_vers -productVersion)，Go $(go version | awk '{print $3}')"
 if [ "${BUILD}" = 1 ]; then
   log "构建 abroad-agent、镜像、开发版 abroad-vm、abroad-dev"
-  env GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o guest/out/abroad-agent ./cmd/abroad-agent || fail "构建 abroad-agent"
+  env GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags abroaddev -trimpath -ldflags "-s -w" -o guest/out/abroad-agent ./cmd/abroad-agent || fail "构建 abroad-agent"
   go run ./cmd/abroad-imagebuild build -agent guest/out/abroad-agent >>"${EVID}" 2>&1 || fail "构建镜像"
   go run ./cmd/abroad-imagebuild verify >>"${EVID}" 2>&1 || fail "镜像检查"
   env CGO_ENABLED=1 go build -tags abroaddev -o "${BIN}/abroad-vm-dev" ./cmd/abroad-vm || fail "构建 abroad-vm-dev"

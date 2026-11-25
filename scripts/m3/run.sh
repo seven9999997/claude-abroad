@@ -144,6 +144,16 @@ precheck() {
   for f in abroad-vm-dev abroadd abroad-dev; do
     [ -x "${BIN}/${f}" ] || reasons+=("缺少 ${BIN}/${f}：见 README 的准备步骤")
   done
+  miss=""
+  [ -x "${BIN}/abroadd" ] && miss=$(m3_dev_flags_missing "${BIN}/abroadd" --dev-skip-claude-kill --dev-skip-region)
+  if [ -n "${miss}" ]; then
+    reasons+=("${BIN}/abroadd 认不出要传的开发参数（$(echo ${miss})）：请按 README 用 go build -tags abroaddev 重新编出（开发参数只在开发构建里有）")
+  fi
+  miss=""
+  [ -x "${BIN}/abroad-vm-dev" ] && miss=$(m3_dev_flags_missing "${BIN}/abroad-vm-dev" --dev-agent)
+  if [ -n "${miss}" ]; then
+    reasons+=("${BIN}/abroad-vm-dev 认不出 --dev-agent：请按 README 用 go build -tags abroaddev 重新编出（开发参数只在开发构建里有）")
+  fi
   [ -f guest/out/Image ] || reasons+=("缺少虚拟机镜像 guest/out：先跑一次 scripts/dev/vm-up.sh --no-panic")
   # 6. Chrome 正在运行：已有进程里的连接、新开的窗口会混进判定，请先退出（只读查询进程名，不结束它）。
   if pgrep -x "${CHROME_APP}" >/dev/null 2>&1; then

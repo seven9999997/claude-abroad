@@ -18,7 +18,7 @@
 ## 准备（两级共用，只做一次）
 
 1. 打包应用：`scripts/dev/app-bundle.sh`（编译、组装 `app/.build/bundle/ClaudeAbroad.app`、临时签名；不安装、不启动）。约 1–3 分钟。
-2. 第二级还要：`go build -o scripts/dev/out/bin/ ./cmd/abroadd ./cmd/abroad-vm ./cmd/abroad ./cmd/abroad-dev`；虚拟机镜像 `guest/out` 已经有（M2 起就有；没有时跑一次 `scripts/dev/vm-up.sh --no-panic`）。
+2. 第二级还要：`go build -tags abroaddev -o scripts/dev/out/bin/ ./cmd/abroadd`（开发构建：默认要传 `--dev-skip-claude-kill`）、`go build -o scripts/dev/out/bin/ ./cmd/abroad-vm ./cmd/abroad ./cmd/abroad-dev`（正式构建）；虚拟机镜像 `guest/out` 已经有（M2 起就有；没有时跑一次 `scripts/dev/vm-up.sh --no-panic`）。
 
 ## 第一级：假系统走查
 

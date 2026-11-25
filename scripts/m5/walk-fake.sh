@@ -63,7 +63,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM HUP
 
-go build -o "${TMP}/abroadd" ./cmd/abroadd
+go build -tags abroaddev -o "${TMP}/abroadd" ./cmd/abroadd # 开发构建才有假系统模式（M6-1）
 
 if [[ "${MODE}" = check ]]; then
   # 空跑：不打开应用。起来 → 应用主代理（属主，直接成功）→ 只停后台 → 同一路径再起来 → 读状态和引导进度。

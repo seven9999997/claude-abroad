@@ -103,8 +103,8 @@ type Route struct {
 func (r Route) Pattern() string { return r.Method + " " + r.Path }
 
 // Forbidden 是永远不能注册的接口（设计 11.1 的敏感清单里，M5 不提供、也不允许悄悄加上的）：
-// 读取凭据、打开调试终端、改 Claude 进程清单。按路径片段匹配。
-var Forbidden = []string{"credential", "secret", "debug", "shell", "terminal", "claude-procs", "process-list"}
+// 读取凭据、打开调试终端、改 Claude 进程清单；以及已移除的旧别名 /v1/baseline（M6-1，不允许再加回来）。按路径片段匹配。
+var Forbidden = []string{"credential", "secret", "debug", "shell", "terminal", "claude-procs", "process-list", "/v1/baseline"}
 
 // CheckRoutes 检查路由表：ID 和“方法 路径”不重复；路径以 /v1/ 开头；级别有效；没有命中“不能注册”的清单。
 func CheckRoutes(rs []Route) error {

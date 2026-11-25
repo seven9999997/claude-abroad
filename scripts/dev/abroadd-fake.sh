@@ -18,7 +18,7 @@ mkdir -p "${OUT}/bin"
 log() { echo "[$(date +%H:%M:%S)] $*" | tee -a "${EVID}"; }
 fail() { log "✗ 失败：$*"; exit 1; }
 
-go build -o "${OUT}/bin/abroadd" ./cmd/abroadd
+go build -tags abroaddev -o "${OUT}/bin/abroadd" ./cmd/abroadd # 开发构建才有假系统模式（M6-1）
 PID=""
 cleanup() {
   if [[ -n "${PID}" ]] && kill -0 "${PID}" 2>/dev/null && [[ "$(ps -p "${PID}" -o comm= 2>/dev/null)" == *abroadd ]]; then

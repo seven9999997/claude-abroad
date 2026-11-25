@@ -12,8 +12,10 @@ import (
 
 // i. 默认（发布）构建里没有任何能打开开发接口的参数；开发标记只出现在带 abroaddev 构建标签的文件里。
 func TestNoDevSwitchInDefaultBuild(t *testing.T) {
-	if _, err := parseFlags([]string{"--state-dir", "x", "--dev-agent"}, io.Discard); err == nil {
-		t.Fatal("默认构建不应有 --dev-agent")
+	for _, f := range []string{"--dev-agent", "--outbound-open"} {
+		if _, err := parseFlags([]string{"--state-dir", "x", f}, io.Discard); err == nil {
+			t.Fatalf("默认构建不应有 %s", f)
+		}
 	}
 	files, _ := filepath.Glob("*.go")
 	for _, f := range files {
@@ -21,7 +23,9 @@ func TestNoDevSwitchInDefaultBuild(t *testing.T) {
 			continue
 		}
 		b, _ := os.ReadFile(f)
-		if strings.Contains(string(b), "devAgent = true") || (strings.Contains(string(b), "dev-agent") && !strings.Contains(string(b), "//go:build abroaddev")) {
+		dev := strings.Contains(string(b), "//go:build abroaddev")
+		if strings.Contains(string(b), "devAgent = true") || strings.Contains(string(b), "outboundOpen = true") ||
+			(!dev && (strings.Contains(string(b), `"dev-agent"`) || strings.Contains(string(b), `"outbound-open"`) || strings.Contains(string(b), "--outbound-open"))) {
 			t.Errorf("%s：开发开关只能出现在带 abroaddev 构建标签的文件里", f)
 		}
 	}

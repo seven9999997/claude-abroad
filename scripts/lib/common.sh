@@ -211,6 +211,18 @@ ab_default_gw() { route -n get default 2>/dev/null | awk '/gateway:/{print $2}';
 ab_services() { networksetup -listallnetworkservices 2>/dev/null | tail -n +2 | grep -v '^\*' || true; }
 
 # 系统代理是否开着（HTTP、HTTPS、SOCKS、PAC、自动发现任一）。
+# 二进制认识要传的开发参数吗（M6-1：开发参数只在 go build -tags abroaddev 的构建里有）。$1 程序，其余是参数名（如 --dev-skip-region）。
+# 输出缺的参数名（每行一个）；都认识时返回 0，缺了返回 1，程序不能执行时返回 2。在前提检查里调用（改动任何东西之前）。
+ab_dev_flags_missing() {
+  local bin=$1 help f miss=0; shift
+  [ -x "$bin" ] || return 2
+  help=$("$bin" -h 2>&1)
+  for f in "$@"; do
+    printf '%s\n' "$help" | grep -qE -- "(^|[[:space:]])-?${f#--}([[:space:]=]|$)" || { printf '%s\n' "$f"; miss=1; }
+  done
+  return $miss
+}
+
 ab_system_proxy_on() {
   local out f; f=$(ab_v TEST_PROXY_FILE)
   if [ -n "$f" ]; then out=$(cat "$f"); else out=$(scutil --proxy 2>/dev/null); fi
@@ -221,7 +233,7 @@ ab_system_proxy_on() {
 ab_wrap() {
   local p=$1 f
   for f in test_guard log die do q require_root state_init state_set state_get state_add deadman_start deadman_stop \
-    arm_restore_trap kill_pidfile free_id user_create user_delete redact default_iface default_gw services system_proxy_on; do
+    arm_restore_trap kill_pidfile free_id user_create user_delete redact default_iface default_gw services system_proxy_on dev_flags_missing; do
     eval "${p}_${f}() { ab_${f} \"\$@\"; }"
   done
 }

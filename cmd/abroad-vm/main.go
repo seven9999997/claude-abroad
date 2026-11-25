@@ -1,10 +1,10 @@
 // abroad-vm 运行 Claude 出国的虚拟机（设计文档 3.1、4.4、7.1）。
 //
 //	abroad-vm run --image-dir guest/out --state-dir scripts/dev/out/state [--cpus 1] [--memory 256]
-//	              [--allow-outbound IPv4:端口]… [--first-hop host:port[,port|lo-hi…]]… [--outbound-open]
+//	              [--allow-outbound IPv4:端口]… [--first-hop host:port[,port|lo-hi…]]…
 //
 // 出站默认收紧（设计 4.5，M2-1a）：虚拟机只能连白名单和路线第一跳；第一跳是域名时由网关 DNS 代为解析
-// （abroad-vm 自己经 DoH 查，答出的地址才放行）。--outbound-open 只给开发用，恢复 M1 的“公网全放行”。
+// （abroad-vm 自己经 DoH 查，答出的地址才放行）。开发构建（-tags abroaddev）另有开放模式的开关，恢复 M1 的“公网全放行”（devflags_dev.go；发布构建没有）。
 //
 // 开发模式下以当前用户运行（不需要 sudo），状态目录里有：
 //
@@ -97,6 +97,9 @@ type options struct {
 // addDevFlags 由 abroaddev 构建标签的文件设置；默认（发布）构建里为 nil，没有任何能打开开发接口的参数。
 var addDevFlags func(fs *flag.FlagSet, o *options)
 
+// devCmdline 由开发构建设置：带 --dev-agent 时给内核命令行加开发标记。
+var devCmdline func(o options, cmdline string, logf func(string, ...any)) string
+
 // listFlag 是可重复的字符串参数。
 type listFlag []string
 
@@ -116,7 +119,6 @@ func parseFlags(args []string, w io.Writer) (options, error) {
 	var hops listFlag
 	fs.Var(&hops, "first-hop", "路线第一跳，host:port[,port|lo-hi…]，可重复，最多 8 项（设计 4.5）。虚拟机只能连它和白名单；"+
 		"两个都不给时什么公网都连不上")
-	fs.BoolVar(&o.outboundOpen, "outbound-open", false, "开发用：公网一律放行（M1 的行为），与 --first-hop 互斥")
 	var ddns listFlag
 	addDirectFlags(fs, "direct-", &o.direct, &ddns)
 	if addDevFlags != nil {
@@ -135,7 +137,7 @@ func parseFlags(args []string, w io.Writer) (options, error) {
 	}
 	o.allow = a
 	if o.outboundOpen && len(hops) > 0 {
-		return o, errors.New("--outbound-open 和 --first-hop 不能同时使用")
+		return o, errors.New("开放模式和 --first-hop 不能同时使用")
 	}
 	if o.firstHops, err = usernet.ParseFirstHops(hops); err != nil {
 		return o, err
@@ -169,9 +171,8 @@ func run(args []string, sigs <-chan os.Signal, factory vmhost.Factory, w io.Writ
 	defer sd.Close()
 	spec := vmhost.SpecFromImageDir(o.imageDir, sd.ConsoleLog())
 	spec.CPUs, spec.MemoryMiB = o.cpus, o.memory
-	if o.devAgent {
-		spec.Cmdline += " " + guestabi.CmdlineDev + "=1"
-		logf("警告：开发构建，内核命令行带 %s=1（agent 注册开发用的多出口接口）", guestabi.CmdlineDev)
+	if devCmdline != nil { // 只有开发构建有（devflags_dev.go）
+		spec.Cmdline = devCmdline(o, spec.Cmdline, logf)
 	}
 	if err := spec.Validate(); err != nil {
 		return err
@@ -200,7 +201,7 @@ func run(args []string, sigs <-chan os.Signal, factory vmhost.Factory, w io.Writ
 	defer os.Remove(sd.HostSock())
 
 	if o.outboundOpen {
-		logf("警告：--outbound-open（开发用）：虚拟机可以连任意公网地址，不按路线第一跳收紧")
+		logf("警告：开放模式（开发构建）：虚拟机可以连任意公网地址，不按路线第一跳收紧")
 	}
 	un, err := newUserNet(o, logf)
 	if err != nil {

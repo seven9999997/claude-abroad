@@ -37,7 +37,7 @@ trap stop_vm EXIT
 log "# M4-1 探查，macOS $(sw_vers -productVersion)，Go $(go version | awk '{print $3}')"
 if [ "${BUILD}" = 1 ]; then
   log "构建 abroad-agent、镜像（带 M4-1 的软件包）"
-  env GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o guest/out/abroad-agent ./cmd/abroad-agent || fail "构建 abroad-agent"
+  env GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags abroaddev -trimpath -ldflags "-s -w" -o guest/out/abroad-agent ./cmd/abroad-agent || fail "构建 abroad-agent"
   go run ./cmd/abroad-imagebuild build -agent guest/out/abroad-agent 2>&1 | tee -a "${EVID}"
   [ "${PIPESTATUS[0]}" -eq 0 ] || fail "构建镜像"
   go run ./cmd/abroad-imagebuild verify 2>&1 | tee -a "${EVID}"

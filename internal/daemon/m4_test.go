@@ -75,7 +75,7 @@ func TestBaselineRequiredAndAPI(t *testing.T) {
 		pr.mu.Lock()
 		pr.rep = r
 		pr.mu.Unlock()
-		if code, b := call(t, d, "POST", "/v1/baseline", nil); code != http.StatusUnprocessableEntity {
+		if code, b := call(t, d, "POST", "/v1/main-proxy/apply", nil); code != http.StatusUnprocessableEntity {
 			t.Fatalf("%s：应拒绝建立：%d %s", name, code, b)
 		}
 		if _, err := os.Stat(filepath.Join(e.dir, BaselineFile)); !os.IsNotExist(err) {
@@ -85,7 +85,7 @@ func TestBaselineRequiredAndAPI(t *testing.T) {
 	pr.mu.Lock()
 	pr.rep = passReport()
 	pr.mu.Unlock()
-	code, b = call(t, d, "POST", "/v1/baseline?rule=same_city", nil)
+	code, b = call(t, d, "POST", "/v1/main-proxy/apply?rule=same_city", nil)
 	var res MainProxyResult
 	sum := &res.Baseline
 	if code != 200 || json.Unmarshal(b, &res) != nil || sum.Rule != exitpolicy.RuleSameCity || sum.Country != "US" ||
@@ -96,7 +96,7 @@ func TestBaselineRequiredAndAPI(t *testing.T) {
 	if err != nil || fi.Mode().Perm() != 0o600 {
 		t.Fatalf("基准文件应是 0600：%v %v", fi, err)
 	}
-	if code, _ := call(t, d, "POST", "/v1/baseline?rule=bogus", nil); code != http.StatusUnprocessableEntity {
+	if code, _ := call(t, d, "POST", "/v1/main-proxy/apply?rule=bogus", nil); code != http.StatusUnprocessableEntity {
 		t.Fatal("规则不认识应拒绝")
 	}
 	post(t, d, "/v1/enable", 200)

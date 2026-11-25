@@ -179,7 +179,7 @@ start_vm() { # start_vm <镜像目录> <状态目录> [额外参数…]
   shift 2
   VM_STATE="${st}"
   VM_LOG="${OUT}/abroad-vm-${TS}-$(basename "${st}")-$((++VM_RUNS)).log"
-  "${BIN}/abroad-vm" run --image-dir "${img}" --state-dir "${st}" ${@+"$@"} 2>"${VM_LOG}" &
+  "${VM_BIN:-${BIN}/abroad-vm}" run --image-dir "${img}" --state-dir "${st}" ${@+"$@"} 2>"${VM_LOG}" &
   VM_PID=$!
   log "abroad-vm 已启动（pid ${VM_PID}，状态目录 ${st}）"
 }
@@ -211,7 +211,7 @@ log "仓库：${ROOT}"
 log "系统：$(sw_vers -productVersion) $(uname -m)；Go：$(go version | awk '{print $3}')"
 
 section "1. 构建 abroad-agent 和镜像"
-with_timeout 600 env GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o guest/out/abroad-agent ./cmd/abroad-agent ||
+with_timeout 600 env GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags abroaddev -trimpath -ldflags "-s -w" -o guest/out/abroad-agent ./cmd/abroad-agent ||
   fail "构建 abroad-agent"
 with_timeout 600 go run ./cmd/abroad-imagebuild build -agent guest/out/abroad-agent 2>&1 | tee -a "${EVID}"
 [[ ${PIPESTATUS[0]} -eq 0 ]] || fail "构建镜像"
@@ -223,6 +223,9 @@ ok "镜像就绪，内核 ${KVER}"
 section "2. 构建并签名 abroad-vm"
 with_timeout 600 env CGO_ENABLED=1 go build -o "${BIN}/abroad-vm" ./cmd/abroad-vm || fail "构建 abroad-vm（需要 Xcode 命令行工具）"
 scripts/dev/sign.sh "${BIN}/abroad-vm" | tee -a "${EVID}"
+# 开发版（-tags abroaddev，M6-1）：开放模式、--dev-agent 只在它里有；正式构建的 abroad-vm 留给真机脚本。
+with_timeout 600 env CGO_ENABLED=1 go build -tags abroaddev -o "${BIN}/abroad-vm-dev" ./cmd/abroad-vm || fail "构建开发版 abroad-vm"
+scripts/dev/sign.sh "${BIN}/abroad-vm-dev" | tee -a "${EVID}"
 with_timeout 600 go build -o "${BIN}/abroad-dev" ./cmd/abroad-dev || fail "构建 abroad-dev"
 ok "abroad-vm 已签名"
 
@@ -231,7 +234,7 @@ STATE="${OUT}/state"
 rm -f "${STATE}/console.log"
 T0="$(now_ms)"
 # 阶段 A 的 4f 要测任意公网目标的出站，用开发用的开放模式（M2-1a 起默认收紧）。
-start_vm guest/out "${STATE}" --outbound-open
+VM_BIN="${BIN}/abroad-vm-dev" start_vm guest/out "${STATE}" --outbound-open
 wait_health 90 || fail "90 秒内 health 不通"
 T1="$(now_ms)"
 ok "health 可达，从启动 abroad-vm 到 health 返回用时 $((T1 - T0)) 毫秒"

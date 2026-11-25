@@ -94,7 +94,7 @@ func (v ExternalVM) Start(ctx context.Context) error {
 	case last == nil:
 		return nil
 	case errors.Is(last, ErrVMOpen):
-		return usererror.New("确认虚拟机", "虚拟机的出站没有收紧到主代理第一跳（outbound_mode 不是 first_hop）", "请不带 --outbound-open 重新启动 abroad-vm。", last)
+		return usererror.New("确认虚拟机", "虚拟机的出站没有收紧到主代理第一跳（outbound_mode 不是 first_hop）", "请用正式构建（或不打开出站的方式）重新启动 abroad-vm。", last)
 	case errors.Is(last, ErrVMNotRunning):
 		return usererror.New("确认虚拟机", "虚拟机没有启动（找不到它的控制接口）", "请先启动 abroad-vm，再启用。", last)
 	}

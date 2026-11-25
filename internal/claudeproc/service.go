@@ -29,7 +29,7 @@ type Service struct {
 }
 
 // SkipNotice 是不结束进程时预览里的说明。
-const SkipNotice = "开发模式（--dev-skip-claude-kill）：本次不会结束这些进程"
+const SkipNotice = "开发模式：本次不会结束这些进程"
 
 func (s *Service) logf(format string, args ...any) {
 	if s.Logf != nil {
@@ -56,7 +56,7 @@ func (s *Service) Preview(context.Context) (Preview, error) {
 // KillClaude 实现 state.Killer：结束全部 Claude 进程并确认已退出；结束不了时返回 *LeftError（带数量）。
 func (s *Service) KillClaude(ctx context.Context) error {
 	if s.Skip {
-		s.logf("!!!!!!!! --dev-skip-claude-kill：没有结束 Claude 进程（开发用；发布构建不能带这个参数）!!!!!!!!")
+		s.logf("!!!!!!!! 开发模式：没有结束 Claude 进程（只有开发构建能这样运行）!!!!!!!!")
 		return nil
 	}
 	if s.Killer == nil {

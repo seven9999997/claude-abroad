@@ -121,6 +121,11 @@ precheck() {
   for f in abroad-vm abroadd abroad-dev; do
     [ -x "${BIN}/${f}" ] || reasons+=("缺少 ${BIN}/${f}：见 README 的准备步骤")
   done
+  miss=""
+  [ -x "${BIN}/abroadd" ] && miss=$(m2_dev_flags_missing "${BIN}/abroadd" --dev-skip-claude-kill --dev-skip-region)
+  if [ -n "${miss}" ]; then
+    reasons+=("${BIN}/abroadd 认不出要传的开发参数（$(echo ${miss})）：请按 README 用 go build -tags abroaddev 重新编出（开发参数只在开发构建里有）")
+  fi
   [ -f guest/out/Image ] || reasons+=("缺少虚拟机镜像 guest/out：先跑一次 scripts/dev/vm-up.sh --no-panic")
   m2_log "提醒：运行期间会断网几次（见 README），请先结束 Claude Code 会话和其他要紧的网络任务。"
   if [ ${#reasons[@]} -gt 0 ]; then

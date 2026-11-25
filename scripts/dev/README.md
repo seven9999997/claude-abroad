@@ -95,6 +95,26 @@ vm-up 在阶段 D 之后运行 `abroad-dev daemon-sim --vm-dir <状态目录> --
 
 软件包清单由 `go run ./cmd/abroad-imagebuild pin-packages` 生成（校验索引签名、解依赖、核对每个包，打印新旧差异），见 `guest/manifest.json` 的 `packages`。
 
+## 开发构建与发布构建（M6-1）
+
+开发功能要带 `abroaddev` 构建标签才有；不带标签的默认构建就是发布形态（忘了加标签得到的是安全的那一种）：
+
+| 程序 | 只在开发构建里有 |
+|---|---|
+| abroadd | `--fake-system`、`--fake-main-proxy`、`--dev-skip-claude-kill`、`--dev-skip-region` |
+| abroad-vm | `--outbound-open`、`--dev-agent` |
+| abroad-agent（镜像里） | 开发用的多出口 `/v1/dev-exits`、M4-1 的探查、M4-7 的同机对端（整段不编译） |
+
+```sh
+go test -tags abroaddev -race -count=1 ./internal/... ./cmd/...   # 开发构建的全量测试（含假系统、开发出口）
+go build ./... && go vet ./... && go test ./internal/... ./cmd/... # 默认构建（CLAUDE.md 的命令，不改也能过）
+go build -tags abroaddev -o scripts/dev/out/bin/abroadd ./cmd/abroadd    # 真机脚本、第一级走查要传开发参数
+CGO_ENABLED=1 go build -tags abroaddev -o scripts/dev/out/bin/abroad-vm-dev ./cmd/abroad-vm
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags abroaddev -trimpath -ldflags "-s -w" -o guest/out/abroad-agent ./cmd/abroad-agent
+```
+
+用到开发参数的真机脚本在前提检查里核对二进制认识这些参数（`ab_dev_flags_missing`），不认识就在改动任何东西之前退出。vm-up.sh、exits-e2e.sh 等开发脚本自己按需带标签编译（agent 和开放模式的 abroad-vm 用开发构建；`scripts/dev/out/bin/abroad-vm` 仍是正式构建，留给真机脚本）。
+
 ## 手动运行虚拟机
 
 ```sh

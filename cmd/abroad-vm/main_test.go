@@ -55,13 +55,6 @@ func TestParseOutboundFlags(t *testing.T) {
 	if err != nil || len(o.firstHops) != 2 || o.outboundOpen {
 		t.Fatalf("%+v %v", o, err)
 	}
-	o, err = parseFlags([]string{"--state-dir", "s", "--outbound-open"}, &w)
-	if err != nil || !o.outboundOpen {
-		t.Fatalf("%+v %v", o, err)
-	}
-	if _, err := parseFlags([]string{"--state-dir", "s", "--outbound-open", "--first-hop", "8.8.4.4:443"}, &w); err == nil {
-		t.Error("--outbound-open 和 --first-hop 应互斥")
-	}
 	for _, bad := range []string{"8.8.4.4", "10.0.0.1:443", "bad_host:443", "x.com:0"} {
 		if _, err := parseFlags([]string{"--state-dir", "s", "--first-hop", bad}, &w); err == nil {
 			t.Errorf("--first-hop %s 应被拒", bad)
@@ -80,14 +73,14 @@ func TestNewUserNetModes(t *testing.T) {
 	if st.OutboundMode != "first_hop" || st.FirstHopCount != 1 || u.dialer.BeforeDial == nil || u.gwdns == nil {
 		t.Fatalf("默认应收紧：%+v", st)
 	}
-	o, _ = parseFlags([]string{"--state-dir", "s", "--outbound-open"}, io.Discard)
+	o.outboundOpen, o.firstHops = true, nil // 开放模式（只有开发构建的参数能打开；这里直接设字段测模式本身）
 	u, err = newUserNet(o, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(u.close)
 	if st := u.stats(); st.OutboundMode != "open" || u.dialer.BeforeDial != nil || u.gwdns != nil {
-		t.Fatalf("--outbound-open 应是开放模式：%+v", st)
+		t.Fatalf("开放模式：%+v", st)
 	}
 }
 

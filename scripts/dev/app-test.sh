@@ -27,7 +27,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-go build -o "${TMP}/abroadd" ./cmd/abroadd
+go build -tags abroaddev -o "${TMP}/abroadd" ./cmd/abroadd # 开发构建才有假系统模式（M6-1）
 "${TMP}/abroadd" --fake-system --fake-main-proxy --state-dir "${ST}" 2>"${TMP}/abroadd.log" &
 PID=$!
 SOCK="${ST}/api.sock"

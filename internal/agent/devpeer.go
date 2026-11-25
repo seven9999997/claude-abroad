@@ -1,3 +1,5 @@
+//go:build abroaddev
+
 package agent
 
 import (

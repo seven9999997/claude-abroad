@@ -1,3 +1,5 @@
+//go:build abroaddev
+
 package agent
 
 // NetnsProbe 是 M4-1 的探查接口（m4-plan M4-1，风险 R19、R5）：只在内核命令行带 abroad.dev=1 时注册
@@ -145,17 +147,6 @@ func (r *probeRun) step(name string, fn func() (string, error)) bool {
 	}
 	r.rep.Steps = append(r.rep.Steps, s)
 	return err == nil
-}
-
-func firstLine(s string) string {
-	s = strings.TrimSpace(s)
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		s = s[:i]
-	}
-	if len(s) > 200 {
-		s = s[:200]
-	}
-	return s
 }
 
 // sh 依次执行多条命令，任一失败就返回（带命令名，不带参数里可能的路径以外的东西）。

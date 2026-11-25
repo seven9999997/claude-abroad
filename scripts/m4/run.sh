@@ -158,6 +158,13 @@ precheck() {
   for f in abroad-vm abroadd abroad-dev; do
     [ -x "${BIN}/${f}" ] || reasons+=("缺少 ${BIN}/${f}：见 README 的准备步骤")
   done
+  local need=(--dev-skip-region)
+  [ "${REAL_KILL}" = 1 ] || need+=(--dev-skip-claude-kill)
+  miss=""
+  [ -x "${BIN}/abroadd" ] && miss=$(m4_dev_flags_missing "${BIN}/abroadd" "${need[@]}")
+  if [ -n "${miss}" ]; then
+    reasons+=("${BIN}/abroadd 认不出要传的开发参数（$(echo ${miss})）：请按 README 用 go build -tags abroaddev 重新编出（开发参数只在开发构建里有）")
+  fi
   [ -f guest/out/Image ] || reasons+=("缺少虚拟机镜像 guest/out：先跑一次 scripts/dev/vm-up.sh --no-panic")
   # 将要改成的时区、会被预览或结束的进程数（只读估算）。
   m4_log "目标时区：${M4_TZ:-（取“应用主代理”时按出口算出的时区）}；语言：$([ "${CHANGE_LANG}" = 1 ] && echo "改成 ${M4_LANG:-en-US}" || echo 不改（保持你现在的语言和地区格式）)"

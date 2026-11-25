@@ -1413,44 +1413,6 @@
         "x-level": "read"
       }
     },
-    "/v1/baseline": {
-      "post": {
-        "description": "已过时：应用主代理的别名，保留到 M6",
-        "operationId": "baseline",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DaemonMainProxyRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DaemonMainProxyResult"
-                }
-              }
-            },
-            "description": "成功"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiErrorBody"
-                }
-              }
-            },
-            "description": "出错"
-          }
-        },
-        "x-level": "sensitive"
-      }
-    },
     "/v1/disable": {
       "post": {
         "description": "停用",

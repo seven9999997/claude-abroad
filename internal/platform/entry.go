@@ -19,7 +19,7 @@ func MacOnlyEntry(prog, goos string) (msg string, code int) {
 // 不能时返回要打印的说明和退出码；能时返回 ("", 0)。
 func RealModeEntry(goos string) (msg string, code int) {
 	if goos == "windows" {
-		return "abroadd：真实模式在 Windows 上" + ErrUnsupported.Error() + "（开发时可以用 --fake-system 试运行）", ExitUnsupported
+		return "abroadd：真实模式在 Windows 上" + ErrUnsupported.Error() + "（开发构建里有假系统模式可以试运行）", ExitUnsupported
 	}
 	return "", 0
 }

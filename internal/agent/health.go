@@ -201,15 +201,12 @@ type API struct {
 	Logs      map[string]*RingLog
 	MainProxy http.Handler
 	Clock     http.Handler
-	DevExits  http.Handler // 只有开发标记打开时非 nil（m3-plan v2.8 决定 7）
-	// NetnsProbe 是 M4-1 的探查（POST /v1/dev/netns-probe），只有开发标记打开时非 nil。
-	NetnsProbe http.Handler
 	// Region 是 PUT /v1/region（M4-5）。
 	Region http.Handler
 	// Exits 是 GET、PUT /v1/exits（M4-7）。
 	Exits http.Handler
-	// DevPeer 是 M4-7 端到端用的同机对端（/v1/dev/exit-peer），只有开发标记打开时非 nil。
-	DevPeer http.Handler
+	// Dev 是开发用的接口（路径 → 处理器）：只有开发构建（serve_dev.go）在内核命令行带开发标记时才填（M6-1）。
+	Dev map[string]http.Handler
 }
 
 // Handler 返回路由。
@@ -222,20 +219,14 @@ func (a *API) Handler() http.Handler {
 	if a.Clock != nil {
 		mux.Handle("/v1/clock", a.Clock)
 	}
-	if a.DevExits != nil {
-		mux.Handle("/v1/dev-exits", a.DevExits)
-	}
-	if a.NetnsProbe != nil {
-		mux.Handle("/v1/dev/netns-probe", a.NetnsProbe)
-	}
 	if a.Region != nil {
 		mux.Handle("/v1/region", a.Region)
 	}
 	if a.Exits != nil {
 		mux.Handle("/v1/exits", a.Exits)
 	}
-	if a.DevPeer != nil {
-		mux.Handle("/v1/dev/exit-peer", a.DevPeer)
+	for path, h := range a.Dev {
+		mux.Handle(path, h)
 	}
 	mux.HandleFunc("/v1/logs", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

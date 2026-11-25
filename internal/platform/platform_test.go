@@ -35,7 +35,7 @@ func TestEntries(t *testing.T) {
 		t.Fatalf("%q %d", m, c)
 	}
 	m, c = RealModeEntry("windows")
-	if c != ExitUnsupported || !strings.Contains(m, "尚未支持") || !strings.Contains(m, "--fake-system") {
+	if c != ExitUnsupported || !strings.Contains(m, "尚未支持") || !strings.Contains(m, "假系统模式") || strings.Contains(m, "--") {
 		t.Fatalf("%q %d", m, c)
 	}
 }

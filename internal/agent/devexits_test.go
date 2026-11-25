@@ -1,3 +1,5 @@
+//go:build abroaddev
+
 package agent
 
 import (
@@ -43,7 +45,7 @@ func TestDevExitsHandler(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "sing-box.json")
 	dev := &DevExits{Set: &SingBoxSet{Path: cfg, Password: strings.Repeat("p", 32), Base: context.Background()}}
-	h := (&API{State: &State{}, DevExits: dev}).Handler()
+	h := (&API{State: &State{}, Dev: map[string]http.Handler{"/v1/dev-exits": dev}}).Handler()
 	put := func(body string) int {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/v1/dev-exits", strings.NewReader(body)))

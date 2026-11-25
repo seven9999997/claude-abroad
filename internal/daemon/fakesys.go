@@ -42,7 +42,7 @@ type System struct {
 	// Locale、VMRegion 是地区（M4-5）：两个都非 nil 才做地区同步（还要有锁定的目标或出口基准）。
 	Locale   sysnet.MacRegion
 	VMRegion state.VMRegion
-	// Baseline 是出口基准（m4-plan v2.2 决定 6）：非 nil 时没有基准不能启用，并提供 POST /v1/baseline。
+	// Baseline 是出口基准（m4-plan v2.2 决定 6）：非 nil 时没有基准不能启用，并提供 POST /v1/main-proxy/apply（应用主代理）。
 	// 开发用的最小检查模式（假系统、daemon-sim）为 nil。
 	Baseline *BaselineService
 	// ExitVM、CheckExit 是分流出口的下发和按出口的检查（M4-8）：ExitVM 为 nil 时出口不下发（正式的出口一律不可用，

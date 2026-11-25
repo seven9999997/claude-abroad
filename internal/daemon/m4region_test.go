@@ -225,8 +225,11 @@ func TestApplyMainProxyRegion(t *testing.T) {
 	if !e.locale().Equal(desired(e, jp)) || status(t, d).Region.Target.Country != "JP" {
 		t.Fatalf("%+v", e.locale())
 	}
-	// /v1/baseline 是别名。
-	if code, _ := call(t, d, "POST", "/v1/baseline?rule=same_country", nil); code != 200 {
+	// /v1/baseline 别名已在 M6-1 移除：回 404；应用主代理照常。
+	if code, _ := call(t, d, "POST", "/v1/baseline?rule=same_country", nil); code != http.StatusNotFound {
+		t.Fatalf("旧别名应 404：%d", code)
+	}
+	if code, _ := call(t, d, "POST", "/v1/main-proxy/apply?rule=same_country", nil); code != 200 {
 		t.Fatalf("别名：%d", code)
 	}
 	// 手动指定后再应用主代理：目标保持手动的。

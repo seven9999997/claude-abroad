@@ -25,7 +25,7 @@ R1 不通过时不要跑本脚本，把 R1 的日志贴回来。本脚本的第�
 - 编出程序（在仓库根目录、普通用户）：
   ```sh
   scripts/dev/vm-up.sh --no-panic                  # 构建镜像、编出并签名 abroad-vm、abroad-dev
-  go build -o scripts/dev/out/bin/abroadd ./cmd/abroadd
+  go build -tags abroaddev -o scripts/dev/out/bin/abroadd ./cmd/abroadd   # 开发构建：真机脚本要传 --dev-skip-… 参数（M6-1）
   ```
 - 先跑一次前提检查（只读、不需要 sudo）：
   ```sh

@@ -34,7 +34,7 @@
 - 编出程序（在仓库根目录、普通用户）：
   ```sh
   scripts/dev/vm-up.sh --no-panic                  # 构建镜像、编出并签名 abroad-vm（正式构建，不带开发标记）、abroad-dev
-  go build -o scripts/dev/out/bin/abroadd ./cmd/abroadd
+  go build -tags abroaddev -o scripts/dev/out/bin/abroadd ./cmd/abroadd   # 开发构建：真机脚本要传 --dev-skip-… 参数（M6-1）
   ```
 - 先跑一次前提检查（只读、不需要 sudo）：
   ```sh

@@ -97,12 +97,12 @@ func Serve(ctx context.Context, e *Env) error {
 	// 开发用的多出口：只有内核命令行带 abroad.dev=1 时才有（m3-plan v2.8 决定 7）。
 	// sing-box 配置的唯一写入者：main 加开发出口加分流出口（M4-7）。
 	sbset := &SingBoxSet{Path: e.path(guestabi.SingBoxConfig), Password: eng.socksPassword, Engine: eng.singBox, Base: ectx}
-	var dev *DevExits
 	var exitTable ExitTable = MainExits{SingBox: eng.singBox, Mihomo: eng.mihomo}
-	if b, err := os.ReadFile(e.path("/proc/cmdline")); err == nil && ParseDevCmdline(string(b)) {
-		dev = &DevExits{Set: sbset}
-		exitTable = devExitTable{MainExits: MainExits{SingBox: eng.singBox, Mihomo: eng.mihomo}, dev: dev}
-		e.logf("serve：开发标记已打开，注册 /v1/dev-exits")
+	var dev devHooks
+	if devSetup != nil { // 只有带 abroaddev 构建标签的版本有（serve_dev.go；M6-1）
+		if t, h := devSetup(e, sbset, MainExits{SingBox: eng.singBox, Mihomo: eng.mihomo}); h != nil {
+			exitTable, dev = t, h
+		}
 	}
 	// 分流出口（M4-7）：PUT /v1/exits 下发；每个出口的引擎随 ectx 停。
 	exits := newServeExits(ectx, e, loader, sbset, dev != nil)
@@ -158,31 +158,9 @@ func Serve(ctx context.Context, e *Env) error {
 				eng.mihomo.Restart(ctx)
 			}
 		}}
-	if dev != nil { // 不能把 nil 指针包进接口
-		api.DevExits = dev
-		// M4-1 的探查（m4-plan M4-1）：同样只在开发标记打开时注册。
-		pops := newProbeOps(func(names []string) []kmod.Result {
-			var out []kmod.Result
-			for _, n := range names {
-				rs, err := loader.LoadNames([]string{n})
-				if err != nil {
-					rs = []kmod.Result{{Name: n, Error: err.Error()}}
-				}
-				out = append(out, rs...)
-			}
-			return out
-		})
-		api.NetnsProbe = &NetnsProbe{Ops: pops}
-		e.logf("serve：开发标记已打开，注册 /v1/dev/netns-probe")
-		if dops, ok := pops.(devPeerOps); ok {
-			peer := &DevPeer{Ops: dops, Exits: exits}
-			api.DevPeer = peer
-			defer func() {
-				t0 := time.Now()
-				peer.teardown()
-				e.logf("serve：拆开发用对端用时 %s", time.Since(t0).Round(time.Millisecond))
-			}()
-			e.logf("serve：开发标记已打开，注册 /v1/dev/exit-peer")
+	if dev != nil {
+		if teardown := dev.register(api, e, loader, exits); teardown != nil {
+			defer teardown()
 		}
 	}
 	srv := NewServer(api.Handler())
@@ -359,6 +337,15 @@ func ParseNetCmdline(cmdline string) (NetConfig, error) {
 }
 
 // newServeExits 准备分流出口的管理器（还不建任何东西：等 PUT /v1/exits）。
+// devHooks 是开发用的接口（多出口、M4-1 的探查、同机对端）：只有带 abroaddev 构建标签的版本有实现（serve_dev.go）。
+// 默认（发布）构建里 devSetup 为 nil，这些接口的代码整段不编译（M6-1，m6-plan v2.1）。
+type devHooks interface {
+	register(api *API, e *Env, loader kmod.Loader, exits *Exits) (teardown func())
+}
+
+// devSetup 读内核命令行的开发标记（abroad.dev=1），打开时返回带开发出口的出口表和开发接口。
+var devSetup func(e *Env, sbset *SingBoxSet, main MainExits) (ExitTable, devHooks)
+
 func newServeExits(ctx context.Context, e *Env, loader kmod.Loader, sbset *SingBoxSet, devMode bool) *Exits {
 	runner := e.Runner
 	if runner == nil {

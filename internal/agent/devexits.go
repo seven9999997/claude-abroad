@@ -1,11 +1,11 @@
+//go:build abroaddev
+
 package agent
 
 import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
@@ -92,24 +92,4 @@ func (t devExitTable) Lookup(tag string) (known, up bool) {
 		return true, t.SingBox.Status().State == EngineRunning
 	}
 	return t.MainExits.Lookup(tag)
-}
-
-func writeAtomic(path string, b []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".dev-exits-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
 }

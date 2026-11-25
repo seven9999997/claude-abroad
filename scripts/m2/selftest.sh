@@ -97,5 +97,9 @@ echo
 # m4-plan v2.5 建议改 3：abroadd 的 LaunchDaemon 模板带 --dev-skip-region（这份脚本不改时区和语言）；启用之前先应用主代理。
 if grep -q '<string>--dev-skip-region</string>' scripts/m2/launchd.plist.tmpl; then ok "plist 模板带 --dev-skip-region"; else bad "plist 模板没带 --dev-skip-region"; fi
 if awk '/api POST \/v1\/main-proxy\/apply/{a=NR} /api POST \/v1\/enable/{e=NR} END{exit !(a && e && a<e)}' scripts/m2/run.sh; then ok "启用之前先应用主代理"; else bad "启用之前没有应用主代理"; fi
+# ---- M6-1：二进制认识要传的开发参数（正式构建在改动之前被拦下的反例）----
+devout=$(scripts/lib/devflags-selftest.sh m2 --dev-skip-claude-kill --dev-skip-region 2>&1)
+while IFS= read -r l; do case "$l" in ✓*) ok "M6-1 ${l#✓ }" ;; ✗*) bad "M6-1 ${l#✗ }" ;; esac; done <<<"$devout"
+
 [ $fails = 0 ] && echo "✓ 自测全部通过" || echo "✗ 自测有 $fails 处没过"
 exit $((fails > 0))

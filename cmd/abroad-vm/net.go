@@ -45,7 +45,7 @@ const InterfaceFresh = 2 * time.Second
 
 // 出站模式（netstats 的 outbound_mode）。
 const (
-	outboundOpen     = "open"      // --outbound-open：开发用，公网一律放行（M1 的行为）
+	outboundOpen     = "open"      // 开放模式：只有开发构建能打开，公网一律放行（M1 的行为）
 	outboundFirstHop = "first_hop" // 默认：只放行白名单和路线第一跳（设计 4.5，M2-1a）
 )
 
@@ -144,7 +144,7 @@ func (u *userNet) logStats() {
 //   - GET /v1/netstats：计数（不含地址）；
 //   - PUT /v1/exit-endpoints：整体替换出站白名单里分流出口的那一组（M4-8，m4-plan v2.12 决定 1）：
 //     {"endpoints":[{"host":"…","proto":"tcp|udp","port":N}]}；不合法 422 并指出第几项，不改任何东西；
-//     主代理第一跳那一组不受影响。开放模式（--outbound-open）下没有收紧，回 409。
+//     主代理第一跳那一组不受影响。开放模式（开发构建）下没有收紧，回 409。
 func (u *userNet) hostHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/exit-endpoints", func(w http.ResponseWriter, r *http.Request) {
@@ -163,7 +163,7 @@ func (u *userNet) hostHandler() http.Handler {
 			return
 		}
 		if u.out == nil {
-			writeHostJSON(w, http.StatusConflict, map[string]string{"error": "开放模式（--outbound-open）下出站没有收紧，不需要端点集合"})
+			writeHostJSON(w, http.StatusConflict, map[string]string{"error": "开放模式（开发构建）下出站没有收紧，不需要端点集合"})
 			return
 		}
 		if err := u.out.SetExitEndpoints(req.Endpoints, u.exitLoopback); err != nil {
@@ -192,7 +192,7 @@ func (u *userNet) hostHandler() http.Handler {
 			return
 		}
 		if u.out == nil {
-			writeHostJSON(w, http.StatusConflict, map[string]string{"error": "开放模式（--outbound-open）下出站没有收紧，不需要第一跳名单"})
+			writeHostJSON(w, http.StatusConflict, map[string]string{"error": "开放模式（开发构建）下出站没有收紧，不需要第一跳名单"})
 			return
 		}
 		if err := u.out.SetMainHops(req); err != nil {

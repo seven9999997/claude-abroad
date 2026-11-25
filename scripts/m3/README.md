@@ -26,7 +26,7 @@
 - 编出程序（在仓库根目录、普通用户）：
   ```sh
   scripts/dev/vm-up.sh --no-panic                  # 构建镜像、编出并签名 abroad-vm、abroad-dev
-  go build -o scripts/dev/out/bin/abroadd ./cmd/abroadd
+  go build -tags abroaddev -o scripts/dev/out/bin/abroadd ./cmd/abroadd   # 开发构建：真机脚本要传 --dev-skip-… 参数（M6-1）
   CGO_ENABLED=1 go build -tags abroaddev -o scripts/dev/out/bin/abroad-vm-dev ./cmd/abroad-vm
   scripts/dev/sign.sh scripts/dev/out/bin/abroad-vm-dev   # 开发标签构建的 abroad-vm（带开发用多出口），要签名才能起虚拟机
   ```
