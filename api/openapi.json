@@ -1161,14 +1161,38 @@
         ],
         "type": "object"
       },
-      "DaemonUninstallSkeleton": {
+      "DaemonUninstallResult": {
         "properties": {
-          "error": {
+          "complete": {
+            "type": "boolean"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonUninstallStep"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "complete"
+        ],
+        "type": "object"
+      },
+      "DaemonUninstallStep": {
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
             "type": "string"
           }
         },
         "required": [
-          "error"
+          "done",
+          "name"
         ],
         "type": "object"
       },
@@ -1622,7 +1646,7 @@
     },
     "/v1/actions/uninstall": {
       "post": {
-        "description": "卸载（骨架，回 501；真正的卸载随 M6 的安装包）",
+        "description": "一键卸载（两步确认）：结束 Claude、恢复本机网络、解除 Claude 启动管控；注销后台服务等由安装器完成",
         "operationId": "uninstall",
         "requestBody": {
           "content": {
@@ -1638,7 +1662,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DaemonUninstallSkeleton"
+                  "$ref": "#/components/schemas/DaemonUninstallResult"
                 }
               }
             },

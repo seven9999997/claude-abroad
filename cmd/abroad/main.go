@@ -225,6 +225,11 @@ func (a *app) codeOf(resp apiclient.Response) int {
 // confirmed 是两步确认：第一次调用回 409 带预览时打印预览；带 --yes 自动提交确认码，否则在终端里问；不是终端又没有
 // --yes 时不执行（需要确认）。body 是请求体（map），确认码放进 confirm 字段。
 func (a *app) confirmed(method, path string, body map[string]any) (apiclient.Response, int) {
+	return a.confirmedWord(method, path, body, "yes")
+}
+
+// confirmedWord 同 confirmed，但终端里要输入指定的确认词（卸载要输入 uninstall，设计 10.3）。
+func (a *app) confirmedWord(method, path string, body map[string]any, word string) (apiclient.Response, int) {
 	var first any
 	if len(body) > 0 {
 		first = body
@@ -292,9 +297,14 @@ func (a *app) confirmed(method, path string, body map[string]any) (apiclient.Res
 			}
 			return resp, ExitConfirm
 		}
-		fmt.Fprint(pw, "确认执行？输入 yes 继续：")
+		fmt.Fprintf(pw, "确认执行？输入 %s 继续：", word)
 		line, _ := bufio.NewReader(a.stdin).ReadString('\n')
-		if s := strings.ToLower(strings.TrimSpace(line)); s != "yes" && s != "y" && s != "是" {
+		s := strings.ToLower(strings.TrimSpace(line))
+		ok := s == word
+		if word == "yes" {
+			ok = ok || s == "y" || s == "是"
+		}
+		if !ok {
 			fmt.Fprintln(a.stderr, "没有确认，什么都没有改动")
 			return resp, ExitConfirm
 		}

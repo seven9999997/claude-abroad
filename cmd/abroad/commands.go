@@ -30,7 +30,7 @@ var commands = []command{
 	{path: []string{"up"}, route: "enable", run: cmdUp},
 	{path: []string{"down"}, route: "disable", run: cmdDown},
 	{path: []string{"restore"}, route: "restore", run: cmdRestore},
-	{path: []string{"uninstall"}, route: "uninstall", later: "卸载在正式安装包里提供；现在请按各份脚本的 README 执行 restore"},
+	{path: []string{"uninstall"}, route: "uninstall", run: cmdUninstall},
 	{path: []string{"apps"}, route: "apps", run: cmdApps},
 	{path: []string{"main", "show"}, route: "main-get", run: cmdMainShow},
 	{path: []string{"main", "exit"}, route: "main-exit", run: cmdMainExit},
@@ -297,6 +297,47 @@ func cmdDown(a *app, args []string) int {
 		return code
 	}
 	return printState(a, resp)
+}
+
+// cmdUninstall 一键卸载（设计 10.3）：两步确认，终端里要输入 uninstall（或 --yes）；可加 --kill-browsers。
+func cmdUninstall(a *app, args []string) int {
+	f, err := parseFlags(args, nil, []string{"--kill-browsers"}, nil)
+	if err != nil {
+		return usageErr(a, err.Error())
+	}
+	var body map[string]any
+	if f.bools["--kill-browsers"] {
+		body = map[string]any{"kill_browsers": true}
+	}
+	resp, code := a.confirmedWord("POST", "/v1/actions/uninstall", body, "uninstall")
+	if code != ExitOK {
+		return code
+	}
+	return a.out(resp, func() {
+		var v struct {
+			Steps []struct {
+				Name string
+				Done bool
+				Note string
+			} `json:"steps"`
+			Complete bool `json:"complete"`
+		}
+		_ = json.Unmarshal(resp.Body, &v)
+		for _, s := range v.Steps {
+			mark := "✓"
+			if !s.Done {
+				mark = "…"
+			}
+			note := ""
+			if s.Note != "" {
+				note = "（" + s.Note + "）"
+			}
+			fmt.Fprintf(a.stdout, "%s %s%s\n", mark, s.Name, note)
+		}
+		if !v.Complete {
+			fmt.Fprintln(a.stdout, "还有步骤要由安装器完成（见上）")
+		}
+	})
 }
 
 func cmdRestore(a *app, args []string) int {

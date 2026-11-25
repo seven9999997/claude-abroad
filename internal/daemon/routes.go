@@ -20,11 +20,6 @@ import (
 // 路由表（m5-plan v2.1 决定 4）：每个接口的路径、方法、级别（或按本次调用决定）、是否任务化、请求和应答类型都在这里；
 // 处理函数在 handlerFuncs 里按 ID 对上。注册只发生在 handler()，源码检查固定（TestRoutesOnlyRegisteredHere）。
 
-// UninstallSkeleton 是卸载接口骨架的应答（真正的卸载随 M6 的安装包）。
-type UninstallSkeleton struct {
-	Error string `json:"error"`
-}
-
 // RouteTable 返回全部接口的描述（平台无关；类型生成和级别矩阵测试都用它）。
 func RouteTable() []api.Route {
 	return []api.Route{
@@ -34,7 +29,7 @@ func RouteTable() []api.Route {
 		{ID: "restore", Method: "POST", Path: "/v1/restore", Level: api.Sensitive, Req: ConfirmRequest{}, Resp: Status{}, Note: "回国：一律两步确认"},
 		{ID: "restore-preview", Method: "GET", Path: "/v1/restore/preview", Level: api.Read, Resp: claudeproc.Preview{}, Note: "回国会结束的 Claude 进程清单（只查看：不签发确认码、不改任何状态；design 10.1）"},
 		{ID: "restore-alias", Method: "POST", Path: "/v1/actions/restore", Level: api.Sensitive, Req: ConfirmRequest{}, Resp: Status{}, Note: "回国的别名"},
-		{ID: "uninstall", Method: "POST", Path: "/v1/actions/uninstall", Level: api.Sensitive, Req: ConfirmRequest{}, Resp: UninstallSkeleton{}, Note: "卸载（骨架，回 501；真正的卸载随 M6 的安装包）"},
+		{ID: "uninstall", Method: "POST", Path: "/v1/actions/uninstall", Level: api.Sensitive, Req: ConfirmRequest{}, Resp: UninstallResult{}, Note: "一键卸载（两步确认）：结束 Claude、恢复本机网络、解除 Claude 启动管控；注销后台服务等由安装器完成"},
 		{ID: "exits-list", Method: "GET", Path: "/v1/exits", Level: api.Read, Note: "分流出口摘要（不含配置原文和密钥）"},
 		{ID: "exit-get", Method: "GET", Path: "/v1/exits/{tag}", Level: api.Read},
 		{ID: "exit-put", Method: "PUT", Path: "/v1/exits/{tag}", Level: api.Sensitive, Note: "增加或替换分流出口"},
@@ -180,11 +175,6 @@ func (d *Daemon) handleStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Daemon) verifier() api.CallerVerifier { return api.Disabled{} }
-
-func (d *Daemon) handleUninstall(w http.ResponseWriter, r *http.Request) {
-	_, _ = io.ReadAll(r.Body)
-	writeJSON(w, http.StatusNotImplemented, UninstallSkeleton{Error: "卸载在正式安装包里提供（M6）；现在请按 README 执行各份脚本的 restore"})
-}
 
 func (d *Daemon) handleGetRegion(w http.ResponseWriter, r *http.Request) {
 	rs := d.regionStatus()

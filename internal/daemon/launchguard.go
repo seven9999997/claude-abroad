@@ -91,6 +91,8 @@ func (d *Daemon) guardPolicy() claudeproc.GuardPolicy {
 	allowed, cover := true, false
 	f, err := d.store.Load()
 	switch {
+	case d.uninstalled(): // 已卸载：启动管控解除（设计 10.3）
+		allowed = true
 	case err != nil:
 		allowed = true // 读不出：不结束（偏向不误杀）
 	case f.State == state.Enabled:
@@ -101,6 +103,9 @@ func (d *Daemon) guardPolicy() claudeproc.GuardPolicy {
 		allowed = false
 	case f.State == state.Restoring, f.State == state.Restored:
 		allowed, cover = false, true
+	}
+	if gs == nil { // 没接第三层：只按状态表给结论，不记“这一段”的开始
+		return claudeproc.GuardPolicy{Allowed: allowed, CoverAll: cover}
 	}
 	gs.mu.Lock()
 	defer gs.mu.Unlock()

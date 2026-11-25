@@ -688,10 +688,23 @@ public struct DaemonStreamEvent: Codable, Sendable {
     }
 }
 
-public struct DaemonUninstallSkeleton: Codable, Sendable {
-    public var error: String
+public struct DaemonUninstallResult: Codable, Sendable {
+    public var steps: [DaemonUninstallStep]?
+    public var complete: Bool
     enum CodingKeys: String, CodingKey {
-        case error = "error"
+        case steps = "steps"
+        case complete = "complete"
+    }
+}
+
+public struct DaemonUninstallStep: Codable, Sendable {
+    public var name: String
+    public var done: Bool
+    public var note: String?
+    enum CodingKeys: String, CodingKey {
+        case name = "name"
+        case done = "done"
+        case note = "note"
     }
 }
 
