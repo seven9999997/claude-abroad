@@ -75,9 +75,9 @@ import (
 	"claude-abroad/internal/fakedns"
 	"claude-abroad/internal/managedproxy"
 	"claude-abroad/internal/pf"
-	"claude-abroad/internal/resolverlock"
 	"claude-abroad/internal/procinfo"
 	"claude-abroad/internal/r3"
+	"claude-abroad/internal/resolverlock"
 	"claude-abroad/internal/tunsim"
 	"claude-abroad/internal/wire"
 )
@@ -114,9 +114,11 @@ func main() {
 			os.Exit(identSample(os.Args[2:], os.Stdout, os.Stderr))
 		case "claude-facts":
 			os.Exit(claudeFacts(os.Args[2:], os.Stdout, os.Stderr))
+		case "integrity-manifest":
+			os.Exit(integrityManifest(os.Args[2:], os.Stdout, os.Stderr))
 		}
 	}
-	fmt.Fprintln(os.Stderr, "用法：abroad-dev probe|exit-flows|socks|upstream|apply-main-proxy|tunsim|daemon-sim|pf-render|r3|direct-probe|ident-sample|claude-facts …（见源码头注释）")
+	fmt.Fprintln(os.Stderr, "用法：abroad-dev probe|exit-flows|socks|upstream|apply-main-proxy|tunsim|daemon-sim|pf-render|r3|direct-probe|ident-sample|claude-facts|integrity-manifest …（见源码头注释）")
 	os.Exit(2)
 }
 

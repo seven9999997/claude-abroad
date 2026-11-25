@@ -673,6 +673,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var vmManager: VmmgrStatus?
     public var resolverLock: ResolverlockStatus?
     public var claudeCode: DaemonClaudeProxyStatus?
+    public var integrity: IntegrityResult?
     public var exits: [DaemonExitStatus]?
     public var opens: [String: DaemonExitCounts]?
     public var region: DaemonRegionStatus?
@@ -693,6 +694,7 @@ public struct DaemonStatus: Codable, Sendable {
         case vmManager = "vm_manager"
         case resolverLock = "resolver_lock"
         case claudeCode = "claude_code"
+        case integrity = "integrity"
         case exits = "exits"
         case opens = "opens"
         case region = "region"
@@ -817,6 +819,28 @@ public struct GatesmStatus: Codable, Sendable {
         case open = "open"
         case reasons = "reasons"
         case leaseLeftMs = "lease_left_ms"
+    }
+}
+
+public struct IntegrityProblem: Codable, Sendable {
+    public var file: String
+    public var kind: String
+    enum CodingKeys: String, CodingKey {
+        case file = "file"
+        case kind = "kind"
+    }
+}
+
+public struct IntegrityResult: Codable, Sendable {
+    public var checked: Bool
+    public var ok: Bool
+    public var note: String?
+    public var problems: [IntegrityProblem]?
+    enum CodingKeys: String, CodingKey {
+        case checked = "checked"
+        case ok = "ok"
+        case note = "note"
+        case problems = "problems"
     }
 }
 

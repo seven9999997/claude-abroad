@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"claude-abroad/internal/integrity"
 	"claude-abroad/internal/pf"
 	"claude-abroad/internal/state"
 )
@@ -223,6 +224,9 @@ type Deps struct {
 	PF       *pf.Controller
 	BootID   func() (string, error) // 本次开机的标识
 	Logf     func(format string, a ...any)
+	// Integrity 是程序完整性校验（M6-7；nil 时不校验）。不通过时只记日志：guard 本来就只加载断网规则、不接管；
+	// 回国状态下也不因此加载（回国干净）。
+	Integrity *integrity.Checker
 }
 
 func (d Deps) logf(format string, a ...any) {
@@ -236,6 +240,9 @@ func (d Deps) logf(format string, a ...any) {
 //   - 已启用、停用、启用中、恢复中、损坏：加载“只断网、不接管”的那一组；abroadd 本次开机已经加载过时不动；
 //   - 参数文件读不出、缺项或不合法：加载最严的一组（不放行任何例外）。
 func Run(ctx context.Context, d Deps) (Outcome, error) {
+	if d.Integrity != nil {
+		d.logf("%s", d.Integrity.Check().Summary())
+	}
 	st := state.NewStore(d.StateDir)
 	f, err := st.Load()
 	switch {

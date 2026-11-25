@@ -80,6 +80,8 @@ type Checker struct {
 	ClaudeSettingsConflicts func() []string
 	// ClaudeProxyDown 报告第四层的本机代理端口没在听（被占用；M6-3b）；nil 时跳过。
 	ClaudeProxyDown func() bool
+	// IntegrityProblem 返回程序完整性校验不通过的说明（M6-7）；nil 或返回空时跳过。
+	IntegrityProblem func() string
 
 	mu   sync.Mutex
 	last Report
@@ -109,6 +111,12 @@ func (c *Checker) Run(ctx context.Context) Report {
 	r.Findings = append(r.Findings, c.checkSharing()...)
 	r.Findings = append(r.Findings, c.checkResolverLock()...)
 	r.Findings = append(r.Findings, c.checkClaudeCode()...)
+	if c.IntegrityProblem != nil {
+		if p := c.IntegrityProblem(); p != "" {
+			r.Findings = append(r.Findings, Finding{ID: "integrity", Severity: Block, Title: p,
+				Fix: "Claude 出国的程序或虚拟机镜像被改过或损坏：请重新安装 Claude 出国。在此之前只保留断网规则，不接管网络。"})
+		}
+	}
 	c.mu.Lock()
 	c.last = r
 	c.mu.Unlock()

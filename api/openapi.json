@@ -1141,6 +1141,9 @@
             },
             "type": "array"
           },
+          "integrity": {
+            "$ref": "#/components/schemas/IntegrityResult"
+          },
           "opens": {
             "additionalProperties": {
               "$ref": "#/components/schemas/DaemonExitCounts"
@@ -1396,6 +1399,45 @@
         "required": [
           "lease_left_ms",
           "open"
+        ],
+        "type": "object"
+      },
+      "IntegrityProblem": {
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "IntegrityResult": {
+        "properties": {
+          "checked": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/IntegrityProblem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "checked",
+          "ok"
         ],
         "type": "object"
       },

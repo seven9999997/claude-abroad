@@ -12,6 +12,7 @@ import (
 	"claude-abroad/internal/claudecfg"
 	"claude-abroad/internal/claudeproc"
 	"claude-abroad/internal/exitcheck"
+	"claude-abroad/internal/integrity"
 	"claude-abroad/internal/pf"
 	"claude-abroad/internal/preflight"
 	"claude-abroad/internal/region"
@@ -49,6 +50,8 @@ type System struct {
 	// DeviceRoot、DeviceHome 是设备体检读字体目录用的根（系统、当前用户主目录；M6-6a）；nil 时跳过那一处。
 	DeviceRoot fs.FS
 	DeviceHome fs.FS
+	// Integrity 是程序完整性校验（M6-7；nil 时不校验）。
+	Integrity *integrity.Checker
 	// Data 是数据面（可为 nil：假系统没有数据面）。daemon 启动时绑定闸门和监护的 Kick，闸门由开变关时断开连接。
 	Data *DataPlane
 	// Env 是环境检测的依赖（M4-6a）：nil 时不做环境检测。

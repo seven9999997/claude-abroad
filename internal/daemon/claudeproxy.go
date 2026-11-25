@@ -399,3 +399,22 @@ func preflightChecker(p state.Preflight) *preflight.Checker {
 	}
 	return nil
 }
+
+// checkIntegrity 启动时做一次完整性校验（M6-7）：不通过时记事件；状态是已启用的，转成停用（只保留断网规则、不接管）。
+func (d *Daemon) checkIntegrity(ctx context.Context) {
+	c := d.opts.Sys.Integrity
+	if c == nil {
+		return
+	}
+	r := c.Check()
+	d.integrity = &r
+	if r.OK {
+		return
+	}
+	d.events.Add("integrity", "failed", r.Summary())
+	if f, err := d.store.Load(); err == nil && f.State == state.Enabled {
+		if err := d.m.Disable(ctx, false); err != nil {
+			d.events.Add("integrity", "disable_failed", "完整性校验不通过，转成停用失败（闸门保持关闭）")
+		}
+	}
+}

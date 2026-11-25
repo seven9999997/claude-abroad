@@ -6,6 +6,7 @@ import (
 	"claude-abroad/internal/envcheck"
 	"claude-abroad/internal/exitcheck"
 	"claude-abroad/internal/gatesm"
+	"claude-abroad/internal/integrity"
 	"claude-abroad/internal/resolverlock"
 	"claude-abroad/internal/vmhost"
 	"claude-abroad/internal/vmmgr"
@@ -91,6 +92,8 @@ type Daemon struct {
 	// M6-3b：第四层的本机代理端口（Options.ClaudeProxyAddr 非空时）。
 	cproxy *claudeProxy
 	// M6-4b：启动管控的第三层（Sys.LaunchGuard 非空时）。
+	// M6-7：启动时完整性校验的结果（接了校验时）。
+	integrity    *integrity.Result
 	gs           *guardState
 	lgStop       func()
 	lgDone       chan struct{}
@@ -269,6 +272,7 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 			d.corrupt.Store(true)
 		}
 	}
+	d.checkIntegrity(ctx) // 完整性校验（M6-7）：不通过时只保留断网规则、不接管
 	if d.opts.RunDir != "" {
 		_ = d.ppf.AdoptExternal() // 开机时 guard 取得的 pf 启用引用：收养进状态文件，回国时一起释放
 	}
@@ -301,6 +305,10 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	d.startLaunchGuard() // 启动管控的第三层（M6-4b；没配置时什么都不做）
 	if chk := preflightChecker(s.Preflight); chk != nil && d.cproxy != nil {
 		chk.ClaudeProxyDown = d.claudeProxyDown // 端口被占用：冲突检查的“必须处理”项
+	}
+	if chk := preflightChecker(s.Preflight); chk != nil && d.integrity != nil && !d.integrity.OK {
+		bad := d.integrity.Summary()
+		chk.IntegrityProblem = func() string { return bad } // 完整性校验不通过：不能启用（必须处理）
 	}
 	// 状态目录必须是属主本人、0700（store 建目录时已保证，这里在监听前再查一次）；先用临时名字监听、改成 0600 再改名，
 	// 没有权限更宽的窗口（architect 判 W-2a 时指出）。
@@ -430,6 +438,8 @@ type Status struct {
 	ResolverLock *resolverlock.Status `json:"resolver_lock,omitempty"`
 	// M6-3b：第四层（Claude Code 的托管设置和本机代理端口）的状态（都没接时没有这一项）。
 	ClaudeCode *ClaudeProxyStatus `json:"claude_code,omitempty"`
+	// M6-7：程序完整性校验的结果（接了校验时；不通过时只保留断网规则、不接管、不能启用）。
+	Integrity *integrity.Result `json:"integrity,omitempty"`
 	// M4-8：分流出口（正式的和开发用的）的摘要、可用状态、最近一次检查；各出口（含 main）的开流计数。
 	// 不含出口 IP、端点地址、配置。
 	Exits []ExitStatus          `json:"exits,omitempty"`
@@ -455,6 +465,10 @@ func (d *Daemon) Status() Status {
 		st.ResolverLock = &ls
 	}
 	st.ClaudeCode = d.claudeCodeStatus()
+	if d.integrity != nil {
+		ir := *d.integrity
+		st.Integrity = &ir
+	}
 	if f, err := d.store.Load(); err != nil {
 		st.State, st.Corrupt = "UNKNOWN", true
 	} else {

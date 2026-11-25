@@ -25,6 +25,7 @@ import (
 
 	"claude-abroad/internal/claudecfg"
 	"claude-abroad/internal/daemon"
+	"claude-abroad/internal/integrity"
 	"claude-abroad/internal/redact"
 	"claude-abroad/internal/resolverlock"
 	"claude-abroad/internal/state"
@@ -41,6 +42,7 @@ type realFlags struct {
 	resolverTest                                            bool     // 只有开发构建能设（--dev-resolver-test-domain）
 	vmExec, vmUser                                          string   // M6-2a：由 abroadd 管理虚拟机
 	vmArgs                                                  []string // 传给 abroad-vm run 的其他参数
+	manifest, manifestBase                                  string   // 完整性清单（M6-7）
 }
 
 // checkRealFlags 是真实模式参数的检查（纯函数，M2-9b-2 决定 7、8）。
@@ -122,6 +124,14 @@ var RealClaudeProxyAddr = "127.0.0.1:" + strconv.Itoa(claudecfg.DefaultPort)
 // claudeSettings 组装 Claude Code 的托管设置（M6-3b）：只组装，写入在首次准备（M6-8）、删除在卸载（M6-5）。
 func claudeSettings(f realFlags) *claudecfg.Settings {
 	return &claudecfg.Settings{Dir: RealClaudeSettingsDir, RecordDir: f.stateDir}
+}
+
+// integrityChecker 组装完整性校验（M6-7）；没给 --integrity-manifest 时为 nil。
+func integrityChecker(f realFlags) *integrity.Checker {
+	if f.manifest == "" {
+		return nil
+	}
+	return &integrity.Checker{Manifest: f.manifest, Base: f.manifestBase, Digest: integrity.ManifestDigest}
 }
 
 // RealResolverDir 是系统的按域名解析配置目录（resolver(5)）。真实路径只在这里出现（源码检查）。
@@ -250,6 +260,8 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		ClaudeSettings: claudeSettings(f),
 		// 启动管控的第三层（M6-4b）：不允许启动时每 200 毫秒扫描、结束确认过的 Claude 进程。
 		LaunchGuard: launchGuard,
+		// 程序完整性校验（M6-7）：清单的摘要在构建时写进程序；没给清单时不校验。
+		Integrity: integrityChecker(f),
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)

@@ -37,6 +37,8 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 	vmUser := fs.String("vm-user", "", "和 --vm-exec 一起：以这个用户运行 abroad-vm（要 root）；不给时和 abroadd 同一个用户")
 	var vmArgs vmArgList
 	fs.Var(&vmArgs, "vm-arg", "和 --vm-exec 一起：传给 abroad-vm run 的其他参数（如 --image-dir=…），可重复；--state-dir 固定用 --vm-dir")
+	manifest := fs.String("integrity-manifest", "", "完整性清单（可选；M6-7）：校验不通过时只保留断网规则、不接管、不能启用")
+	manifestBase := fs.String("integrity-base", "", "完整性清单里相对路径的根（和 --integrity-manifest 一起）")
 	sockDir := fs.String("socket-dir", "", "本地接口 socket 的目录（目录属主 root、组和其他人不能写；socket 0666，级别按对端 uid 判）；空时放在状态目录里、只认属主")
 	var dev devOptions
 	if addDevFlags != nil { // 只有开发构建有（devflags_dev.go）
@@ -60,7 +62,7 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 	}
 	return runReal(realFlags{stateDir: *stateDir, vmDir: *vmDir, pfUser: *pfUser, mainStore: *mainStore,
 		exitHost: *exitHost, skipKill: dev.skipKill, skipRegion: dev.skipRegion, socketDir: *sockDir, resolverTest: dev.resolverTest,
-		vmExec: *vmExec, vmUser: *vmUser, vmArgs: vmArgs}, stderr, ready)
+		vmExec: *vmExec, vmUser: *vmUser, vmArgs: vmArgs, manifest: *manifest, manifestBase: *manifestBase}, stderr, ready)
 }
 
 // devOptions 是开发构建的参数（默认构建里全是零值）。

@@ -3,6 +3,7 @@ package daemon
 import (
 	"claude-abroad/internal/claudecfg"
 	"claude-abroad/internal/claudeproc"
+	"claude-abroad/internal/integrity"
 	"claude-abroad/internal/region"
 	"claude-abroad/internal/resolverlock"
 	"context"
@@ -75,6 +76,8 @@ type RealParams struct {
 	ClaudeSettings *claudecfg.Settings
 	// LaunchGuard 是启动管控的第三层（M6-4b；nil 时不扫描、不结束）。
 	LaunchGuard *claudeproc.LaunchGuard
+	// Integrity 是程序完整性校验（M6-7；nil 时不校验）。
+	Integrity *integrity.Checker
 }
 
 // ErrNoAllowUser 是查不到放行用户。
@@ -185,6 +188,7 @@ func NewRealSystem(p RealParams) (System, error) {
 		Preflight: realPreflight{PreflightHints{C: chk}, p.FirstHop != nil},
 		Data:      p.Data, ResolverLock: p.ResolverLock, ClaudeSettings: p.ClaudeSettings, LaunchGuard: p.LaunchGuard,
 		DeviceRoot: p.RootFS, DeviceHome: p.HomeFS, // 设备体检读字体目录（M6-6a）
+		Integrity: p.Integrity,
 	}, nil
 }
 

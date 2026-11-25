@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"claude-abroad/internal/guard"
+	"claude-abroad/internal/integrity"
 	"claude-abroad/internal/pf"
 	"claude-abroad/internal/platform"
 )
@@ -31,7 +32,7 @@ const ExitNotRoot = 4
 
 func main() { os.Exit(run(os.Args[1:], os.Stderr, platform.IsAdmin(), runtime.GOOS)) }
 
-type options struct{ stateDir, runDir string }
+type options struct{ stateDir, runDir, manifest, base string }
 
 func parse(args []string, w io.Writer) (options, error) {
 	var o options
@@ -39,6 +40,8 @@ func parse(args []string, w io.Writer) (options, error) {
 	fs.SetOutput(w)
 	fs.StringVar(&o.stateDir, "state-dir", "", "abroadd 的状态目录（必填）")
 	fs.StringVar(&o.runDir, "run-dir", "", "运行时目录（必填；abroadd 的“本次开机已加载”标记和 guard 的启用引用放在这里）")
+	fs.StringVar(&o.manifest, "integrity-manifest", "", "完整性清单（可选；M6-7）：校验不通过只记日志")
+	fs.StringVar(&o.base, "integrity-base", "", "完整性清单里相对路径的根（和 --integrity-manifest 一起）")
 	if err := fs.Parse(args); err != nil {
 		return o, err
 	}
@@ -71,15 +74,24 @@ func run(args []string, stderr io.Writer, root bool, goos string) int {
 	return runReal(o, stderr)
 }
 
+// integrityChecker：没给清单时为 nil（不校验）；清单的摘要在构建时写进程序（integrity.ManifestDigest）。
+func integrityChecker(manifest, base string) *integrity.Checker {
+	if manifest == "" {
+		return nil
+	}
+	return &integrity.Checker{Manifest: manifest, Base: base, Digest: integrity.ManifestDigest}
+}
+
 func runReal(o options, stderr io.Writer) int {
 	lg := log.New(stderr, "abroad-guard: ", log.LstdFlags)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	out, err := guard.Run(ctx, guard.Deps{
 		StateDir: o.stateDir, RunDir: o.runDir,
-		PF:     &pf.Controller{R: pf.ExecRunner{}}, // 真实的 pfctl 执行器：只在这里接上（源码检查）
-		BootID: guard.BootID,
-		Logf:   lg.Printf,
+		PF:        &pf.Controller{R: pf.ExecRunner{}}, // 真实的 pfctl 执行器：只在这里接上（源码检查）
+		BootID:    guard.BootID,
+		Logf:      lg.Printf,
+		Integrity: integrityChecker(o.manifest, o.base),
 	})
 	switch out {
 	case guard.Loaded:
