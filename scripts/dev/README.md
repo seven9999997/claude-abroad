@@ -121,6 +121,12 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags abroaddev -trimpath -ldflag
 - `scripts/dev/guard-plist.sh <abroad-guard 路径> <状态目录> [运行时目录]`：生成开发用的 LaunchDaemon 到 `scripts/dev/out/`，用 `plutil -lint` 检查格式。**只生成、不安装**（不调用 launchctl、不需要 sudo）。
 - `scripts/dev/pf-syntax.sh` 多检查一组 `lockdown`（最严的一组），只做 `pfctl -n` 语法检查、不加载。
 
+## 带完整性清单的构建（M6-7）
+
+- `scripts/dev/integrity-build.sh [--dev]`：编译 abroad、abroad-vm（先 ad-hoc 签上虚拟化授权），连同 `guest/out` 的镜像生成
+  完整性清单 `scripts/dev/out/integrity/integrity.json`，再把清单的摘要经 `-ldflags` 写进 abroadd 和 abroad-guard。
+  只编译、不安装。开发安装（`scripts/m6/install/`）用它的输出。
+
 ## 手动运行虚拟机
 
 ```sh

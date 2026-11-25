@@ -22,6 +22,7 @@ mkdir -p "${OUT}/bin" "${OUT}/image"
 
 go build ${TAGS[@]+"${TAGS[@]}"} -trimpath -o "${OUT}/bin/abroad" ./cmd/abroad
 go build ${TAGS[@]+"${TAGS[@]}"} -trimpath -o "${OUT}/bin/abroad-vm" ./cmd/abroad-vm
+scripts/dev/sign.sh "${OUT}/bin/abroad-vm" >/dev/null # 虚拟化授权（ad-hoc）：要在生成清单之前，签名会改文件内容
 go build -o "${OUT}/abroad-dev" ./cmd/abroad-dev
 
 FILES=(bin/abroad bin/abroad-vm)

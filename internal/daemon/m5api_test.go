@@ -538,6 +538,28 @@ func TestSocketDirShared(t *testing.T) {
 	}
 }
 
+// socket 目录不在（开机时 /var/run 被清空）：只建最后一级（0755），照常监听；上一级不在时不建、启动失败。
+func TestSocketDirCreated(t *testing.T) {
+	e := newEnv(t)
+	sd := filepath.Join(t.TempDir(), "c") // unix socket 路径有长度上限
+	o := e.opts()
+	o.SocketDir = sd
+	d := e.start(o)
+	fi, err := os.Stat(sd)
+	if err != nil || !fi.IsDir() || fi.Mode().Perm()&0o022 != 0 {
+		t.Fatalf("应建好 socket 目录、组和其他人不能写：%v %v", fi, err)
+	}
+	if code, _ := call(t, d, "GET", "/v1/status", nil); code != 200 {
+		t.Fatal("应连得上")
+	}
+	d.Shutdown()
+	o2 := newEnv(t).opts()
+	o2.SocketDir = filepath.Join(t.TempDir(), "no", "such")
+	if _, err := Start(t.Context(), o2); err == nil {
+		t.Fatal("上一级不在时不应建（只建最后一级）")
+	}
+}
+
 // 有事件流订阅者连着时，正常退出不能等满时限：事件流主动结束，客户端读到断开。
 func TestShutdownEndsEventStream(t *testing.T) {
 	e := newEnv(t)

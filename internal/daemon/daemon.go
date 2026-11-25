@@ -317,6 +317,11 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	listen := vmhost.ListenPrivateUnix
 	if o.SocketDir != "" {
 		listen = vmhost.ListenSharedUnix
+		// /var/run 开机时清空（M6-8b 的开发安装）：目录不在就建（只建最后一级，0755）；属主和权限照样由 ListenSharedUnix 核对。
+		if err := os.Mkdir(o.SocketDir, 0o755); err != nil && !errors.Is(err, fs.ErrExist) {
+			d.stopInternals(false)
+			return nil, err
+		}
 	}
 	ln, err := listen(sock, d.store.UID)
 	if err != nil {

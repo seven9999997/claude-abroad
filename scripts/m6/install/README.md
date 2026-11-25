@@ -1,0 +1,71 @@
+# scripts/m6/install：开发安装和卸载（M6-8b）
+
+没有付费开发者账号时的安装方式（设计 11.4 的 M6-8a 段）：用脚本把程序装到固定位置、注册两个开发用 LaunchDaemon，
+代替以后的 `SMAppService` 注册。M6-9 的端到端也从这里开始。
+
+> **安装不会断网，也不会结束任何程序。** 装完是“已回国”状态：不加载断网规则、不接管网络。
+> 默认是开发构建：abroadd 带 `--dev-skip-claude-kill`（回国、卸载时只预览、不结束 Claude 进程）和
+> `--dev-resolver-test-domain`（首次准备只锁测试域名 `lock-test.claude-abroad.invalid`，不写 Claude Code 的托管设置），
+> 本机真实的 Claude、Claude Code 不受影响。**启用**（应用里点“启用”或 `abroad up`）才会接管网络，那是 M6-9 的步骤。
+
+## 准备（以你自己的身份，不要 sudo）
+
+```sh
+scripts/dev/vm-up.sh --no-panic          # 第一次：构建虚拟机镜像到 guest/out
+scripts/dev/integrity-build.sh --dev     # 开发构建 + 完整性清单 → scripts/dev/out/integrity/
+scripts/dev/app-bundle.sh                # 应用包 → app/.build/bundle/ClaudeAbroad.app
+scripts/m6/install/install.sh --check-only   # 前提检查（只读）
+```
+
+## 安装
+
+```sh
+sudo scripts/m6/install/install.sh
+```
+
+按顺序做（任何一步失败都会自动执行卸载，回到安装前）：
+
+1. 拍快照到 `/Library/Application Support/claude-abroad-install-snap`（安装位置、本地接口目录、日志目录、两个 plist、应用、
+   命令行链接、`/etc/resolver`、Claude Code 的托管设置目录各自是否存在和内容摘要；专用用户、两个服务是否注册、
+   pf 锚点里的规则数、DNS 键、各网络服务的 IPv6）。卸载后再拍一份，逐项对照。
+2. 程序、镜像和完整性清单装到 `/Library/Application Support/claude-abroad/`（root 所有，组和其他人不能写）。
+   其中 `bin/abroad` 就是应急文档里说的另存的命令行。
+3. 建专用用户 `_abroad`（无 shell、无主目录、隐藏），虚拟机以它运行，pf 只放行它的出站。
+4. 状态目录 `…/claude-abroad/state/`（abroadd、虚拟机、主代理存储），日志目录 `/var/log/claude-abroad/`，
+   本地接口目录 `/var/run/claude-abroad/`（开机时被清空，abroadd 和 guard 会自己重建）。
+5. 应用复制到 `/Applications/ClaudeAbroad.app`，命令行链接 `/usr/local/bin/abroad`；已经有同名的都不覆盖。
+6. 注册 `com.claude-abroad.dev.guard`（开机时运行一次，按状态文件加载断网规则）和 `com.claude-abroad.dev.abroadd`（常驻）。
+   abroadd 由它自己拉起和管理虚拟机，第一次启动时做首次准备（写解析锁）。
+7. 等 abroadd 起来，核对状态应为“已回国”、首次准备完成、完整性校验通过。
+
+装好后以你自己的身份打开应用：`open /Applications/ClaudeAbroad.app`。
+
+## 卸载
+
+```sh
+sudo scripts/m6/install/uninstall.sh
+```
+
+1. 先走正常途径 `abroad uninstall`（提示时输入 `uninstall`）：结束 Claude（开发构建只预览）、恢复本机网络、删解析锁和托管设置。
+2. 停掉两个后台服务。
+3. 正常途径没走完时（abroadd 不在、卸载出错），按 [docs/emergency.md](../../../docs/emergency.md) 兜底：清空自己的 pf 锚点
+   `com.apple/250.abroad`、删 DNS 键、按快照把原来是“自动”的 IPv6 改回来，按 abroadd 的记录删内容一致的解析锁和托管设置。
+4. 按安装记录删掉 plist、`_abroad`、命令行链接、应用（只删安装时放的）、各个目录。
+5. 和安装前的快照逐项对照：一致就删掉快照目录；不一致时列出差异、保留快照目录，退出码非零（可以重试卸载）。
+
+可以重复执行；没有安装记录时什么都不做。
+
+## 会话里能做的（不需要 sudo、不改系统）
+
+```sh
+DRY_RUN=1 scripts/m6/install/install.sh   >/tmp/i.out   # 空跑：只打印 CHANGE:、QUERY:、STATE:、WAIT:
+DRY_RUN=1 scripts/m6/install/uninstall.sh >/tmp/u.out
+scripts/m6/install/check-commands.sh /tmp/i.out /tmp/u.out   # 命令核对（清单在 commands.txt）
+scripts/m6/install/selftest.sh             # 自测：在临时目录里真的装、真的卸，系统命令只记日志
+```
+
+## 注意
+
+- `/usr/local/bin` 原来不存在时，安装会建它，卸载不删（空目录，不影响别的）。
+- 走查脚本（scripts/m2–m5）留下的状态、已有的 `_abroad` 用户、已有的 `/var/run/claude-abroad` 都会让安装在一开始停下、什么都不改。
+- 用发布构建验证真实效果（锁真实的 Claude 域名、结束真实的 Claude 进程）是 M6-9 的单独一节，要输入确认，这里不提供。

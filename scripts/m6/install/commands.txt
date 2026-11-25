@@ -1,0 +1,38 @@
+# scripts/m6/install 的 install.sh、uninstall.sh 会执行的全部命令（扩展正则，每行一条）。check-commands.sh 用它核对空跑的输出
+# （输出里仓库的绝对路径先换成 <仓库>）。“CHANGE ” 是改动类命令，“QUERY ” 是只读查询。
+# 安装只装文件、建 _abroad、注册两个开发用 LaunchDaemon；不碰 pf、DNS、网卡、路由、IPv6。
+# 卸载的兜底（正常途径没走完时）只撤 Claude 出国自己的：pf 锚点 com.apple/250.abroad、DNS 键、按快照恢复 IPv6。
+CHANGE ^mkdir -p /Library/Application Support/claude-abroad-install-snap$
+CHANGE ^chmod 700 /Library/Application Support/claude-abroad-install-snap$
+CHANGE ^mkdir -p /Library/Application Support/claude-abroad/bin /Library/Application Support/claude-abroad/image$
+CHANGE ^cp <仓库>/scripts/dev/out/integrity/(bin/(abroad|abroadd|abroad-guard|abroad-vm)|image/(Image|initramfs\.gz|modloop|rootfs\.img)|integrity\.json) /Library/Application Support/claude-abroad/(bin/(abroad|abroadd|abroad-guard|abroad-vm)|image/(Image|initramfs\.gz|modloop|rootfs\.img)|integrity\.json)$
+CHANGE ^chown -R root:wheel /Library/Application Support/claude-abroad$
+CHANGE ^chmod -R go-w /Library/Application Support/claude-abroad$
+CHANGE ^dscl \. -create /(Users|Groups)/_abroad( (PrimaryGroupID|UniqueID) [0-9]+| Password \*| UserShell /usr/bin/false| NFSHomeDirectory /var/empty| RealName claude-abroad| IsHidden 1)?$
+CHANGE ^dscacheutil -flushcache$
+CHANGE ^mkdir -p /Library/Application Support/claude-abroad/state/abroadd /Library/Application Support/claude-abroad/state/vm /Library/Application Support/claude-abroad/state/store /var/log/claude-abroad$
+CHANGE ^chmod 700 /Library/Application Support/claude-abroad/state/abroadd /Library/Application Support/claude-abroad/state/vm /Library/Application Support/claude-abroad/state/store$
+CHANGE ^chown _abroad /Library/Application Support/claude-abroad/state/vm$
+CHANGE ^mkdir -p /var/run/claude-abroad$
+CHANGE ^chown root:wheel /var/run/claude-abroad$
+CHANGE ^chmod 755 /var/run/claude-abroad$
+CHANGE ^cp -R <仓库>/app/\.build/bundle/ClaudeAbroad\.app /Applications/ClaudeAbroad\.app$
+CHANGE ^mkdir -p /usr/local/bin$
+CHANGE ^ln -s /Library/Application Support/claude-abroad/bin/abroad /usr/local/bin/abroad$
+CHANGE ^cp /Library/Application Support/claude-abroad-install-snap/com\.claude-abroad\.dev\.(abroadd|guard)\.plist /Library/LaunchDaemons/com\.claude-abroad\.dev\.(abroadd|guard)\.plist$
+CHANGE ^chown root:wheel /Library/LaunchDaemons/com\.claude-abroad\.dev\.(abroadd|guard)\.plist$
+CHANGE ^chmod 644 /Library/LaunchDaemons/com\.claude-abroad\.dev\.(abroadd|guard)\.plist$
+CHANGE ^launchctl bootstrap system /Library/LaunchDaemons/com\.claude-abroad\.dev\.(abroadd|guard)\.plist$
+CHANGE ^rm -f /Library/Application Support/claude-abroad-install-snap/(installing|launchd\.com\.claude-abroad\.dev\.(abroadd|guard)|plist\.com\.claude-abroad\.dev\.(abroadd|guard)|user|cli_link|app|sockdir|logdir|install_dir)$
+CHANGE ^/Library/Application Support/claude-abroad/bin/abroad uninstall$
+CHANGE ^launchctl bootout system/com\.claude-abroad\.dev\.(abroadd|guard)$
+CHANGE ^pfctl -a com\.apple/250\.abroad -F all$
+CHANGE ^scutil remove State:/Network/Service/claude-abroad/DNS$
+CHANGE ^networksetup -setv6automatic <快照里原来是自动、现在不是的网络服务>$
+CHANGE ^rm -f (/etc/resolver|/Library/Application Support/ClaudeCode/managed-settings\.d)/<记录里的文件>（只删内容和记录一致的）$
+CHANGE ^rm -f /Library/LaunchDaemons/com\.claude-abroad\.dev\.(abroadd|guard)\.plist$
+CHANGE ^dscl \. -delete /(Users|Groups)/_abroad$
+CHANGE ^rm -f /usr/local/bin/abroad$
+CHANGE ^rm -rf (/Applications/ClaudeAbroad\.app|/var/run/claude-abroad|/var/log/claude-abroad|/Library/Application Support/claude-abroad)$
+CHANGE ^rm -rf /Library/Application Support/claude-abroad-install-snap（对照一致时）$
+QUERY ^curl --unix-socket /var/run/claude-abroad/api\.sock http://abroadd/v1/status（应为 RESTORED、prepare\.done、integrity\.ok）$
