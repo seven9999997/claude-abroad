@@ -83,10 +83,11 @@ const TestDomain = "lock-test.claude-abroad.invalid"
 const RecordFile = "resolver-lock.json"
 
 type record struct {
-	Version int      `json:"version"`
-	Form    string   `json:"form"`
-	Domains []string `json:"domains"`
-	Content string   `json:"content"`
+	Version    int      `json:"version"`
+	Form       string   `json:"form"`
+	Domains    []string `json:"domains"`
+	Content    string   `json:"content"`
+	CreatedDir bool     `json:"created_dir,omitempty"` // 锁目录是我们建的（卸载时空了就一并删掉）
 }
 
 // Lock 是一把解析锁。
@@ -202,7 +203,11 @@ func (l *Lock) Write() (WriteResult, error) {
 			}
 		}
 	}
-	if err := l.writeRecord(record{Version: 1, Form: f.Name(), Domains: all, Content: string(want)}); err != nil {
+	created := rec != nil && rec.CreatedDir
+	if _, err := os.Stat(l.Dir); errors.Is(err, fs.ErrNotExist) {
+		created = true
+	}
+	if err := l.writeRecord(record{Version: 1, Form: f.Name(), Domains: all, Content: string(want), CreatedDir: created}); err != nil {
 		return res, err
 	}
 	if err := os.MkdirAll(l.Dir, 0o755); err != nil {
@@ -276,6 +281,9 @@ func (l *Lock) Remove() (RemoveResult, error) {
 			return res, err
 		}
 		res.Removed = append(res.Removed, d)
+	}
+	if rec.CreatedDir {
+		_ = os.Remove(l.Dir) // 我们建的目录：空了才删得掉（还有别人的或留下的文件时 Remove 失败，留下）
 	}
 	if err := os.Remove(filepath.Join(l.RecordDir, RecordFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return res, err

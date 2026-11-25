@@ -3,6 +3,8 @@ package vmmgr
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -268,6 +270,15 @@ type rig struct {
 	m      *Manager
 	cancel context.CancelFunc
 	done   chan struct{}
+	bmu    sync.Mutex
+	bo     []time.Duration // 管理器日志里的退避值（“X 后重新拉起虚拟机”）
+}
+
+// backoffs 返回到目前为止管理器算出的退避值。
+func (r *rig) backoffs() []time.Duration {
+	r.bmu.Lock()
+	defer r.bmu.Unlock()
+	return append([]time.Duration(nil), r.bo...)
 }
 
 func newRig(t *testing.T, mods ...func(*Timing)) *rig {
@@ -279,9 +290,20 @@ func newRig(t *testing.T, mods ...func(*Timing)) *rig {
 	for _, f := range mods {
 		f(&tm)
 	}
-	m := &Manager{Launcher: l, Health: l.health, Gate: g, Kick: g, Clock: c, Timing: tm, Logf: t.Logf}
+	m := &Manager{Launcher: l, Health: l.health, Gate: g, Kick: g, Clock: c, Timing: tm}
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &rig{t: t, clock: c, l: l, gate: g, m: m, cancel: cancel, done: make(chan struct{})}
+	m.Logf = func(format string, a ...any) {
+		msg := fmt.Sprintf(format, a...)
+		t.Log(msg)
+		if d, ok := strings.CutSuffix(msg, " 后重新拉起虚拟机"); ok {
+			if v, err := time.ParseDuration(d); err == nil {
+				r.bmu.Lock()
+				r.bo = append(r.bo, v)
+				r.bmu.Unlock()
+			}
+		}
+	}
 	go func() { m.Run(ctx); close(r.done) }()
 	t.Cleanup(func() {
 		cancel()

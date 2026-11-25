@@ -589,6 +589,9 @@ func TestNoOtherExit(t *testing.T) {
 
 // AST：internal/daemon 的非测试文件里，拨号和监听的网络类型只能是 "unix"；不用 net/http 的默认客户端。
 func TestNoDirectDialSource(t *testing.T) {
+	if b, err := os.ReadFile("claudeproxy.go"); err != nil || !strings.Contains(string(b), "IsLoopback()") {
+		t.Error("claudeproxy.go 监听 TCP 之前必须校验地址是回环")
+	}
 	files, _ := filepath.Glob("*.go")
 	dialers := map[string]int{"Dial": 0, "DialTimeout": 0, "Listen": 0, "ListenPacket": 0, "ListenUnix": 0, "DialContext": 1}
 	for _, f := range files {
@@ -611,6 +614,11 @@ func TestNoDirectDialSource(t *testing.T) {
 					return true
 				}
 				lit, ok := x.Args[idx].(*ast.BasicLit)
+				// M6-3b 唯一的例外：第四层的本机代理端口监听回环上的 TCP（地址在 startClaudeProxy 里校验必须是回环，
+				// 下面另查这个文件确实有这项校验）。只许 Listen，不许任何拨号。
+				if ok && f == "claudeproxy.go" && sel.Sel.Name == "Listen" && lit.Value == strconv.Quote("tcp") {
+					return true
+				}
 				if !ok || lit.Value != strconv.Quote("unix") {
 					t.Errorf("%s：%s 的网络类型不是字面量 \"unix\"", f, sel.Sel.Name)
 				}

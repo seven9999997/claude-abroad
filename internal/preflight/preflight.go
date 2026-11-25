@@ -35,7 +35,7 @@ const (
 
 // Finding 是一条检查结果。文字里不含地址、端口、值和完整路径。
 type Finding struct {
-	ID       string   // 检查项（system_proxy、pac、auto_discovery、takeover_route、ipv6_only、loopback_hop、proxy_app、shell_env、sharing、resolver_lock）
+	ID       string   // 检查项（system_proxy、pac、auto_discovery、takeover_route、ipv6_only、loopback_hop、proxy_app、shell_env、sharing、resolver_lock、claude_settings、claude_proxy_port）
 	Severity Severity //
 	Title    string   // 发现了什么
 	Fix      string   // 怎么处理
@@ -76,6 +76,10 @@ type Checker struct {
 	FirstHop func() (string, error)
 	// ResolverConflicts 返回 Claude 域名解析锁有别人同名文件的域名（M6-3，设计 10.4）；nil 时跳过这一项。
 	ResolverConflicts func() []string
+	// ClaudeSettingsConflicts 返回别的托管设置文件定义了代理变量的“文件：变量”（M6-3b）；nil 时跳过。
+	ClaudeSettingsConflicts func() []string
+	// ClaudeProxyDown 报告第四层的本机代理端口没在听（被占用；M6-3b）；nil 时跳过。
+	ClaudeProxyDown func() bool
 
 	mu   sync.Mutex
 	last Report
@@ -104,6 +108,7 @@ func (c *Checker) Run(ctx context.Context) Report {
 	r.Findings = append(r.Findings, c.checkShell()...)
 	r.Findings = append(r.Findings, c.checkSharing()...)
 	r.Findings = append(r.Findings, c.checkResolverLock()...)
+	r.Findings = append(r.Findings, c.checkClaudeCode()...)
 	c.mu.Lock()
 	c.last = r
 	c.mu.Unlock()
@@ -149,6 +154,27 @@ func (c *Checker) checkResolverLock() []Finding {
 	return []Finding{{ID: "resolver_lock", Severity: Warn,
 		Title: "Claude 域名解析锁有别的软件写的同名文件（" + strings.Join(doms, "、") + "）",
 		Fix:   "回国后“Claude 连不上”的第一层对这些域名不生效。请确认这些文件是哪个软件写的；不再需要时移走它们，再在设置里重新写入解析锁。"}}
+}
+
+// ---- 第四层：Claude Code 的托管设置和本机代理端口（M6-3b）----
+
+// checkClaudeCode：别的托管设置文件定义了代理变量（第四层被盖掉）、本机代理端口被占用（占用者如果是代理，
+// Claude Code 的流量会交给它），都是必须处理的阻断项。
+func (c *Checker) checkClaudeCode() []Finding {
+	var out []Finding
+	if c.ClaudeSettingsConflicts != nil {
+		if cs := c.ClaudeSettingsConflicts(); len(cs) > 0 {
+			out = append(out, Finding{ID: "claude_settings", Severity: Block,
+				Title: "Claude Code 的托管设置里别的文件也定义了代理变量（" + strings.Join(cs, "、") + "）",
+				Fix:   "第四层（回国后没拦住的 Claude Code 一律连不上）会被盖掉。请确认这些文件是谁写的，去掉其中的代理变量后再试；不会替你改别人的文件。"})
+		}
+	}
+	if c.ClaudeProxyDown != nil && c.ClaudeProxyDown() {
+		out = append(out, Finding{ID: "claude_proxy_port", Severity: Block,
+			Title: "第四层的本机代理端口被别的程序占着",
+			Fix:   "占用者如果是代理，Claude Code 的流量会交给它。请退出占用这个端口的程序后重启 Claude 出国的后台服务。"})
+	}
+	return out
 }
 
 // ---- 系统代理、PAC、自动发现 ----

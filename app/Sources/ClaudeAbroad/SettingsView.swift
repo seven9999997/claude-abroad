@@ -36,6 +36,9 @@ struct SettingsView: View {
                 LabeledContent(L10n.resolverLockTitle) {
                     Text(model.resolverLockText).foregroundStyle(model.resolverLockWarn ? .orange : .primary)
                 }
+                LabeledContent(L10n.claudeCodeTitle) {
+                    Text(model.claudeCodeText).foregroundStyle(model.claudeCodeWarn ? .orange : .primary)
+                }
             }
             .tabItem { Text(L10n.settingsClaude) }
             Form {

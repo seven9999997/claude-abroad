@@ -524,6 +524,7 @@ func (m *Manager) backoff(ctx context.Context) bool {
 		d = t.BackoffMax
 	}
 	m.setPhase(PhaseBackoff)
+	m.logf("%s 后重新拉起虚拟机", d) // 测试按这条日志断言退避值（不量时钟间隔）
 	select {
 	case <-ctx.Done():
 		return false

@@ -230,3 +230,24 @@ func mapsEqual(a, b map[string]string) bool {
 	}
 	return true
 }
+
+// 卸载后不留空目录：锁目录是我们建的、删完空了就一并删掉；原来就有的留下。
+func TestRemoveCleansCreatedDir(t *testing.T) {
+	l := newLock(t)
+	if _, err := l.Write(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(l.Dir); !os.IsNotExist(err) {
+		t.Fatal("我们建的空目录应删掉")
+	}
+	l2 := newLock(t)
+	_ = os.MkdirAll(l2.Dir, 0o755)
+	_, _ = l2.Write()
+	_, _ = l2.Remove()
+	if _, err := os.Stat(l2.Dir); err != nil {
+		t.Fatal("原来就有的目录不应删")
+	}
+}

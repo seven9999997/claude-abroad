@@ -16,6 +16,9 @@ func TestDaemonNoDial(t *testing.T) {
 	srccheck.NoDial(t, ".", map[string][]string{
 		"daemon.go": {"net.Listen"},
 		"vmext.go":  {"net.Dialer", "http.Client", "http.Transport"},
+		// M6-3b：第四层的本机代理端口只监听回环上的 TCP（地址在 startClaudeProxy 里校验必须是回环），不拨号：
+		// 转发全部经网络栈的 dispatch（数据通道、直连拨号模块）。
+		"claudeproxy.go": {"net.Listen"},
 	})
 	for _, f := range []string{"daemon.go", "vmext.go"} {
 		af := srccheck.Parse(t, f)

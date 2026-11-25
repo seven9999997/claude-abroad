@@ -3,6 +3,7 @@ package vmmgr
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 )
@@ -61,12 +62,9 @@ func TestLaunchFails(t *testing.T) {
 	if st.Failures != testTiming.MaxFailures || r.l.count() != testTiming.MaxFailures || st.LastError == "" {
 		t.Fatalf("状态 %+v，拉起 %d 次", st, r.l.count())
 	}
-	// 退避：1s、2s、4s（上限 8s），间隔递增
-	lt := r.l.launchTimes
-	for i := 2; i < len(lt); i++ {
-		if lt[i].Sub(lt[i-1]) <= lt[i-1].Sub(lt[i-2]) {
-			t.Fatalf("退避没有递增：%v", lt)
-		}
+	// 退避：1s、2s、4s（上限 8s），看管理器算出的值
+	if got := r.backoffs(); !slices.Equal(got, []time.Duration{time.Second, 2 * time.Second, 4 * time.Second}) {
+		t.Fatalf("退避应递增：%v", got)
 	}
 	// 停止重启后不再拉起
 	before := r.l.count()
@@ -89,20 +87,16 @@ func TestLaunchFails(t *testing.T) {
 	}
 }
 
-// 退避有上限：失败次数多时间隔不超过 BackoffMax。
+// 退避有上限：断言管理器自己算出的退避值（日志“X 后重新拉起虚拟机”），不量假时钟上两次拉起的间隔
+// （负载高时推进时钟的协程和登记定时器的协程错开，间隔会多出几格；architect 判 M6-3b）。
 func TestBackoffCap(t *testing.T) {
 	r := newRig(t, func(tm *Timing) { tm.MaxFailures = 8 })
 	r.l.set(func(l *fakeLauncher) { l.failNext = 100 })
 	r.m.SetWanted(true)
 	r.pump(r.phaseIs(PhaseFailed), "failed")
-	lt := r.l.launchTimes
-	for i := 1; i < len(lt); i++ {
-		if d := lt[i].Sub(lt[i-1]); d > testTiming.BackoffMax+time.Second {
-			t.Fatalf("第 %d 次间隔 %s 超过上限", i, d)
-		}
-	}
-	if last := lt[len(lt)-1].Sub(lt[len(lt)-2]); last < testTiming.BackoffMax {
-		t.Fatalf("最后的间隔 %s 应达到上限 %s", last, testTiming.BackoffMax)
+	want := []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 8 * time.Second, 8 * time.Second, 8 * time.Second}
+	if got := r.backoffs(); !slices.Equal(got, want) {
+		t.Fatalf("退避应翻倍到上限 %s：%v", testTiming.BackoffMax, got)
 	}
 }
 
@@ -237,11 +231,8 @@ func TestCrashStorm(t *testing.T) {
 	}
 	r.pump(r.phaseIs(PhaseFailed), "failed")
 	r.wantGateClosed("风暴后")
-	lt := r.l.launchTimes
-	for i := 2; i < len(lt); i++ {
-		if lt[i].Sub(lt[i-1]) <= lt[i-1].Sub(lt[i-2]) {
-			t.Fatalf("退避没有递增：%v", lt)
-		}
+	if got := r.backoffs(); !slices.Equal(got, []time.Duration{time.Second, 2 * time.Second, 4 * time.Second}) {
+		t.Fatalf("退避应递增：%v", got)
 	}
 	if r.l.maxAlive != 1 {
 		t.Fatalf("同时存活 %d 个", r.l.maxAlive)

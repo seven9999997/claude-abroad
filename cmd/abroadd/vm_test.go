@@ -97,3 +97,14 @@ func TestResolverLockWiring(t *testing.T) {
 		t.Fatalf("测试域名：%+v", l)
 	}
 }
+
+// M6-3b：真实模式的托管设置指向 Claude Code 的托管设置目录、记录在状态目录；本机代理端口在回环上的固定端口。只组装，不写文件。
+func TestClaudeSettingsWiring(t *testing.T) {
+	s := claudeSettings(realFlags{stateDir: "/st"})
+	if s.Dir != "/Library/Application Support/ClaudeCode/managed-settings.d" || s.RecordDir != "/st" {
+		t.Fatalf("%+v", s)
+	}
+	if RealClaudeProxyAddr != "127.0.0.1:47821" {
+		t.Fatal(RealClaudeProxyAddr)
+	}
+}

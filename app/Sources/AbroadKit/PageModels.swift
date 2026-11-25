@@ -371,6 +371,8 @@ public final class SettingsModel: PageModel {
     @Published public private(set) var security: ApiSecurity?
     /// Claude 域名解析锁（第一层，M6-3）的状态；后台没接时为 nil。
     @Published public private(set) var resolverLock: ResolverlockStatus?
+    /// 第四层（Claude Code 的托管设置和本机代理端口，M6-3b）的状态；后台没接时为 nil。
+    @Published public private(set) var claudeCode: DaemonClaudeProxyStatus?
     public let env: EnvModel
 
     public let preference: NotificationPreference
@@ -389,7 +391,7 @@ public final class SettingsModel: PageModel {
     override public func load() async {
         let o = await client.status()
         state = LoadState.from(o)
-        if case .ok(let st) = o { security = st.security; resolverLock = st.resolverLock }
+        if case .ok(let st) = o { security = st.security; resolverLock = st.resolverLock; claudeCode = st.claudeCode }
         switch await client.restorePreview() {
         case .ok(let pv):
             processes = pv.processes ?? []
@@ -431,6 +433,33 @@ public final class SettingsModel: PageModel {
         }
         if let c = l.conflicts, !c.isEmpty { parts.append(L10n.resolverLockConflicts(c)) }
         return parts.joined(separator: "\n")
+    }
+    /// 第四层的状态文字：生效、未写入、未生效（托管设置的问题或端口没在听）、有冲突；总带覆盖范围那句。
+    public var claudeCodeText: String {
+        guard let c = claudeCode else { return L10n.claudeCodeUnknown }
+        var parts: [String] = []
+        let s = c.settings
+        if s == nil || s?.written == false {
+            parts.append(L10n.claudeCodeNotWritten)
+        } else if c.effective {
+            parts.append(L10n.claudeCodeEffective)
+        } else {
+            var why: [String] = []
+            if let p = s?.problem, !p.isEmpty { why.append(L10n.claudeCodeProblem(p)) }
+            if !c.listening { why.append(L10n.claudeCodePortDown) }
+            parts.append(L10n.claudeCodeNotEffective + (why.isEmpty ? "" : "：" + why.joined(separator: "；")))
+        }
+        if let cs = s?.conflicts, !cs.isEmpty {
+            parts.append(L10n.claudeCodeConflicts(cs.map { $0.var.isEmpty ? $0.file + "：" + L10n.claudeCodeUnparsable : $0.file + "：" + $0.var }))
+        }
+        parts.append(L10n.claudeCodeScope)
+        return parts.joined(separator: "\n")
+    }
+    /// 第四层是否有问题（界面标成警告色）。写入过但未生效、端口没在听、有冲突。
+    public var claudeCodeWarn: Bool {
+        guard let c = claudeCode else { return false }
+        let written = c.settings?.written ?? false
+        return (written && !c.effective) || !c.listening || !(c.settings?.conflicts ?? []).isEmpty
     }
     /// 第一层是否有问题（界面标成警告色）。
     public var resolverLockWarn: Bool {

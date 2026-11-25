@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"claude-abroad/internal/claudecfg"
 	"claude-abroad/internal/region"
 	"claude-abroad/internal/resolverlock"
 	"context"
@@ -69,6 +70,8 @@ type RealParams struct {
 	FetchSource func(ctx context.Context, url string, viaHost bool) ([]byte, error)
 	// ResolverLock 是 Claude 域名解析锁（M6-3；nil 时不报告、冲突检查跳过这一项）。
 	ResolverLock *resolverlock.Lock
+	// ClaudeSettings 是 Claude Code 的托管设置分片（M6-3b；nil 时不报告、冲突检查跳过这一项）。
+	ClaudeSettings *claudecfg.Settings
 }
 
 // ErrNoAllowUser 是查不到放行用户。
@@ -134,6 +137,19 @@ func NewRealSystem(p RealParams) (System, error) {
 	if lk := p.ResolverLock; lk != nil {
 		chk.ResolverConflicts = func() []string { return lk.Check().Conflicts }
 	}
+	if cs := p.ClaudeSettings; cs != nil {
+		chk.ClaudeSettingsConflicts = func() []string {
+			var out []string
+			for _, c := range cs.Conflicts() {
+				if c.Var == "" {
+					out = append(out, c.File+"：解析不了")
+				} else {
+					out = append(out, c.File+"："+c.Var)
+				}
+			}
+			return out
+		}
+	}
 	if p.Env != nil && p.Env.Conflicts == nil { // 第 11 项复用冲突检查（带上我们自己的 utun 名）
 		env := *p.Env
 		env.Conflicts = chk.TakeoverConflicts
@@ -164,7 +180,7 @@ func NewRealSystem(p RealParams) (System, error) {
 		ExitVM: p.ExitVM, CheckExit: p.CheckExit,
 		MainProfile: p.MainProfile, MainVM: p.MainVM, FetchSource: p.FetchSource,
 		Preflight: realPreflight{PreflightHints{C: chk}, p.FirstHop != nil},
-		Data:      p.Data, ResolverLock: p.ResolverLock,
+		Data:      p.Data, ResolverLock: p.ResolverLock, ClaudeSettings: p.ClaudeSettings,
 	}, nil
 }
 

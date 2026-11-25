@@ -63,6 +63,45 @@
         ],
         "type": "object"
       },
+      "ClaudecfgConflict": {
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "var": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "var"
+        ],
+        "type": "object"
+      },
+      "ClaudecfgStatus": {
+        "properties": {
+          "conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudecfgConflict"
+            },
+            "type": "array"
+          },
+          "effective": {
+            "type": "boolean"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "written": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "effective",
+          "written"
+        ],
+        "type": "object"
+      },
       "ClaudeprocPreview": {
         "properties": {
           "notice": {
@@ -199,6 +238,31 @@
         "required": [
           "country",
           "rule"
+        ],
+        "type": "object"
+      },
+      "DaemonClaudeProxyStatus": {
+        "properties": {
+          "effective": {
+            "type": "boolean"
+          },
+          "listen_error": {
+            "type": "string"
+          },
+          "listening": {
+            "type": "boolean"
+          },
+          "port": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ClaudecfgStatus"
+          }
+        },
+        "required": [
+          "effective",
+          "listening"
         ],
         "type": "object"
       },
@@ -870,6 +934,9 @@
       },
       "DaemonStatus": {
         "properties": {
+          "claude_code": {
+            "$ref": "#/components/schemas/DaemonClaudeProxyStatus"
+          },
           "corrupt": {
             "type": "boolean"
           },

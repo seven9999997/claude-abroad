@@ -69,6 +69,28 @@ public struct ApiSecurity: Codable, Sendable {
     }
 }
 
+public struct ClaudecfgConflict: Codable, Sendable {
+    public var file: String
+    public var `var`: String
+    enum CodingKeys: String, CodingKey {
+        case file = "file"
+        case `var` = "var"
+    }
+}
+
+public struct ClaudecfgStatus: Codable, Sendable {
+    public var written: Bool
+    public var effective: Bool
+    public var problem: String?
+    public var conflicts: [ClaudecfgConflict]?
+    enum CodingKeys: String, CodingKey {
+        case written = "written"
+        case effective = "effective"
+        case problem = "problem"
+        case conflicts = "conflicts"
+    }
+}
+
 public struct ClaudeprocPreview: Codable, Sendable {
     public var processes: [ClaudeprocTarget]?
     public var unverified: [ClaudeprocTarget]?
@@ -144,6 +166,21 @@ public struct DaemonBaselineSummary: Codable, Sendable {
         case rule = "rule"
         case country = "country"
         case timezone = "timezone"
+    }
+}
+
+public struct DaemonClaudeProxyStatus: Codable, Sendable {
+    public var settings: ClaudecfgStatus?
+    public var listening: Bool
+    public var port: Int64?
+    public var listenError: String?
+    public var effective: Bool
+    enum CodingKeys: String, CodingKey {
+        case settings = "settings"
+        case listening = "listening"
+        case port = "port"
+        case listenError = "listen_error"
+        case effective = "effective"
     }
 }
 
@@ -543,6 +580,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var gate: GatesmStatus
     public var vmManager: VmmgrStatus?
     public var resolverLock: ResolverlockStatus?
+    public var claudeCode: DaemonClaudeProxyStatus?
     public var exits: [DaemonExitStatus]?
     public var opens: [String: DaemonExitCounts]?
     public var region: DaemonRegionStatus?
@@ -562,6 +600,7 @@ public struct DaemonStatus: Codable, Sendable {
         case gate = "gate"
         case vmManager = "vm_manager"
         case resolverLock = "resolver_lock"
+        case claudeCode = "claude_code"
         case exits = "exits"
         case opens = "opens"
         case region = "region"

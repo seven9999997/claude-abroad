@@ -23,6 +23,7 @@ import (
 	"strings"
 	"syscall"
 
+	"claude-abroad/internal/claudecfg"
 	"claude-abroad/internal/daemon"
 	"claude-abroad/internal/redact"
 	"claude-abroad/internal/resolverlock"
@@ -110,6 +111,17 @@ func vmLifecycle(f realFlags, lookup lookupFunc, out io.Writer) (state.VM, error
 		Launcher: &vmmgr.ExecLauncher{Path: f.vmExec, Args: args, RunAs: cred, Output: out},
 		Health:   ext.Probe,
 	}, nil
+}
+
+// RealClaudeSettingsDir 是 Claude Code 的托管设置分片目录（主文件在它的上一级）。真实路径只在这里出现（源码检查）。
+const RealClaudeSettingsDir = "/Library/Application Support/ClaudeCode/managed-settings.d"
+
+// RealClaudeProxyAddr 是第四层的本机代理端口（静态写在托管设置里）。
+var RealClaudeProxyAddr = "127.0.0.1:" + strconv.Itoa(claudecfg.DefaultPort)
+
+// claudeSettings 组装 Claude Code 的托管设置（M6-3b）：只组装，写入在首次准备（M6-8）、删除在卸载（M6-5）。
+func claudeSettings(f realFlags) *claudecfg.Settings {
+	return &claudecfg.Settings{Dir: RealClaudeSettingsDir, RecordDir: f.stateDir}
 }
 
 // RealResolverDir 是系统的按域名解析配置目录（resolver(5)）。真实路径只在这里出现（源码检查）。
@@ -232,12 +244,15 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		Env:      realEnvDeps(claude, direct), // 环境检测（M4-6a、6b）
 		// Claude 域名解析锁（M6-3）：状态接口和冲突检查读它；写入和删除不在这里。
 		ResolverLock: resolverLock(f),
+		// 第四层（M6-3b）：Claude Code 的托管设置（状态和冲突检查读它）。
+		ClaudeSettings: claudeSettings(f),
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)
 		return 1
 	}
 	d, err := daemon.Start(context.Background(), daemon.Options{StateDir: f.stateDir, Sys: sys, Log: logger, SocketDir: f.socketDir,
+		ClaudeProxyAddr: RealClaudeProxyAddr, // 第四层的本机代理端口（M6-3b）
 		// M6-2b：运行时目录沿用 socket 目录（/var/run/claude-abroad，重启后清空）：给开机时的 guard 写标记、收养它的启用引用。
 		RunDir: f.socketDir})
 	if err != nil {

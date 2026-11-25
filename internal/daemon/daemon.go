@@ -6,8 +6,8 @@ import (
 	"claude-abroad/internal/envcheck"
 	"claude-abroad/internal/exitcheck"
 	"claude-abroad/internal/gatesm"
-	"claude-abroad/internal/vmhost"
 	"claude-abroad/internal/resolverlock"
+	"claude-abroad/internal/vmhost"
 	"claude-abroad/internal/vmmgr"
 	"context"
 	"encoding/json"
@@ -73,7 +73,13 @@ type Options struct {
 	// RunDir 是运行时目录（M6-2b，真实模式是 /var/run/claude-abroad）：给了就为开机时的 guard 另存参数
 	// （状态目录里的 guard-params.json）、写“本次开机已加载规则”的标记、收养 guard 取得的 pf 启用引用。空时都不做。
 	RunDir string
-	BootID func() (string, error) // 本次开机的标识（nil 用 guard.BootID；测试注入）
+	// ClaudeProxyAddr 是第四层的本机代理端口（M6-3b；真实模式 127.0.0.1:47821，测试 127.0.0.1:0）；空时不监听。
+	// 只能是回环地址。假系统模式默认不监听。
+	ClaudeProxyAddr string
+	// ClaudeProxyRetry、ClaudeProxyHandshake 是端口被占用时重试的间隔、读完请求头的时限（0 用默认 5 秒、10 秒；测试注入）。
+	ClaudeProxyRetry     time.Duration
+	ClaudeProxyHandshake time.Duration
+	BootID               func() (string, error) // 本次开机的标识（nil 用 guard.BootID；测试注入）
 }
 
 // Daemon 是一个 abroadd 实例。
@@ -82,6 +88,8 @@ type Daemon struct {
 	vmm    *vmmgr.Manager
 	vmStop func()
 	vmDone chan struct{}
+	// M6-3b：第四层的本机代理端口（Options.ClaudeProxyAddr 非空时）。
+	cproxy       *claudeProxy
 	resolverLast string // 上一次解析锁自检的摘要（变化时才记事件）
 	resolverMu   sync.Mutex
 	// 地区待还原重试循环跑完的轮数（startupSettled 用）。
@@ -245,11 +253,11 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	}
 
 	d.wireExitAvail()
-	d.wireExits()      // 出口要在规则之前：规则引用的出口要能查到
-	d.wireRules()      // 规则要在 Recover 之前接上：Recover 到 ENABLED 时会通知数据面启用（重新计算直连配置）
+	d.wireExits()         // 出口要在规则之前：规则引用的出口要能查到
+	d.wireRules()         // 规则要在 Recover 之前接上：Recover 到 ENABLED 时会通知数据面启用（重新计算直连配置）
 	d.checkResolverLock() // 解析锁自检（只读；不在或被改了记事件，不自动重写）
 	d.wireGuard()         // 要在 Recover 之前：Recover 到 ENABLED、DISABLED 时会应用 pf
-	d.startVMManager() // 要在 Recover 之前：Recover 里可能调用虚拟机的启停
+	d.startVMManager()    // 要在 Recover 之前：Recover 里可能调用虚拟机的启停
 	if err := d.m.Recover(ctx); err != nil {
 		o.logf("恢复上次的状态：%v", err)
 		d.events.Add("daemon", "recover_failed", err.Error())
@@ -285,6 +293,10 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 		}
 	}()
 
+	d.startClaudeProxy() // 第四层的本机代理端口（M6-3b；没配置时什么都不做）
+	if chk := preflightChecker(s.Preflight); chk != nil && d.cproxy != nil {
+		chk.ClaudeProxyDown = d.claudeProxyDown // 端口被占用：冲突检查的“必须处理”项
+	}
 	// 状态目录必须是属主本人、0700（store 建目录时已保证，这里在监听前再查一次）；先用临时名字监听、改成 0600 再改名，
 	// 没有权限更宽的窗口（architect 判 W-2a 时指出）。
 	listen := vmhost.ListenPrivateUnix
@@ -338,6 +350,7 @@ func (d *Daemon) stopInternals(closeGate bool) {
 	if closeGate {
 		d.gate.AddReason(gatesm.ReasonState, "abroadd 退出")
 	}
+	d.cproxy.stop()      // 第四层的本机代理端口（没配置时为 nil，stop 什么都不做）
 	if d.vmStop != nil { // 由 abroadd 管理的虚拟机：关掉自己拉起的（先请它退出，超时强制结束）
 		d.vmStop()
 		<-d.vmDone
@@ -406,6 +419,8 @@ type Status struct {
 	VMManager *vmmgr.Status `json:"vm_manager,omitempty"`
 	// M6-3：Claude 域名解析锁（第一层）的状态：是否写入、锁的域名、写法、自检结果、冲突（没有接上时没有这一项）。
 	ResolverLock *resolverlock.Status `json:"resolver_lock,omitempty"`
+	// M6-3b：第四层（Claude Code 的托管设置和本机代理端口）的状态（都没接时没有这一项）。
+	ClaudeCode *ClaudeProxyStatus `json:"claude_code,omitempty"`
 	// M4-8：分流出口（正式的和开发用的）的摘要、可用状态、最近一次检查；各出口（含 main）的开流计数。
 	// 不含出口 IP、端点地址、配置。
 	Exits []ExitStatus          `json:"exits,omitempty"`
@@ -430,6 +445,7 @@ func (d *Daemon) Status() Status {
 		ls := lk.Check()
 		st.ResolverLock = &ls
 	}
+	st.ClaudeCode = d.claudeCodeStatus()
 	if f, err := d.store.Load(); err != nil {
 		st.State, st.Corrupt = "UNKNOWN", true
 	} else {

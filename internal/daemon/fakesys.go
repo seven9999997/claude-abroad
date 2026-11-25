@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 
+	"claude-abroad/internal/claudecfg"
 	"claude-abroad/internal/claudeproc"
 	"claude-abroad/internal/exitcheck"
 	"claude-abroad/internal/pf"
@@ -38,6 +39,8 @@ type System struct {
 	Preflight state.Preflight
 	// ResolverLock 是 Claude 域名解析锁（M6-3；nil 时不报告）。目录由组装方给出：真实模式 /etc/resolver，测试用临时目录。
 	ResolverLock *resolverlock.Lock
+	// ClaudeSettings 是 Claude Code 的托管设置分片（M6-3b；nil 时不报告）。目录由组装方给出。
+	ClaudeSettings *claudecfg.Settings
 	// Data 是数据面（可为 nil：假系统没有数据面）。daemon 启动时绑定闸门和监护的 Kick，闸门由开变关时断开连接。
 	Data *DataPlane
 	// Env 是环境检测的依赖（M4-6a）：nil 时不做环境检测。

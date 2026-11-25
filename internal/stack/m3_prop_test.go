@@ -187,7 +187,7 @@ func TestSingleDispatchPath(t *testing.T) {
 		"Opener.Open": "probe,open",            // M4-6a：探测窗口的放行路径是唯一的例外（出口固定是主代理，见 TestProbePathMainOnly）
 		"Direct.Dial": "dialDirect,dialDirect", // 有域名、没有域名各一处
 		"Decide":      "decide,dispatch",
-		"dispatch":    "TCP,UDP,dispatch",
+		"dispatch":    "ServeProxyFlow,TCP,UDP,dispatch", // M6-3b：本机代理端口的流走同一个 dispatch（不另写判定和拨号）
 		"probe":       "TCP,UDP",
 	}
 	for k, w := range want {

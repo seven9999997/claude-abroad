@@ -219,6 +219,25 @@ public enum L10n {
         default: return domain + " " + kind
         }
     }
+    // M6-3b：第四层（Claude Code 的托管设置和本机代理端口）
+    public static let claudeCodeTitle = "第四层：Claude Code 的本机代理"
+    public static let claudeCodeUnknown = "后台没有报告第四层的状态"
+    public static let claudeCodeNotWritten = "托管设置还没有写入（首次准备时写入）"
+    public static let claudeCodeEffective = "生效中：Claude Code 只经本机代理端口联网，回国后一律连不上"
+    public static let claudeCodeNotEffective = "未生效"
+    public static func claudeCodeProblem(_ kind: String) -> String {
+        switch kind {
+        case "missing": return "托管设置文件不在了"
+        case "modified": return "托管设置文件被改过"
+        case "unreadable": return "托管设置文件普通用户读不到"
+        case "permission": return "托管设置文件权限不对"
+        default: return kind
+        }
+    }
+    public static let claudeCodePortDown = "本机代理端口没在听（可能被别的程序占着）"
+    public static func claudeCodeConflicts(_ items: [String]) -> String { "别的托管设置文件也定义了代理变量：" + items.joined(separator: "、") }
+    public static let claudeCodeUnparsable = "解析不了"
+    public static let claudeCodeScope = "只覆盖 Claude Code，不覆盖 Claude 桌面版和浏览器"
     public static func resolverLockConflicts(_ doms: [String]) -> String { "有别的软件写的同名文件：" + doms.joined(separator: "、") + "（这些域名不受锁保护）" }
     public static let uninstall = "卸载"
     public static let uninstallInInstaller = "在正式安装包里提供"
