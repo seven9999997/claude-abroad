@@ -203,6 +203,19 @@ func cmdStatus(a *app, args []string) int {
 			Region *struct {
 				Target *struct{ Timezone, Lang string } `json:"target"`
 			} `json:"region"`
+			Integrity *struct {
+				OK       bool   `json:"ok"`
+				Checked  bool   `json:"checked"`
+				Note     string `json:"note"`
+				Problems []struct {
+					File string `json:"file"`
+					Kind string `json:"kind"`
+				} `json:"problems"`
+			} `json:"integrity"`
+			Prepare *struct {
+				Done  bool     `json:"done"`
+				Notes []string `json:"notes"`
+			} `json:"prepare"`
 		}
 		_ = json.Unmarshal(resp.Body, &st)
 		fmt.Fprintf(a.stdout, "状态：%s\n闸门：%s\n", st.State, map[bool]string{true: "开", false: "关"}[st.GateOpen])
@@ -214,6 +227,28 @@ func cmdStatus(a *app, args []string) int {
 		}
 		if st.Security != nil && st.Security.CallerVerification == "disabled" {
 			fmt.Fprintf(a.stdout, "注意：%s\n", st.Security.Note)
+		}
+		if ig := st.Integrity; ig != nil {
+			switch {
+			case ig.OK && !ig.Checked:
+				fmt.Fprintf(a.stdout, "完整性校验：%s\n", ig.Note)
+			case ig.OK:
+				fmt.Fprintln(a.stdout, "完整性校验：通过")
+			default:
+				var parts []string
+				for _, p := range ig.Problems {
+					parts = append(parts, p.File+"（"+map[string]string{"missing": "不见了", "mismatch": "内容不对", "manifest": "清单被改过或读不出"}[p.Kind]+"）")
+				}
+				fmt.Fprintf(a.stdout, "完整性校验不通过：%s。只保留断网规则、不能启用，请重新安装。\n", strings.Join(parts, "、"))
+			}
+		}
+		if st.Prepare != nil {
+			if !st.Prepare.Done {
+				fmt.Fprintln(a.stdout, "首次准备：没有完成")
+			}
+			for _, n := range st.Prepare.Notes {
+				fmt.Fprintf(a.stdout, "首次准备：%s\n", n)
+			}
 		}
 	})
 }

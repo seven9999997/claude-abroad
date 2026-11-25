@@ -393,6 +393,10 @@ public final class SettingsModel: PageModel {
     @Published public private(set) var claudeCode: DaemonClaudeProxyStatus?
     /// 启动管控（M6-4b）；后台没给时为 nil。
     @Published public private(set) var launchGuard: DaemonLaunchGuardView?
+    /// 程序完整性（M6-7）；后台没接时为 nil。
+    @Published public private(set) var integrity: IntegrityResult?
+    /// 首次准备（M6-8a）；后台没打开时为 nil（不显示）。
+    @Published public private(set) var prepare: DaemonPrepareStatus?
     public let env: EnvModel
 
     public let preference: NotificationPreference
@@ -411,7 +415,7 @@ public final class SettingsModel: PageModel {
     override public func load() async {
         let o = await client.status()
         state = LoadState.from(o)
-        if case .ok(let st) = o { security = st.security; resolverLock = st.resolverLock; claudeCode = st.claudeCode }
+        if case .ok(let st) = o { security = st.security; resolverLock = st.resolverLock; claudeCode = st.claudeCode; integrity = st.integrity; prepare = st.prepare }
         switch await client.restorePreview() {
         case .ok(let pv):
             processes = pv.processes ?? []
@@ -491,6 +495,19 @@ public final class SettingsModel: PageModel {
         let written = c.settings?.written ?? false
         return (written && !c.effective) || !c.listening || !(c.settings?.conflicts ?? []).isEmpty
     }
+    /// 程序完整性的一句话（M6-7）。
+    public var integrityText: String {
+        guard let r = integrity else { return L10n.integrityUnknown }
+        if r.ok { return r.checked ? L10n.integrityOK : L10n.integrityNotChecked(r.note ?? "") }
+        return L10n.integrityFailed((r.problems ?? []).map { L10n.integrityItem($0.file, $0.kind) })
+    }
+    public var integrityWarn: Bool { integrity.map { !$0.ok } ?? false }
+    /// 首次准备的说明（M6-8a）；后台没打开首次准备时为 nil。
+    public var prepareText: String? {
+        guard let p = prepare else { return nil }
+        return ([p.done ? L10n.prepareDone : L10n.prepareNotDone] + (p.notes ?? [])).joined(separator: "\n")
+    }
+    public var prepareWarn: Bool { prepare.map { !$0.done || !($0.notes ?? []).isEmpty } ?? false }
     /// 第一层是否有问题（界面标成警告色）。
     public var resolverLockWarn: Bool {
         guard let l = resolverLock else { return false }

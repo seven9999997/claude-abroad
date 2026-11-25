@@ -78,6 +78,8 @@ type RealParams struct {
 	LaunchGuard *claudeproc.LaunchGuard
 	// Integrity 是程序完整性校验（M6-7；nil 时不校验）。
 	Integrity *integrity.Checker
+	// FirstRun、PrepareTestOnly 见 System（M6-8a）。
+	FirstRun, PrepareTestOnly bool
 }
 
 // ErrNoAllowUser 是查不到放行用户。
@@ -188,7 +190,7 @@ func NewRealSystem(p RealParams) (System, error) {
 		Preflight: realPreflight{PreflightHints{C: chk}, p.FirstHop != nil},
 		Data:      p.Data, ResolverLock: p.ResolverLock, ClaudeSettings: p.ClaudeSettings, LaunchGuard: p.LaunchGuard,
 		DeviceRoot: p.RootFS, DeviceHome: p.HomeFS, // 设备体检读字体目录（M6-6a）
-		Integrity: p.Integrity,
+		Integrity: p.Integrity, FirstRun: p.FirstRun, PrepareTestOnly: p.PrepareTestOnly,
 	}, nil
 }
 

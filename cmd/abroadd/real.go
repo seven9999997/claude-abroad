@@ -262,6 +262,8 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		LaunchGuard: launchGuard,
 		// 程序完整性校验（M6-7）：清单的摘要在构建时写进程序；没给清单时不校验。
 		Integrity: integrityChecker(f),
+		// 首次准备（M6-8a）：第一次启动时写入解析锁和托管设置；开发构建只管测试域名时不写托管设置。
+		FirstRun: true, PrepareTestOnly: f.resolverTest,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)

@@ -235,6 +235,25 @@ public enum L10n {
     public static func launchGuardRecent(_ n: Int) -> String { "最近拦下 \(n) 次" }
     public static let loginItemHint = "如果 Claude 设了“登录时打开”，请在 Claude 的设置里关掉：开机时它会比 Claude 出国先起来，会被拦下"
     public static let claudeCodeTitle = "第四层：Claude Code 的本机代理"
+    // M6-7：程序完整性（没有付费开发者账号，用清单校验代替系统签名校验）
+    public static let integrityTitle = "程序完整性"
+    public static let integrityUnknown = "后台没有报告完整性校验"
+    public static let integrityOK = "按清单校验通过（未使用系统签名校验）"
+    public static func integrityNotChecked(_ why: String) -> String { "没有校验：" + why }
+    public static func integrityFailed(_ items: [String]) -> String {
+        "校验不通过：" + items.joined(separator: "、") + "。只保留断网规则、不能启用，请重新安装。"
+    }
+    public static func integrityItem(_ file: String, _ kind: String) -> String {
+        switch kind {
+        case "missing": return file + " 不见了"
+        case "mismatch": return file + " 内容不对"
+        default: return "完整性清单被改过或读不出"
+        }
+    }
+    // M6-8a：首次准备（写入解析锁和托管设置）
+    public static let prepareTitle = "首次准备"
+    public static let prepareDone = "已完成"
+    public static let prepareNotDone = "没有完成（后台下次启动时重试）"
     public static let claudeCodeUnknown = "后台没有报告第四层的状态"
     public static let claudeCodeNotWritten = "托管设置还没有写入（首次准备时写入）"
     public static let claudeCodeEffective = "生效中：Claude Code 只经本机代理端口联网，回国后一律连不上"

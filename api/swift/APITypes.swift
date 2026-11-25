@@ -562,6 +562,15 @@ public struct DaemonPreflightView: Codable, Sendable {
     }
 }
 
+public struct DaemonPrepareStatus: Codable, Sendable {
+    public var done: Bool
+    public var notes: [String]?
+    enum CodingKeys: String, CodingKey {
+        case done = "done"
+        case notes = "notes"
+    }
+}
+
 public struct DaemonRefreshRequest: Codable, Sendable {
     public var viaHost: Bool?
     enum CodingKeys: String, CodingKey {
@@ -674,6 +683,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var resolverLock: ResolverlockStatus?
     public var claudeCode: DaemonClaudeProxyStatus?
     public var integrity: IntegrityResult?
+    public var prepare: DaemonPrepareStatus?
     public var exits: [DaemonExitStatus]?
     public var opens: [String: DaemonExitCounts]?
     public var region: DaemonRegionStatus?
@@ -695,6 +705,7 @@ public struct DaemonStatus: Codable, Sendable {
         case resolverLock = "resolver_lock"
         case claudeCode = "claude_code"
         case integrity = "integrity"
+        case prepare = "prepare"
         case exits = "exits"
         case opens = "opens"
         case region = "region"

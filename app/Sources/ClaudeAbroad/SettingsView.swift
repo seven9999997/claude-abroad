@@ -39,6 +39,12 @@ struct SettingsView: View {
                 LabeledContent(L10n.claudeCodeTitle) {
                     Text(model.claudeCodeText).foregroundStyle(model.claudeCodeWarn ? .orange : .primary)
                 }
+                if let t = model.prepareText {
+                    LabeledContent(L10n.prepareTitle) { Text(t).foregroundStyle(model.prepareWarn ? .orange : .primary) }
+                }
+                LabeledContent(L10n.integrityTitle) {
+                    Text(model.integrityText).foregroundStyle(model.integrityWarn ? .red : .primary)
+                }
             }
             .tabItem { Text(L10n.settingsClaude) }
             Form {

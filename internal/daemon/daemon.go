@@ -94,6 +94,7 @@ type Daemon struct {
 	// M6-4b：启动管控的第三层（Sys.LaunchGuard 非空时）。
 	// M6-7：启动时完整性校验的结果（接了校验时）。
 	integrity    *integrity.Result
+	prepareSt    *PrepareStatus // 首次准备的结果（M6-8a；没打开时为 nil）
 	gs           *guardState
 	lgStop       func()
 	lgDone       chan struct{}
@@ -262,6 +263,7 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	d.wireExitAvail()
 	d.wireExits()         // 出口要在规则之前：规则引用的出口要能查到
 	d.wireRules()         // 规则要在 Recover 之前接上：Recover 到 ENABLED 时会通知数据面启用（重新计算直连配置）
+	d.prepare()           // 首次准备（M6-8a）：要在解析锁自检之前
 	d.checkResolverLock() // 解析锁自检（只读；不在或被改了记事件，不自动重写）
 	d.wireGuard()         // 要在 Recover 之前：Recover 到 ENABLED、DISABLED 时会应用 pf
 	d.startVMManager()    // 要在 Recover 之前：Recover 里可能调用虚拟机的启停
@@ -440,6 +442,8 @@ type Status struct {
 	ClaudeCode *ClaudeProxyStatus `json:"claude_code,omitempty"`
 	// M6-7：程序完整性校验的结果（接了校验时；不通过时只保留断网规则、不接管、不能启用）。
 	Integrity *integrity.Result `json:"integrity,omitempty"`
+	// M6-8a：首次准备（写入解析锁和托管设置）的结果（打开了首次准备时）。
+	Prepare *PrepareStatus `json:"prepare,omitempty"`
 	// M4-8：分流出口（正式的和开发用的）的摘要、可用状态、最近一次检查；各出口（含 main）的开流计数。
 	// 不含出口 IP、端点地址、配置。
 	Exits []ExitStatus          `json:"exits,omitempty"`
@@ -468,6 +472,10 @@ func (d *Daemon) Status() Status {
 	if d.integrity != nil {
 		ir := *d.integrity
 		st.Integrity = &ir
+	}
+	if d.prepareSt != nil {
+		ps := *d.prepareSt
+		st.Prepare = &ps
 	}
 	if f, err := d.store.Load(); err != nil {
 		st.State, st.Corrupt = "UNKNOWN", true

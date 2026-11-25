@@ -936,6 +936,23 @@
         ],
         "type": "object"
       },
+      "DaemonPrepareStatus": {
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "done"
+        ],
+        "type": "object"
+      },
       "DaemonRefreshRequest": {
         "properties": {
           "via_host": {
@@ -1149,6 +1166,9 @@
               "$ref": "#/components/schemas/DaemonExitCounts"
             },
             "type": "object"
+          },
+          "prepare": {
+            "$ref": "#/components/schemas/DaemonPrepareStatus"
           },
           "protected": {
             "type": "boolean"
