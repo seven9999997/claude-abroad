@@ -20,15 +20,7 @@ import (
 	"unicode/utf8"
 
 	"claude-abroad/internal/procinfo"
-	"claude-abroad/internal/rules"
 )
-
-// AnthropicTeamID 是 Anthropic 的代码签名 Team ID（2026-11-20 在本机对原生安装的 Claude Code 只读执行
-// codesign -dv 得到，design 15 R17）。
-const AnthropicTeamID = "Q6L2SF6YDW"
-
-// DesktopBundleID 是 Claude 桌面版的 Bundle ID（design 10.1）。
-const DesktopBundleID = "com.anthropic.claudefordesktop"
 
 const claudeCodePkg = "@anthropic-ai/claude-code"
 
@@ -218,12 +210,12 @@ func (s *Scanner) classify(p procinfo.Proc, teams map[string]teamResult) verdict
 		}
 		return verdict{}
 	}
-	if s.Bundle != nil && procinfo.AppIDForPath(p.Path, s.Bundle) == rules.AppID(DesktopBundleID) {
+	if s.Bundle != nil && IsDesktopBundle(string(procinfo.AppIDForPath(p.Path, s.Bundle))) {
 		id, err := s.team(p.Path, teams)
 		switch {
 		case err != nil:
 			return verdict{app: appDesktop, unverified: noteUnsigned}
-		case id == AnthropicTeamID:
+		case IsAnthropicTeam(id):
 			return verdict{match: true, app: appDesktop, reason: "Bundle ID 和签名"}
 		default:
 			return verdict{app: appDesktop, unverified: noteWrongSign}
@@ -240,7 +232,7 @@ func (s *Scanner) classify(p procinfo.Proc, teams map[string]teamResult) verdict
 		switch {
 		case err != nil:
 			return verdict{app: appCode, unverified: noteUnsigned}
-		case id == AnthropicTeamID:
+		case IsAnthropicTeam(id):
 			return verdict{match: true, app: appCode, reason: "签名"}
 		}
 		return verdict{} // 只是文件名叫 claude

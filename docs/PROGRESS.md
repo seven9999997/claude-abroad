@@ -25,7 +25,7 @@
   - 需要用户（不阻塞）：R17 真机抽查放进 M6-9。原有各项照旧。
   ```
 - **等用户的任务**：无（W-2a-3 第 3 步“正式执行 Windows 第一级探查”随 Windows 暂停撤下，2026-11-25）。
-- 设计文档：v0.37；Windows 平台层 design-windows v0.5。
+- 设计文档：v0.38；Windows 平台层 design-windows v0.5。
 - **构建与测试备忘（W-1 起）**：每个任务的验收都加 `GOOS=windows GOARCH=amd64 go build ./...` 和 `GOOS=windows GOARCH=amd64 go vet ./...`（Mac 的任务也一样）；Windows 上没实现的功能一律返回 `platform.Unsupported`，源码检查 `internal/srccheck` 的 `TestRepoWindowsPlaceholdersFail` 会抓“假装成功”的占位。
 - M0：不再单独做 demo（2026-11-17 用户决定）。`docs/m0-plan.md` 作废，只保留 R2 脚本（`cmd/m0-r2-probe/`、`scripts/m0/`）。
 
@@ -167,7 +167,7 @@ M5 开工前的 7 条前提：
 | M6-2a | abroadd 管理虚拟机的生命周期 | |
 | M6-2b | guard（开机时加载断网规则） | |
 | M6-3 | Claude 域名解析锁 | |
-| M6-4a | Claude 进程的识别规则（启动管控用，只认签名） | |
+| M6-4a | Claude 进程的识别规则（启动管控用，只认签名） | **完成，待顾问补审**（2026-11-25；第一轮复审的必须改已改——原生安装文件名是版本号、Homebrew 由签名决定；返工后顾问因额度上限没审成，用户决定先不复审、继续开发；claudeproc 的 AutoJudge、签名缓存、Coverage、集中清单 idlist.go） |
 | M6-4b | 启动管控（第三层，10.2 口径 A–D）、“打开 Claude”、--kill-browsers | |
 | M6-5 | 一键卸载与应急恢复（restore --force 先结束 Claude） | |
 | M6-6a | 设备体检和诊断包 | |
@@ -351,6 +351,8 @@ M5 开工前的 7 条前提：
 - **M4 备注**（architect 审 M1-6c-2 时提出）：出口检查里的 UDP 探测以“收到应答”为准。回应帧 ok 不算数：路线不转 UDP 时，数据面照样回 ok，UDP 被 mihomo 的 `MATCH,REJECT` 静默丢弃。
 
 ## 已做的决定
+
+- **2026-11-25 用户决定：顾问额度到上限期间先不复审，继续开发**。用户原话：“先不复查，还有没开发的继续开发”。之后的任务按 m6-plan 的顺序和已审定的决定由主会话推进，进度单里标“待顾问补审”，顾问额度恢复后逐个补审，有必须改再返工。
 
 - **2026-11-25 用户本人决定：新增回国后的兜底，Windows 暂停**。用户要求把 caibao_vps（用户自己的项目：本机代理经 TLS 隧道连到 VPS 上的中继）的策略加进来做兜底，随后更正为：回国后还是要连不上，拦截没拦住时才由它兜底。architect 出方案后，用户回答了三个问题：
   - 回国后没被拦住的 Claude Code 连到本机代理时**一律拒绝**（甲），不经中继转发；因此不需要中继和服务器，原计划的 M6-3c（中继上游）不做。
