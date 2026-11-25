@@ -85,6 +85,8 @@ extension APIClient {
     public func envSettings() async -> Outcome<EnvSettings> { await get("/v1/envcheck/settings") }
     public func putEnvSettings(_ s: EnvSettings) async -> Outcome<EnvSettings> { await call(json("PUT", "/v1/envcheck/settings", s)) }
     public func runEnvcheck() async -> Outcome<EnvcheckReport> { await call(HTTPRequest(method: "POST", path: "/v1/envcheck/run")) }
+    /// 设备体检（M6-6a）：字体等，只返回结果。
+    public func deviceCheck() async -> Outcome<EnvcheckDeviceReport> { await call(HTTPRequest(method: "POST", path: "/v1/envcheck/device")) }
 
     // 地区
     public func region() async -> Outcome<DaemonRegionStatus> { await get("/v1/region") }

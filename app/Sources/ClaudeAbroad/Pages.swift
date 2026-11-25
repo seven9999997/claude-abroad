@@ -184,7 +184,10 @@ struct EnvPage: View {
             List {
                 Section(L10n.envHard) { ForEach(model.hardRows) { row($0) } }
                 Section(L10n.envWarn) { ForEach(model.warnRows) { row($0) } }
-                Section(L10n.envDevice) { Text(model.deviceCheckText).foregroundStyle(.secondary) }
+                Section(L10n.envDevice) {
+                    Text(model.deviceCheckText).foregroundStyle(.secondary)
+                    Button(L10n.deviceCheckRun) { Task { await model.runDevice() } }.disabled(model.busy)
+                }
             }
             .toolbar { Button(L10n.envRerun) { Task { await model.rerun() } }.disabled(model.busy) }
         }

@@ -224,7 +224,7 @@ let envJSON = "{\"at\":\"2026-11-22T00:00:00Z\",\"hard\":\"fail\",\"items\":[{\"
     // 重新检测后结果更新
     await m.rerun()
     #expect(ran.v && m.hardRows[1].result == "pass")
-    #expect(m.deviceCheckText == L10n.laterVersion)
+    #expect(m.deviceCheckText == L10n.deviceCheckHint) // M6-6a：没跑过时是提示
 }
 
 // ---- e：地区 ----

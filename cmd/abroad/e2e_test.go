@@ -297,7 +297,7 @@ func TestYes(t *testing.T) {
 func TestLater(t *testing.T) {
 	r := newRig(t, rigOpt{})
 	for _, args := range [][]string{
-		{"engine", "install", "sing-box"}, {"engine", "rollback", "sing-box"}, {"check", "--device"},
+		{"engine", "install", "sing-box"}, {"engine", "rollback", "sing-box"}, // check --device 在 M6-6a 提供了
 		{"restore", "--force"}, // --kill-browsers 在 M6-4b-3、uninstall 在 M6-5a 提供了
 	} {
 		x := r.run(args...)

@@ -55,6 +55,7 @@ var commands = []command{
 	{path: []string{"region", "auto"}, route: "region-put", run: cmdRegionAuto},
 	{path: []string{"engine", "ls"}, route: "engines", run: cmdEngineLs},
 	{path: []string{"launchguard"}, route: "launchguard", run: cmdLaunchGuard},
+	{path: []string{"diagnostics"}, route: "diagnostics", run: cmdDiagnostics},
 	{path: []string{"engine", "install"}, later: "引擎的安装和升级随更新机制提供"},
 	{path: []string{"engine", "rollback"}, later: "引擎的回滚随更新机制提供"},
 }
@@ -72,6 +73,7 @@ var notInCLI = map[string]string{
 	"preflight":             "启用被拦下时已经列出",
 	"setup-get":             "安装引导是应用里的流程",
 	"setup-complete":        "安装引导是应用里的流程",
+	"envcheck-device":       "由 check --device 调用（M6-6a）",
 }
 
 func findCommand(words []string) (*command, []string) {
@@ -246,9 +248,27 @@ func cmdCheck(a *app, args []string) int {
 	if err != nil {
 		return usageErr(a, err.Error())
 	}
-	if f.bools["--device"] {
-		fmt.Fprintln(a.stdout, "check --device：在以后的版本提供（设备体检）")
-		return ExitLater
+	if f.bools["--device"] { // 设备体检（M6-6a）：字体等，只提示，不参与放行
+		resp, code := a.call("POST", "/v1/envcheck/device", nil)
+		if code != ExitOK {
+			return code
+		}
+		return a.out(resp, func() {
+			var rep struct {
+				Findings []struct{ Font, File, Location string } `json:"findings"`
+				Note     string                                  `json:"note"`
+			}
+			_ = json.Unmarshal(resp.Body, &rep)
+			if len(rep.Findings) == 0 {
+				fmt.Fprintln(a.stdout, "设备体检：没有发现随中文办公软件安装的字体")
+				return
+			}
+			fmt.Fprintf(a.stdout, "设备体检：发现 %d 个随中文办公软件安装的字体\n", len(rep.Findings))
+			for _, x := range rep.Findings {
+				fmt.Fprintf(a.stdout, "  %s：%s（%s）\n", x.Location, x.Font, x.File)
+			}
+			fmt.Fprintln(a.stdout, rep.Note)
+		})
 	}
 	resp, code := a.call("POST", "/v1/envcheck/run", nil)
 	if code != ExitOK {
@@ -971,6 +991,22 @@ func regionPut(a *app, body map[string]any) int {
 }
 
 // ---- 引擎 ----
+
+// cmdDiagnostics 输出诊断包（M6-6a）：后台已整段脱敏的 JSON，原样写到标准输出（重定向到文件交给维护者）。
+func cmdDiagnostics(a *app, args []string) int {
+	if len(args) > 0 {
+		return usageErr(a, "diagnostics 不接受参数（重定向到文件：abroad diagnostics > 诊断包.json）")
+	}
+	resp, code := a.call("GET", "/v1/diagnostics", nil)
+	if code != ExitOK {
+		return code
+	}
+	a.stdout.Write(resp.Body)
+	if len(resp.Body) > 0 && resp.Body[len(resp.Body)-1] != '\n' {
+		fmt.Fprintln(a.stdout)
+	}
+	return ExitOK
+}
 
 // cmdLaunchGuard 显示启动管控（M6-4b）：现在是否允许启动 Claude、四层各自是否生效、第三层的覆盖范围、最近拦截。
 func cmdLaunchGuard(a *app, args []string) int {

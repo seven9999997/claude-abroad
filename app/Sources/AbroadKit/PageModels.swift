@@ -276,7 +276,24 @@ public final class EnvModel: PageModel {
         if case .ok(let rep) = o { apply(rep); notice = nil } else { _ = await handle(o, op: nil) }
     }
 
-    public var deviceCheckText: String { L10n.laterVersion }
+    /// 设备体检的结果（没跑过时为 nil）。
+    @Published public private(set) var device: EnvcheckDeviceReport?
+
+    /// 跑一次设备体检（只读，不影响放行）。
+    public func runDevice() async {
+        busy = true
+        defer { busy = false }
+        let o = await client.deviceCheck()
+        if case .ok(let rep) = o { device = rep; notice = nil } else { _ = await handle(o, op: nil) }
+    }
+
+    /// 设备体检的文字：没跑过时是提示，跑过时是结果。
+    public var deviceCheckText: String {
+        guard let d = device else { return L10n.deviceCheckHint }
+        let fs = d.findings ?? []
+        if fs.isEmpty { return L10n.deviceCheckClean }
+        return ([L10n.deviceCheckFound(fs.count)] + fs.map { L10n.deviceCheckLine($0.location, $0.font, $0.file) } + [d.note]).joined(separator: "\n")
+    }
 
     public static func resultTitle(_ r: String) -> String {
         switch r {

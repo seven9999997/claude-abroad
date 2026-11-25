@@ -256,7 +256,12 @@ public enum L10n {
     public static let uninstall = "卸载"
     public static let uninstallInInstaller = "在正式安装包里提供"
     public static let diagnostics = "诊断包"
-    public static let diagnosticsNone = "后台还没有诊断包的接口：暂不提供"
+    public static let diagnosticsNone = "在终端里执行 abroad diagnostics > 诊断包.json，生成脱敏后的诊断包（不含出口 IP、订阅地址和密码）"
+    public static let deviceCheckHint = "按需运行：扫描随中文办公软件安装的字体（只提示，不影响放行）"
+    public static let deviceCheckRun = "运行设备体检"
+    public static let deviceCheckClean = "没有发现随中文办公软件安装的字体"
+    public static func deviceCheckFound(_ n: Int) -> String { "发现 \(n) 个随中文办公软件安装的字体：" }
+    public static func deviceCheckLine(_ loc: String, _ font: String, _ file: String) -> String { "· " + loc + "：" + font + "（" + file + "）" }
     public static let unreachableTitle = "后台服务没有运行"
     public static let unsupportedTitle = "这个模式不提供"
     public static let retry = "重试"

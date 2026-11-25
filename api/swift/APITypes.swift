@@ -240,6 +240,36 @@ public struct DaemonConfirmRequest: Codable, Sendable {
     }
 }
 
+public struct DaemonDiagnosticVersion: Codable, Sendable {
+    public var module: String
+    public var version: String
+    public var revision: String?
+    public var go: String
+    public var os: String
+    enum CodingKeys: String, CodingKey {
+        case module = "module"
+        case version = "version"
+        case revision = "revision"
+        case go = "go"
+        case os = "os"
+    }
+}
+
+public struct DaemonDiagnostics: Codable, Sendable {
+    public var generatedAt: String
+    public var version: DaemonDiagnosticVersion
+    public var status: DaemonStatus
+    public var envcheck: EnvcheckReport?
+    public var launchguard: DaemonLaunchGuardView
+    enum CodingKeys: String, CodingKey {
+        case generatedAt = "generated_at"
+        case version = "version"
+        case status = "status"
+        case envcheck = "envcheck"
+        case launchguard = "launchguard"
+    }
+}
+
 public struct DaemonDirectStatus: Codable, Sendable {
     public var attached: Bool
     public var configured: Bool
@@ -704,6 +734,26 @@ public struct DaemonUninstallStep: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case name = "name"
         case done = "done"
+        case note = "note"
+    }
+}
+
+public struct EnvcheckDeviceFinding: Codable, Sendable {
+    public var font: String
+    public var file: String
+    public var location: String
+    enum CodingKeys: String, CodingKey {
+        case font = "font"
+        case file = "file"
+        case location = "location"
+    }
+}
+
+public struct EnvcheckDeviceReport: Codable, Sendable {
+    public var findings: [EnvcheckDeviceFinding]?
+    public var note: String
+    enum CodingKeys: String, CodingKey {
+        case findings = "findings"
         case note = "note"
     }
 }

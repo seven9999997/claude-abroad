@@ -117,3 +117,17 @@ final class Counter: @unchecked Sendable {
         flow.cancel()
     }
 }
+
+// M6-6a：设备体检：没跑过时是提示；跑了显示结果（有字体、没有字体两种）。
+@MainActor
+@Test func deviceCheckFlow() async {
+    for (body, want) in [("{\"findings\":[{\"font\":\"宋体（SimSun）\",\"file\":\"SimSun.ttc\",\"location\":\"系统字体\"}],\"note\":\"说明\"}", "宋体"),
+                         ("{\"findings\":[],\"note\":\"说明\"}", L10n.deviceCheckClean)] {
+        let t = FakeTransport { req in req.path == "/v1/envcheck/device" ? json(200, body) : json(404, "{}") }
+        let m = EnvModel(client: APIClient(transport: t))
+        #expect(m.deviceCheckText == L10n.deviceCheckHint)
+        await m.runDevice()
+        #expect(m.deviceCheckText.contains(want))
+        #expect(t.requests.contains { $0.method == "POST" && $0.path == "/v1/envcheck/device" })
+    }
+}

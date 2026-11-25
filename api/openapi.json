@@ -365,6 +365,59 @@
         },
         "type": "object"
       },
+      "DaemonDiagnosticVersion": {
+        "properties": {
+          "go": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "go",
+          "module",
+          "os",
+          "version"
+        ],
+        "type": "object"
+      },
+      "DaemonDiagnostics": {
+        "properties": {
+          "envcheck": {
+            "$ref": "#/components/schemas/EnvcheckReport"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "launchguard": {
+            "$ref": "#/components/schemas/DaemonLaunchGuardView"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DaemonStatus"
+          },
+          "version": {
+            "$ref": "#/components/schemas/DaemonDiagnosticVersion"
+          }
+        },
+        "required": [
+          "generated_at",
+          "launchguard",
+          "status",
+          "version"
+        ],
+        "type": "object"
+      },
       "DaemonDirectStatus": {
         "properties": {
           "attached": {
@@ -1196,6 +1249,42 @@
         ],
         "type": "object"
       },
+      "EnvcheckDeviceFinding": {
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "font": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "font",
+          "location"
+        ],
+        "type": "object"
+      },
+      "EnvcheckDeviceReport": {
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/EnvcheckDeviceFinding"
+            },
+            "type": "array"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "note"
+        ],
+        "type": "object"
+      },
       "EnvcheckItemResult": {
         "properties": {
           "detail": {
@@ -1711,6 +1800,35 @@
         "x-level": "read"
       }
     },
+    "/v1/diagnostics": {
+      "get": {
+        "description": "诊断包：版本、状态、最近的环境检测、启动管控、事件（整段脱敏）",
+        "operationId": "diagnostics",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonDiagnostics"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      }
+    },
     "/v1/disable": {
       "post": {
         "description": "停用",
@@ -1829,6 +1947,35 @@
           }
         },
         "x-level": "read"
+      }
+    },
+    "/v1/envcheck/device": {
+      "post": {
+        "description": "设备体检（字体等）：只返回结果，不参与放行",
+        "operationId": "envcheck-device",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvcheckDeviceReport"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "normal"
       }
     },
     "/v1/envcheck/run": {
