@@ -37,7 +37,7 @@
 // --udp-target：UDP 那一步改发往这个真实 IP（主代理答不了 DoH 时用，见 internal/tunsim.Config.UDPTarget）。
 // 退出码：0 全部通过；1 有一步失败或连不上 data.sock；2 参数错。
 //
-//	abroad-dev pf-render [--user nobody] [--utun utun9] [--lan 192.168.1.0/24]… [--vmif bridge100]…
+//	abroad-dev pf-render [--user nobody] [--utun utun9] [--lan 192.168.1.0/24]… [--vmif bridge100]… [--lockdown]
 //
 // pf-render 把 internal/pf.Render 生成的规则打到标准输出（给 scripts/dev/pf-syntax.sh 做 pfctl -n 语法检查；
 // 本机没有 _abroad 用户，所以默认用 nobody）。--lan 经 pf.LANPrefixes 处理（丢掉公网网段，加上组播、链路本地）。
@@ -509,6 +509,7 @@ func pfRender(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	user := fs.String("user", "nobody", "放行去公网的用户（本机没有 _abroad，语法检查用 nobody）")
 	utun := fs.String("utun", "", "我们的 utun（为空表示开机时还没有 utun）")
+	lockdown := fs.Bool("lockdown", false, "最严的一组（M6-2b：开机时 guard 读不出参数时用；不放行任何用户、局域网、网桥）")
 	var lans, vmifs listFlag
 	fs.Var(&lans, "lan", "直连网段，可重复")
 	fs.Var(&vmifs, "vmif", "虚拟机网桥接口，可重复")
@@ -525,7 +526,10 @@ func pfRender(args []string, stdout, stderr io.Writer) int {
 		direct = append(direct, p)
 	}
 	c := pf.Config{UtunName: *utun, VMIfs: vmifs, User: *user}
-	if len(direct) > 0 {
+	if *lockdown {
+		c = pf.Config{Lockdown: true}
+	}
+	if len(direct) > 0 && !*lockdown {
 		c.LAN = pf.LANPrefixes(direct)
 	}
 	out, err := pf.Render(c)

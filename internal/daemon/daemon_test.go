@@ -79,7 +79,22 @@ func (e *env) start(o Options) *Daemon {
 	e.d = d
 	e.cur.Store(d)
 	d.gate.SetOnChange(func(bool) { e.check("gate") })
+	waitStartupSettled(e.t, d)
 	return d
+}
+
+// waitStartupSettled 等启动后的后台工作（监护第一轮、地区重试第一轮）结束：它们会短暂占用忙标记，
+// 刚启动就发启用一类的请求可能被回“忙”（architect 判 M6-2a：TestErrorCodes 的失败就是这个竞争）。
+// 按完成计数等，不按固定时长睡眠。
+func waitStartupSettled(t *testing.T, d *Daemon) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for !d.startupSettled() {
+		if time.Now().After(deadline) {
+			t.Fatal("启动后的后台工作 10 秒内没有结束")
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 var public = []pf.Packet{

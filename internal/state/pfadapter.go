@@ -19,6 +19,9 @@ type PatrolPF struct {
 	Store   *Store
 	OnEvent func(Event) // 可为 nil
 
+	// ExternalTokens 取走别处（开机时的 guard，M6-2b）取得的 pf 启用引用；收养进状态文件，回国时一起释放。可为 nil。
+	ExternalTokens func() ([]string, error)
+
 	mu        sync.Mutex
 	utun      string
 	unsaved   []string
@@ -99,6 +102,28 @@ func (a *PatrolPF) Flush(ctx context.Context) error {
 
 // Release 实现 PF。
 func (a *PatrolPF) Release(ctx context.Context, token string) error { return a.P.C.Release(ctx, token) }
+
+// AdoptExternal 把 guard 取得的启用引用收养进状态文件（abroadd 启动时、回国释放之前调用）。
+func (a *PatrolPF) AdoptExternal() error {
+	if a.ExternalTokens == nil {
+		return nil
+	}
+	toks, err := a.ExternalTokens()
+	if err != nil {
+		a.emit(EvTokenUnsaved, "读不出开机时 guard 留下的 pf 启用引用")
+		return err
+	}
+	for _, tok := range toks {
+		if err := a.Store.AddToken(tok); err != nil {
+			a.mu.Lock()
+			a.unsaved = append(a.unsaved, tok)
+			a.unsaveErr = err
+			a.mu.Unlock()
+			a.emit(EvTokenUnsaved, "开机时 guard 的 pf 启用引用没能写进状态文件，先留在内存")
+		}
+	}
+	return nil
+}
 
 // SaveUnsaved 实现 PF。
 func (a *PatrolPF) SaveUnsaved() error {

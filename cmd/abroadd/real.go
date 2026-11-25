@@ -220,7 +220,9 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)
 		return 1
 	}
-	d, err := daemon.Start(context.Background(), daemon.Options{StateDir: f.stateDir, Sys: sys, Log: logger, SocketDir: f.socketDir})
+	d, err := daemon.Start(context.Background(), daemon.Options{StateDir: f.stateDir, Sys: sys, Log: logger, SocketDir: f.socketDir,
+		// M6-2b：运行时目录沿用 socket 目录（/var/run/claude-abroad，重启后清空）：给开机时的 guard 写标记、收养它的启用引用。
+		RunDir: f.socketDir})
 	if err != nil {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)
 		return 1

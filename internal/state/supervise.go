@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -52,6 +53,7 @@ type Supervisor struct {
 
 	kickOnce sync.Once
 	kick     chan struct{}
+	rounds   atomic.Int64 // Run 跑完的轮数（含跳过的轮）；测试用来等启动后的第一轮结束
 
 	// 只在持有状态机忙标记时访问。
 	takeoverSet bool // 加过 takeover 原因、还没清
@@ -99,6 +101,7 @@ func (s *Supervisor) Run(ctx context.Context) {
 	kick := s.kickCh()
 	for {
 		_ = s.Tick(ctx)
+		s.rounds.Add(1)
 		select {
 		case <-ctx.Done():
 			return
@@ -107,6 +110,9 @@ func (s *Supervisor) Run(ctx context.Context) {
 		}
 	}
 }
+
+// Rounds 是 Run 跑完的轮数。
+func (s *Supervisor) Rounds() int64 { return s.rounds.Load() }
 
 // Tick 跑一轮。有操作在跑时直接返回 nil（这一轮跳过）。
 func (s *Supervisor) Tick(ctx context.Context) error {

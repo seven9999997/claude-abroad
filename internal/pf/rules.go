@@ -25,6 +25,9 @@ type Config struct {
 	LAN      []netip.Prefix // 允许直连的局域网段；“允许局域网”关闭时为空。只收私有范围（见 lanAllowed）
 	VMIfs    []string       // 本机虚拟机网桥（bridge100、vmenet0 …）
 	User     string         // 唯一放行去公网的用户（_abroad）
+	// Lockdown 是最严的一组（M6-2b：开机时 guard 读不出 abroadd 另存的参数时用）：不放行任何用户、局域网和网桥，
+	// 只留本机回环和 DHCP。为真时 User、LAN、VMIfs、UtunName 必须都为空。
+	Lockdown bool
 }
 
 // 名字只收明确的形式，挡住 pf 的保留字（any、all、self、inet6、unknown、纯数字……），
@@ -106,10 +109,13 @@ func sortPrefixes(in []netip.Prefix) []netip.Prefix {
 
 // Render 生成规则文本。输入不合法时返回错误，输出为空。
 func Render(c Config) ([]byte, error) {
+	if c.Lockdown && (c.User != "" || len(c.LAN) > 0 || len(c.VMIfs) > 0 || c.UtunName != "") {
+		return nil, errors.New("最严的一组不能带放行用户、局域网、网桥或 utun")
+	}
 	if c.UtunName != "" && !utunRe.MatchString(c.UtunName) {
 		return nil, errors.New("utun 名称不合法")
 	}
-	if !userOK(c.User) {
+	if !c.Lockdown && !userOK(c.User) {
 		return nil, errors.New("放行用户名不合法")
 	}
 	var lan []netip.Prefix
@@ -149,8 +155,10 @@ func Render(c Config) ([]byte, error) {
 	for _, d := range dhcpDst {
 		line("pass out quick inet proto udp from any port 68 to %s port 67", d)
 	}
-	line("pass out quick inet proto tcp all user %s", c.User)
-	line("pass out quick inet proto udp all user %s", c.User)
+	if !c.Lockdown {
+		line("pass out quick inet proto tcp all user %s", c.User)
+		line("pass out quick inet proto udp all user %s", c.User)
+	}
 	if len(lan) > 0 {
 		line("pass out quick inet to <abroad_lan>")
 	}

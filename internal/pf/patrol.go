@@ -62,9 +62,13 @@ type Patrol struct {
 	// OnToken、OnEvent 在 Patrol 持锁时被调用：回调里不能再调用 Patrol 的方法（会死锁）。
 	OnToken func(string)
 	OnEvent func(Event) // 可为 nil
+	// OnApplied 在一轮成功应用（Ensure 无错）之后调用，参数是这轮的规则配置（M6-2b：abroadd 另存给开机时的
+	// guard、写“本次开机已加载”的标记）。同样在 Patrol 持锁时调用。可为 nil。
+	OnApplied func(Config)
 
 	mu           sync.Mutex
 	lastExpected []byte // 上一次成功算出的期望规则
+	lastCfg      Config // 算出 lastExpected 的配置
 	lastApplied  []byte // 上一次成功应用（Ensure 无错）的规则
 	protected    bool
 	softFails    int // 连续的“其他错误”轮数
@@ -116,7 +120,7 @@ func (p *Patrol) expected(ctx context.Context) ([]byte, error) {
 		}
 		rules, rerr := Render(c)
 		if rerr == nil {
-			p.lastExpected = rules
+			p.lastExpected, p.lastCfg = rules, c
 			return rules, nil
 		}
 		err = rerr
@@ -126,7 +130,8 @@ func (p *Patrol) expected(ctx context.Context) ([]byte, error) {
 		return p.lastExpected, nil
 	}
 	// 从来没算出过：最小配置（不放行局域网和网桥）。
-	return Render(Config{UtunName: p.utun(), User: p.User})
+	p.lastCfg = Config{UtunName: p.utun(), User: p.User}
+	return Render(p.lastCfg)
 }
 
 // Apply 解除暂停并立即跑一轮（状态机设置好 utun 之后调用；pf 的应用都经同一个 Patrol，M2-7c）。
@@ -209,6 +214,9 @@ func (p *Patrol) step(ctx context.Context) error {
 	switch {
 	case err == nil:
 		p.protected, p.softFails, p.lastApplied = true, 0, exp
+		if p.OnApplied != nil {
+			p.OnApplied(p.lastCfg)
+		}
 	case errors.Is(err, ErrAnchorNotReferenced):
 		p.protected, p.softFails = false, 0
 		// Ensure 只在复核通过（或不需要加载）之后才返回这个错误，所以锚点里已经是期望的规则。

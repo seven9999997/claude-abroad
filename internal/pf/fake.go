@@ -266,3 +266,13 @@ func (f *FakePF) print(a *fakeAnchor) []byte {
 	}
 	return []byte(strings.Join(out, "\n") + "\n")
 }
+
+// Raw 是锚点里加载的原始规则文本（没有时为 nil）。
+func (f *FakePF) Raw(anchor string) []byte {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if a := f.anchors[anchor]; a != nil {
+		return slices.Clone(a.raw)
+	}
+	return nil
+}

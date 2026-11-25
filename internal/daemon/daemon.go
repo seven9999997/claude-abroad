@@ -69,6 +69,10 @@ type Options struct {
 	// 否则可用”，规则也可以引用它们。只有开发工具（daemon-sim、测试）在构造时给；没有任何接口能打这个标记
 	// （m4-plan v2.12 决定 4）。
 	DevExits []string
+	// RunDir 是运行时目录（M6-2b，真实模式是 /var/run/claude-abroad）：给了就为开机时的 guard 另存参数
+	// （状态目录里的 guard-params.json）、写“本次开机已加载规则”的标记、收养 guard 取得的 pf 启用引用。空时都不做。
+	RunDir string
+	BootID func() (string, error) // 本次开机的标识（nil 用 guard.BootID；测试注入）
 }
 
 // Daemon 是一个 abroadd 实例。
@@ -77,6 +81,8 @@ type Daemon struct {
 	vmm    *vmmgr.Manager
 	vmStop func()
 	vmDone chan struct{}
+	// 地区待还原重试循环跑完的轮数（startupSettled 用）。
+	regionRounds atomic.Int64
 
 	opts    Options
 	store   *state.Store
@@ -238,6 +244,7 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	d.wireExitAvail()
 	d.wireExits()      // 出口要在规则之前：规则引用的出口要能查到
 	d.wireRules()      // 规则要在 Recover 之前接上：Recover 到 ENABLED 时会通知数据面启用（重新计算直连配置）
+	d.wireGuard()      // 要在 Recover 之前：Recover 到 ENABLED、DISABLED 时会应用 pf
 	d.startVMManager() // 要在 Recover 之前：Recover 里可能调用虚拟机的启停
 	if err := d.m.Recover(ctx); err != nil {
 		o.logf("恢复上次的状态：%v", err)
@@ -245,6 +252,9 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 		if errors.Is(err, state.ErrCorrupt) {
 			d.corrupt.Store(true)
 		}
+	}
+	if d.opts.RunDir != "" {
+		_ = d.ppf.AdoptExternal() // 开机时 guard 取得的 pf 启用引用：收养进状态文件，回国时一起释放
 	}
 	if dp := s.Data; dp != nil && dp.direct != nil {
 		_ = dp.pushDirect(ctx) // 预热：abroadd 启动后下发一次，失败不算错（直连时按代数补发，m3-plan v2.9）
@@ -334,6 +344,15 @@ func (d *Daemon) stopInternals(closeGate bool) {
 	if d.release != nil {
 		d.release()
 	}
+}
+
+// startupSettled 报告启动后的后台工作（监护的第一轮、接了地区时待还原重试的第一轮）是否都已跑完。
+// 这两样会短暂占用状态机的忙标记：刚启动时的请求可能被回“忙”（正确行为，应用和命令行提示重试）；测试要等它为真再发请求。
+func (d *Daemon) startupSettled() bool {
+	if d.sup == nil || d.sup.Rounds() < 1 {
+		return false
+	}
+	return !d.regionOn() || d.regionRounds.Load() >= 1
 }
 
 // Shutdown 是收到 SIGTERM、SIGINT 时的退出流程（决定 5）：停止接收请求，等正在进行的操作结束（最多 ShutdownWait），

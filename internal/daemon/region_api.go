@@ -144,6 +144,7 @@ func (d *Daemon) regionRetryLoop(ctx context.Context) {
 	kick := make(chan struct{}, 1)
 	for {
 		_ = d.m.RetryRegionPending(ctx)
+		d.regionRounds.Add(1)
 		t := clock.AfterFunc(RegionRetryInterval, func() {
 			select {
 			case kick <- struct{}{}:

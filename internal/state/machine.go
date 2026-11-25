@@ -508,6 +508,11 @@ func (m *Machine) clearPF(ctx context.Context) error {
 	if err := m.D.PF.Flush(ctx); err != nil {
 		return err
 	}
+	// 开机时 guard 取得的启用引用（M6-2b）：先收养进状态文件，下面一起释放（回国干净）。
+	if ad, ok := m.D.PF.(interface{ AdoptExternal() error }); ok {
+		_ = ad.AdoptExternal()
+		_ = m.D.PF.SaveUnsaved()
+	}
 	f, err := m.Store.Load()
 	if err != nil {
 		return err

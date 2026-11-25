@@ -115,6 +115,12 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags abroaddev -trimpath -ldflag
 
 用到开发参数的真机脚本在前提检查里核对二进制认识这些参数（`ab_dev_flags_missing`），不认识就在改动任何东西之前退出。vm-up.sh、exits-e2e.sh 等开发脚本自己按需带标签编译（agent 和开放模式的 abroad-vm 用开发构建；`scripts/dev/out/bin/abroad-vm` 仍是正式构建，留给真机脚本）。
 
+## 开机时的 guard（M6-2b）
+
+- `cmd/abroad-guard`：开机最早阶段读状态文件，按状态决定要不要把“只断网、不接管”的规则加载到本项目的 pf 锚点，加载后退出。回国、全新安装不碰 pf；abroadd 本次开机已经加载过时不动；参数文件读不出时加载最严的一组。必须以 root 运行，所以**会话里不运行它**，只跑单元测试（假 pf）。
+- `scripts/dev/guard-plist.sh <abroad-guard 路径> <状态目录> [运行时目录]`：生成开发用的 LaunchDaemon 到 `scripts/dev/out/`，用 `plutil -lint` 检查格式。**只生成、不安装**（不调用 launchctl、不需要 sudo）。
+- `scripts/dev/pf-syntax.sh` 多检查一组 `lockdown`（最严的一组），只做 `pfctl -n` 语法检查、不加载。
+
 ## 手动运行虚拟机
 
 ```sh
