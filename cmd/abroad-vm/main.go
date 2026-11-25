@@ -92,6 +92,7 @@ type options struct {
 	outboundOpen       bool
 	direct             directOpts
 	devAgent           bool // 只有 abroaddev 构建标签的版本有这个开关（devflags_dev.go）
+	parentWatch        bool // 由 abroadd 拉起（M6-2a）：标准输入读到 EOF 就停止虚拟机
 }
 
 // addDevFlags 由 abroaddev 构建标签的文件设置；默认（发布）构建里为 nil，没有任何能打开开发接口的参数。
@@ -121,6 +122,7 @@ func parseFlags(args []string, w io.Writer) (options, error) {
 		"两个都不给时什么公网都连不上")
 	var ddns listFlag
 	addDirectFlags(fs, "direct-", &o.direct, &ddns)
+	fs.BoolVar(&o.parentWatch, "parent-watch", false, "由 abroadd 拉起时使用：标准输入读到 EOF（abroadd 已退出）就停止虚拟机，不留没人管的虚拟机")
 	if addDevFlags != nil {
 		addDevFlags(fs, &o)
 	}
@@ -261,6 +263,14 @@ func run(args []string, sigs <-chan os.Signal, factory vmhost.Factory, w io.Writ
 		}
 	}()
 
+	if o.parentWatch { // abroadd 持有标准输入管道的写端：它不管怎么退出，内核都会关掉写端（M6-2a）
+		go func() {
+			_, _ = io.Copy(io.Discard, parentStdin)
+			logf("abroadd 已退出（标准输入读到 EOF），停止虚拟机")
+			cancel()
+		}()
+	}
+
 	sup := &vmhost.Supervisor{Factory: factory, Spec: spec, Log: logf, Force: force, Timing: supTiming}
 	wake := make(chan struct{}, 1)
 	sup.OnWake = func() { // 不得阻塞
@@ -302,6 +312,9 @@ func run(args []string, sigs <-chan os.Signal, factory vmhost.Factory, w io.Writ
 	}
 	return runErr
 }
+
+// parentStdin 是 --parent-watch 读的标准输入（测试里换成管道）。
+var parentStdin io.Reader = os.Stdin
 
 // directDialerOverride 只给测试用：替换 run 里直连拨号模块的拨号器。
 var directDialerOverride directdial.BoundDialer

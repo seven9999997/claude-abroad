@@ -85,6 +85,9 @@ public final class Notifier {
     /// 用户自己引起的闸门关闭（原因代码精确比较）：停用、回国、回滚、退出（state），以及更换主代理（main_proxy_switch）。
     /// 这些关闭不通知，由它们引起的那次恢复也不通知；关闭期间又加了别的原因时照常通知。
     public static let userCodes: Set<String> = ["state", "main_proxy_switch"]
+    /// 只在闸门原来开着时才算“保护断开”的原因（M6-2a）：vm。启用、停用、回国时 abroadd 拉起或关闭虚拟机，
+    /// 会在闸门已经因为 state 关着时再加 vm；那不是保护断开。已启用、闸门开着时虚拟机崩溃（由开变关）才通知。
+    public static let onlyWhenOpenCodes: Set<String> = ["vm"]
 
     /// 后台 detail 的形式是“原因代码：说明”。
     static func split(_ detail: String) -> (code: String, text: String) {
@@ -134,9 +137,11 @@ public final class Notifier {
         case ("gate", "gate_closed"):
             let (code, text) = Self.split(r.detail ?? "")
             let repeated = gateOpen == false && code == lastClosedCode
+            let wasClosed = gateOpen == false
             gateOpen = false
             lastClosedCode = code
             if repeated || Self.userCodes.contains(code) { return } // 同一原因不重复；用户自己引起的不是“保护断开”
+            if wasClosed && Self.onlyWhenOpenCodes.contains(code) { return } // 已经关着时又加的 vm：不通知、不置“通知过断开”
             notifiedLost = true
             emit(.protectionLost, L10n.notifyProtectionLost(L10n.gateReasonName(code), text))
         case ("gate", "gate_opened"):

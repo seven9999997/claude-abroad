@@ -1,0 +1,86 @@
+package main
+
+import (
+	"errors"
+	"io"
+	"reflect"
+	"testing"
+
+	"claude-abroad/internal/daemon"
+	"claude-abroad/internal/vmmgr"
+)
+
+// M6-2a：--vm-exec 相关的参数检查。
+func TestCheckVMFlags(t *testing.T) {
+	ok := realFlags{vmDir: "/v", mainStore: "m", exitHost: "h", pfUser: "_abroad"}
+	good := ok
+	good.vmExec, good.vmUser, good.vmArgs = "/usr/local/libexec/abroad-vm", "_abroad", []string{"--image-dir=/img"}
+	if err := checkRealFlags(good); err != nil {
+		t.Fatal(err)
+	}
+	bad := map[string]func(*realFlags){
+		"没有 vm-exec 却给了 vm-user": func(f *realFlags) { f.vmUser = "_abroad" },
+		"没有 vm-exec 却给了 vm-arg":  func(f *realFlags) { f.vmArgs = []string{"--cpus=2"} },
+		"vm-exec 不是绝对路径":         func(f *realFlags) { f.vmExec = "abroad-vm" },
+		"vm-arg 里有 state-dir":    func(f *realFlags) { f.vmExec = "/x"; f.vmArgs = []string{"--state-dir=/tmp/x"} },
+		"vm-arg 里有 parent-watch": func(f *realFlags) { f.vmExec = "/x"; f.vmArgs = []string{"-parent-watch"} },
+	}
+	for name, mut := range bad {
+		f := ok
+		mut(&f)
+		if checkRealFlags(f) == nil {
+			t.Errorf("%s 应被拒绝", name)
+		}
+	}
+}
+
+// 没有 --vm-exec：虚拟机由外部启动，和以前相同；有：由 abroadd 管理，参数固定带 --state-dir 和 --parent-watch。
+func TestVMLifecycle(t *testing.T) {
+	noLookup := func(string) (string, string, error) { t.Fatal("不应查用户"); return "", "", nil }
+	v, err := vmLifecycle(realFlags{vmDir: "/v"}, noLookup, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := v.(daemon.ExternalVM); !ok {
+		t.Fatalf("没有 --vm-exec 时应是外部启动：%T", v)
+	}
+	lookup := func(name string) (string, string, error) {
+		if name != "_abroad" {
+			return "", "", errors.New("没有这个用户")
+		}
+		return "299", "298", nil
+	}
+	f := realFlags{vmDir: "/v", vmExec: "/opt/abroad-vm", vmUser: "_abroad", vmArgs: []string{"--image-dir=/img"}}
+	v, err = vmLifecycle(f, lookup, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, ok := v.(*vmmgr.Manager)
+	if !ok {
+		t.Fatalf("应是管理器：%T", v)
+	}
+	l := m.Launcher.(*vmmgr.ExecLauncher)
+	if l.Path != "/opt/abroad-vm" || !reflect.DeepEqual(l.Args, []string{"run", "--state-dir", "/v", "--parent-watch", "--image-dir=/img"}) {
+		t.Fatalf("参数 %q %q", l.Path, l.Args)
+	}
+	if l.RunAs == nil || l.RunAs.UID != 299 || l.RunAs.GID != 298 {
+		t.Fatalf("用户 %+v", l.RunAs)
+	}
+	if m.Health == nil {
+		t.Fatal("没有健康检查")
+	}
+	// 不给 --vm-user：和 abroadd 同一个用户
+	f.vmUser = ""
+	v, _ = vmLifecycle(f, noLookup, io.Discard)
+	if v.(*vmmgr.Manager).Launcher.(*vmmgr.ExecLauncher).RunAs != nil {
+		t.Fatal("不给 --vm-user 时不应切用户")
+	}
+	// 查不到用户：报错，不启动
+	f.vmUser = "nobody-here"
+	if _, err := vmLifecycle(f, lookup, io.Discard); err == nil {
+		t.Fatal("查不到用户应报错")
+	}
+	if _, err := vmCredential("x", func(string) (string, string, error) { return "a", "1", nil }); err == nil {
+		t.Fatal("uid 不是数字应报错")
+	}
+}

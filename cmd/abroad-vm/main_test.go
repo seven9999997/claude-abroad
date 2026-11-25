@@ -285,3 +285,64 @@ func TestThirdPartyLogsRedacted(t *testing.T) {
 		t.Fatalf("logrus 输出应已脱敏：%q", buf.String())
 	}
 }
+
+// M6-2a：带 --parent-watch 时标准输入读到 EOF（abroadd 退出）就停止虚拟机、删 socket、正常退出。
+func TestRunParentWatch(t *testing.T) {
+	old := supTiming
+	supTiming = vmhost.DefaultTiming
+	supTiming.Watchdog = time.Hour
+	supTiming.ShutdownTimeout = time.Second
+	supTiming.StopWait = time.Second
+	defer func() { supTiming = old }()
+	pr, pw := io.Pipe()
+	oldIn := parentStdin
+	parentStdin = pr
+	defer func() { parentStdin = oldIn }()
+
+	base, err := os.MkdirTemp("", "avm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(base)
+	img := filepath.Join(base, "img")
+	_ = os.Mkdir(img, 0o755)
+	for _, n := range []string{"Image", "initramfs.gz", "rootfs.img", "modloop"} {
+		_ = os.WriteFile(filepath.Join(img, n), []byte("x"), 0o644)
+	}
+	state := filepath.Join(base, "st")
+	m := &portMachine{done: make(chan struct{}), ports: make(chan uint32, 16)}
+	done := make(chan error, 1)
+	var w bytes.Buffer
+	go func() {
+		done <- run([]string{"--image-dir", img, "--state-dir", state, "--parent-watch"}, make(chan os.Signal),
+			func(vmhost.Spec) (vmhost.Machine, error) { return m, nil }, &w)
+	}()
+	sock := filepath.Join(state, "ctl.sock")
+	for i := 0; ; i++ {
+		if _, err := os.Stat(sock); err == nil {
+			break
+		}
+		if i > 300 {
+			t.Fatal("ctl.sock 没有出现")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("写端还在时不应退出：%v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	pw.Close()                                                        // abroadd 退出
+	go func() { time.Sleep(500 * time.Millisecond); close(m.done) }() // 假机器收到关机后“停下”
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("应正常退出：%v", err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("读到 EOF 后没有停止")
+	}
+	if _, err := os.Lstat(sock); !os.IsNotExist(err) {
+		t.Fatal("退出后 ctl.sock 应被删除")
+	}
+}

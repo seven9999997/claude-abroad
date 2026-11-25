@@ -26,6 +26,7 @@ import (
 	"claude-abroad/internal/daemon"
 	"claude-abroad/internal/redact"
 	"claude-abroad/internal/state"
+	"claude-abroad/internal/vmmgr"
 	"claude-abroad/internal/wire"
 )
 
@@ -35,6 +36,8 @@ const DefaultRealStateDir = "/Library/Application Support/claude-abroad"
 type realFlags struct {
 	stateDir, vmDir, pfUser, mainStore, exitHost, socketDir string
 	skipKill, skipRegion                                    bool
+	vmExec, vmUser                                          string   // M6-2a：由 abroadd 管理虚拟机
+	vmArgs                                                  []string // 传给 abroad-vm run 的其他参数
 }
 
 // checkRealFlags 是真实模式参数的检查（纯函数，M2-9b-2 决定 7、8）。
@@ -48,8 +51,71 @@ func checkRealFlags(f realFlags) error {
 		return errors.New("需要 --exit-check-host（出口检查经主代理访问它）")
 	case f.pfUser == "":
 		return errors.New("需要 --pf-user")
+	case f.vmExec == "" && (f.vmUser != "" || len(f.vmArgs) > 0):
+		return errors.New("--vm-user、--vm-arg 只能和 --vm-exec 一起用")
+	case f.vmExec != "" && !filepath.IsAbs(f.vmExec):
+		return errors.New("--vm-exec 要写绝对路径")
+	}
+	for _, a := range f.vmArgs {
+		switch name := strings.SplitN(strings.TrimLeft(a, "-"), "=", 2)[0]; name {
+		case "state-dir", "parent-watch":
+			return fmt.Errorf("--vm-arg 里不能有 --%s（由 abroadd 固定传）", name)
+		}
 	}
 	return nil
+}
+
+// vmArgList 是可重复的 --vm-arg。
+type vmArgList []string
+
+func (l *vmArgList) String() string     { return strings.Join(*l, " ") }
+func (l *vmArgList) Set(v string) error { *l = append(*l, v); return nil }
+
+// vmCredential 取运行 abroad-vm 的用户；name 为空时返回 nil（和 abroadd 同一个用户）。
+type lookupFunc func(name string) (uid, gid string, err error)
+
+func vmCredential(name string, lookup lookupFunc) (*vmmgr.Credential, error) {
+	if name == "" {
+		return nil, nil
+	}
+	us, gs, err := lookup(name)
+	if err != nil {
+		return nil, fmt.Errorf("找不到运行虚拟机的用户 %s：%w", name, err)
+	}
+	uid, err1 := strconv.ParseUint(us, 10, 32)
+	gid, err2 := strconv.ParseUint(gs, 10, 32)
+	if err1 != nil || err2 != nil {
+		return nil, fmt.Errorf("用户 %s 的 uid/gid 不是数字", name)
+	}
+	return &vmmgr.Credential{UID: uint32(uid), GID: uint32(gid)}, nil
+}
+
+// vmLifecycle 选虚拟机的启停（M6-2a）：
+//   - 没有 --vm-exec：虚拟机由外部启动（ExternalVM，Start 只确认就绪、Stop 什么都不做），和以前相同；
+//   - 有：由 abroadd 拉起和管理（vmmgr.Manager + ExecLauncher；这里是整个仓库唯一构造 ExecLauncher 的地方，源码检查）。
+//     abroad-vm 带 --parent-watch，abroadd 不管怎么退出它都会自己停下。
+func vmLifecycle(f realFlags, lookup lookupFunc, out io.Writer) (state.VM, error) {
+	ext := daemon.ExternalVM{Dir: f.vmDir}
+	if f.vmExec == "" {
+		return ext, nil
+	}
+	cred, err := vmCredential(f.vmUser, lookup)
+	if err != nil {
+		return nil, err
+	}
+	args := append([]string{"run", "--state-dir", f.vmDir, "--parent-watch"}, f.vmArgs...)
+	return &vmmgr.Manager{
+		Launcher: &vmmgr.ExecLauncher{Path: f.vmExec, Args: args, RunAs: cred, Output: out},
+		Health:   ext.Probe,
+	}, nil
+}
+
+func lookupUser(name string) (string, string, error) {
+	u, err := user.Lookup(name)
+	if err != nil {
+		return "", "", err
+	}
+	return u.Uid, u.Gid, nil
 }
 
 // claudeService 选结束 Claude 的实现（m4-plan v2.3 决定 6）：
@@ -121,6 +187,11 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 	checker := &exitcheck.Checker{Opener: dp.Streams(), HTTPSURL: "https://" + f.exitHost + "/generate_204",
 		Logf: func(format string, a ...any) { logger.Printf(format, a...) }}
 	baseline := daemon.NewBaselineService(checker, f.stateDir)
+	vm, err := vmLifecycle(f, lookupUser, logger.Writer())
+	if err != nil {
+		fmt.Fprintf(stderr, "abroadd：%v\n", err)
+		return 1
+	}
 	sys, err := daemon.NewRealSystem(daemon.RealParams{
 		PFRunner: pfR, Net: netR, OpenTun: openUtun,
 		LookupUID: func(name string) (string, error) {
@@ -133,7 +204,7 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		User: f.pfUser, RootFS: os.DirFS("/"), FirstHop: daemon.MainProxyFirstHop(f.mainStore),
 		// 冲突检查读 shell 配置：当前控制台用户的主目录（每次读时重新取；没人登录时这一项跳过；M5-5）。
 		HomeFS: console.HomeFS{},
-		Data:   dp, VM: daemon.ExternalVM{Dir: f.vmDir}, ExitVM: daemon.ExternalVM{Dir: f.vmDir},
+		Data:   dp, VM: vm, ExitVM: daemon.ExternalVM{Dir: f.vmDir},
 		// 主代理由 abroadd 持有（M5-4）：存储就是 --main-proxy-store；订阅启用时经数据通道走主代理，经本机网络时经直连拨号模块。
 		MainProfile: f.mainStore, MainVM: daemon.ExternalVM{Dir: f.vmDir}, FetchSource: realFetch(dp.Streams(), direct),
 		// 按出口的检查（M4-8）：经该出口开流，不做基准比对（判定只看 HTTPS、出口 IP、大陆段、DoH）。

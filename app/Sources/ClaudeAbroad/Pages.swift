@@ -251,6 +251,10 @@ struct EnginesPage: View {
     var body: some View {
         LoadStateView(state: model.state, retry: { Task { await model.load() } }) {
             Form {
+                if let m = model.view?.vmManager {
+                    Text(L10n.vmManagerLine(m.phase, m.restarts))
+                    if let e = m.lastError, !e.isEmpty { Text(L10n.vmLastError + "：" + e).foregroundStyle(.secondary) }
+                }
                 if let t = model.vmText {
                     Text(t).foregroundStyle(.secondary)
                 } else if let v = model.view {

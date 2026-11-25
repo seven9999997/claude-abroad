@@ -16,6 +16,7 @@ import (
 	"claude-abroad/internal/preflight"
 	"claude-abroad/internal/redact"
 	"claude-abroad/internal/stack"
+	"claude-abroad/internal/vmmgr"
 )
 
 // M5-5 的其余接口（m5-plan v2.3）：冲突检查、在联网的应用、安装引导的进度、引擎与虚拟机的状态、单独检查一个出口。
@@ -244,6 +245,8 @@ type EnginesView struct {
 	UptimeS     int64        `json:"uptime_s,omitempty"`
 	BootChanged bool         `json:"boot_changed"` // 启动标识和 abroadd 上次看到的不同（虚拟机重启过）
 	Engines     []EngineView `json:"engines"`
+	// M6-2a：由 abroadd 管理虚拟机时的管理器状态（虚拟机由外部启动时没有）。虚拟机不可达时也照样给出。
+	VMManager *vmmgr.Status `json:"vm_manager,omitempty"`
 }
 
 // VMHealth 是 agent health 里给这个接口用的部分。
@@ -271,6 +274,10 @@ func (v ExternalVM) Health(ctx context.Context) (VMHealth, error) {
 
 func (d *Daemon) handleEngines(w http.ResponseWriter, r *http.Request) {
 	v := EnginesView{Engines: []EngineView{}}
+	if d.vmm != nil {
+		vs := d.vmm.Status()
+		v.VMManager = &vs
+	}
 	hr, ok := d.opts.Sys.MainVM.(healthReporter)
 	if !ok {
 		writeJSON(w, http.StatusOK, v)

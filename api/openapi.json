@@ -306,6 +306,9 @@
           },
           "version": {
             "type": "string"
+          },
+          "vm_manager": {
+            "$ref": "#/components/schemas/VmmgrStatus"
           }
         },
         "required": [
@@ -926,6 +929,9 @@
           },
           "utun": {
             "type": "string"
+          },
+          "vm_manager": {
+            "$ref": "#/components/schemas/VmmgrStatus"
           }
         },
         "required": [
@@ -1297,6 +1303,34 @@
           "udp_unsupported",
           "unknown_exit",
           "zero_eof"
+        ],
+        "type": "object"
+      },
+      "VmmgrStatus": {
+        "properties": {
+          "failures": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "last_error": {
+            "type": "string"
+          },
+          "managed": {
+            "type": "boolean"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "restarts": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "failures",
+          "managed",
+          "phase",
+          "restarts"
         ],
         "type": "object"
       }

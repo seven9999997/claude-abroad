@@ -2,7 +2,7 @@
 // 出口复查循环。只取 Cage 的思路（epoch、租约），不搬它的出站和检查项。时钟全部可注入。
 //
 // 闸门打开 = 没有任何关闭原因 且 放行期有效。
-//   - 关闭原因只有四种（Reason*）；各方只能清自己加的（AddReason/ClearReason 按原因名）。
+//   - 关闭原因见 Reason*；各方只能清自己加的（AddReason/ClearReason 按原因名）。
 //   - 加任何原因都会让当前的放行作废（epoch 加一、放行期清零）：之后要重新检查并放行，过期的检查结果不能放行。
 //   - 放行期到期不是原因：到期时由闸门自己的定时器走关闭路径，记一条 lease_expired 事件；不依赖复查协程。
 //   - 每一次由开变关，恰好调用一次 OnClose（断开走代理的连接）。
@@ -26,6 +26,9 @@ const (
 	// ReasonMainSwitch 是正在更换主代理（M5-4，m5-plan v2.2 决定 2）：从关闸门开始，到新主代理的出口检查通过、
 	// 或失败后回到旧配置为止；之后由复查决定是否放行。
 	ReasonMainSwitch Reason = "main_proxy_switch"
+	// ReasonVM 是虚拟机不在或不健康（M6-2a，由 abroadd 管理虚拟机时）：拉起中、健康检查连续不通过、意外退出、
+	// 连续失败停止重启、卡住。重新健康时清掉，之后由复查决定是否放行。
+	ReasonVM Reason = "vm"
 )
 
 // 事件种类。
@@ -114,7 +117,7 @@ func (g *Gate) AddReason(r Reason, detail string) {
 	_, had := g.reasons[r]
 	g.reasons[r] = detail
 	g.epoch++
-	if r == ReasonTakeover || r == ReasonExitCheck {
+	if r == ReasonTakeover || r == ReasonExitCheck || r == ReasonVM {
 		g.probeUntil = time.Time{} // 接管故障、出口检查不通过：探测窗口立即失效
 	}
 	g.leaseUntil = time.Time{}

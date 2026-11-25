@@ -33,6 +33,10 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 	pfUser := fs.String("pf-user", daemon.DefaultAllowUser, "pf 放行的用户（abroad-vm 以它运行）")
 	mainStore := fs.String("main-proxy-store", "", "主代理存储（managedproxy 的 profile 目录）")
 	exitHost := fs.String("exit-check-host", "", "出口检查里 HTTPS 探测的主机（经主代理 GET https://<主机>/generate_204，要 204）")
+	vmExec := fs.String("vm-exec", "", "abroad-vm 的路径：给了就由 abroadd 拉起和管理虚拟机（健康检查、崩溃后退避重启、退出时关闭；M6-2a）；不给时虚拟机由外部启动")
+	vmUser := fs.String("vm-user", "", "和 --vm-exec 一起：以这个用户运行 abroad-vm（要 root）；不给时和 abroadd 同一个用户")
+	var vmArgs vmArgList
+	fs.Var(&vmArgs, "vm-arg", "和 --vm-exec 一起：传给 abroad-vm run 的其他参数（如 --image-dir=…），可重复；--state-dir 固定用 --vm-dir")
 	sockDir := fs.String("socket-dir", "", "本地接口 socket 的目录（目录属主 root、组和其他人不能写；socket 0666，级别按对端 uid 判）；空时放在状态目录里、只认属主")
 	var dev devOptions
 	if addDevFlags != nil { // 只有开发构建有（devflags_dev.go）
@@ -55,7 +59,8 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 		return code
 	}
 	return runReal(realFlags{stateDir: *stateDir, vmDir: *vmDir, pfUser: *pfUser, mainStore: *mainStore,
-		exitHost: *exitHost, skipKill: dev.skipKill, skipRegion: dev.skipRegion, socketDir: *sockDir}, stderr, ready)
+		exitHost: *exitHost, skipKill: dev.skipKill, skipRegion: dev.skipRegion, socketDir: *sockDir,
+		vmExec: *vmExec, vmUser: *vmUser, vmArgs: vmArgs}, stderr, ready)
 }
 
 // devOptions 是开发构建的参数（默认构建里全是零值）。

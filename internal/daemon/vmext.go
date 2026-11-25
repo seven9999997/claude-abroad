@@ -101,6 +101,11 @@ func (v ExternalVM) Start(ctx context.Context) error {
 	return usererror.New("确认虚拟机", fmt.Sprintf("%s 内虚拟机没有就绪", timeout), "请检查 abroad-vm 的日志后再试。", last)
 }
 
+// Probe 检查一次：控制面 health 通过、出站已收紧到第一跳（M6-2a：由 abroadd 管理虚拟机时的健康检查）。
+func (v ExternalVM) Probe(ctx context.Context) error {
+	return v.check(ctx, filepath.Join(v.Dir, "ctl.sock"), filepath.Join(v.Dir, "host.sock"))
+}
+
 func (v ExternalVM) check(ctx context.Context, ctl, host string) error {
 	for _, s := range []string{ctl, host} {
 		if _, err := os.Stat(s); err != nil {

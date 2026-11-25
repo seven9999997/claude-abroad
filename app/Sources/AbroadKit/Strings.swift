@@ -174,6 +174,22 @@ public enum L10n {
     public static let vmKernel = "内核"
     public static let vmUptime = "运行时间"
     public static let vmBootChanged = "虚拟机重启过"
+    /// 由 abroadd 管理虚拟机时的阶段名称（M6-2a；不认识的原样显示）。
+    public static func vmPhaseName(_ code: String) -> String {
+        switch code {
+        case "idle": return "不需要（未启用或已回国）"
+        case "starting": return "正在启动"
+        case "running": return "运行中"
+        case "unhealthy": return "健康检查不通过"
+        case "backoff": return "等待重新启动"
+        case "stopping": return "正在关闭"
+        case "failed": return "连续启动失败，已停止重启（保持断网）"
+        case "stuck": return "关闭不了，没有再启动新的"
+        default: return code
+        }
+    }
+    public static func vmManagerLine(_ phase: String, _ restarts: Int64) -> String { "虚拟机：" + vmPhaseName(phase) + "（重新启动 \(restarts) 次）" }
+    public static let vmLastError = "最近一次失败"
     public static func engineLine(_ name: String, _ state: String, _ restarts: Int64) -> String { "\(name)：\(state)（重启 \(restarts) 次）" }
     public static func seconds(_ s: Int64) -> String { "\(s) 秒" }
     public static let settingsGeneral = "通用"
@@ -226,6 +242,7 @@ public enum L10n {
         case "env_check": return "环境检测的硬性项没有通过"
         case "state": return "没有启用"
         case "main_proxy_switch": return "正在更换主代理"
+        case "vm": return "虚拟机没有运行或不健康"
         default: return code
         }
     }

@@ -27,9 +27,17 @@ type GeoTriChecker interface {
 
 // recheckFunc 把系统的出口检查适配成复查用的三态：先确认虚拟机在（Recover、监护不再启动它），再检查。
 // onGeo 非 nil 且检查能给出国家、时区时调用（只用来比对目标地区、发事件）。
+// readyReporter 是能只读报告是否健康的虚拟机（vmmgr.Manager 实现）。复查不能经 Start：
+// Start 表示“需要虚拟机”，会让停止重启的管理器重新开始拉起。
+type readyReporter interface{ Ready() error }
+
 func recheckFunc(vm state.VM, ex state.ExitCheck, onGeo func(country, tz string)) gatesm.CheckFunc {
 	return func(ctx context.Context) (gatesm.Result, string) {
-		if err := vm.Start(ctx); err != nil {
+		if r, ok := vm.(readyReporter); ok { // 由 abroadd 管理的虚拟机：只读当前是否健康，不触发拉起（M6-2a）
+			if err := r.Ready(); err != nil {
+				return gatesm.Unknown, "虚拟机没有就绪"
+			}
+		} else if err := vm.Start(ctx); err != nil {
 			return gatesm.Unknown, "虚拟机没有就绪"
 		}
 		if gc, ok := ex.(GeoTriChecker); ok {

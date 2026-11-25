@@ -202,6 +202,7 @@ public struct DaemonEnginesView: Codable, Sendable {
     public var uptimeS: Int64?
     public var bootChanged: Bool
     public var engines: [DaemonEngineView]?
+    public var vmManager: VmmgrStatus?
     enum CodingKeys: String, CodingKey {
         case reachable = "reachable"
         case version = "version"
@@ -209,6 +210,7 @@ public struct DaemonEnginesView: Codable, Sendable {
         case uptimeS = "uptime_s"
         case bootChanged = "boot_changed"
         case engines = "engines"
+        case vmManager = "vm_manager"
     }
 }
 
@@ -539,6 +541,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var stack: StackProxyStats?
     public var direct: DaemonDirectStatus?
     public var gate: GatesmStatus
+    public var vmManager: VmmgrStatus?
     public var exits: [DaemonExitStatus]?
     public var opens: [String: DaemonExitCounts]?
     public var region: DaemonRegionStatus?
@@ -556,6 +559,7 @@ public struct DaemonStatus: Codable, Sendable {
         case stack = "stack"
         case direct = "direct"
         case gate = "gate"
+        case vmManager = "vm_manager"
         case exits = "exits"
         case opens = "opens"
         case region = "region"
@@ -739,6 +743,21 @@ public struct StackProxyStats: Codable, Sendable {
         case sniff = "sniff"
         case udpPendingDropped = "udp_pending_dropped"
         case recheckedDropped = "rechecked_dropped"
+    }
+}
+
+public struct VmmgrStatus: Codable, Sendable {
+    public var managed: Bool
+    public var phase: String
+    public var restarts: Int64
+    public var failures: Int64
+    public var lastError: String?
+    enum CodingKeys: String, CodingKey {
+        case managed = "managed"
+        case phase = "phase"
+        case restarts = "restarts"
+        case failures = "failures"
+        case lastError = "last_error"
     }
 }
 

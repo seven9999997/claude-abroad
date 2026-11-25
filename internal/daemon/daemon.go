@@ -7,6 +7,7 @@ import (
 	"claude-abroad/internal/exitcheck"
 	"claude-abroad/internal/gatesm"
 	"claude-abroad/internal/vmhost"
+	"claude-abroad/internal/vmmgr"
 	"context"
 	"encoding/json"
 	"errors"
@@ -72,6 +73,11 @@ type Options struct {
 
 // Daemon 是一个 abroadd 实例。
 type Daemon struct {
+	// M6-2a：由 abroadd 管理的虚拟机（Sys.VM 是 *vmmgr.Manager 时）；虚拟机由外部启动时为 nil。
+	vmm    *vmmgr.Manager
+	vmStop func()
+	vmDone chan struct{}
+
 	opts    Options
 	store   *state.Store
 	release func()
@@ -230,8 +236,9 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	}
 
 	d.wireExitAvail()
-	d.wireExits() // 出口要在规则之前：规则引用的出口要能查到
-	d.wireRules() // 规则要在 Recover 之前接上：Recover 到 ENABLED 时会通知数据面启用（重新计算直连配置）
+	d.wireExits()      // 出口要在规则之前：规则引用的出口要能查到
+	d.wireRules()      // 规则要在 Recover 之前接上：Recover 到 ENABLED 时会通知数据面启用（重新计算直连配置）
+	d.startVMManager() // 要在 Recover 之前：Recover 里可能调用虚拟机的启停
 	if err := d.m.Recover(ctx); err != nil {
 		o.logf("恢复上次的状态：%v", err)
 		d.events.Add("daemon", "recover_failed", err.Error())
@@ -317,6 +324,10 @@ func (d *Daemon) stopInternals(closeGate bool) {
 	if closeGate {
 		d.gate.AddReason(gatesm.ReasonState, "abroadd 退出")
 	}
+	if d.vmStop != nil { // 由 abroadd 管理的虚拟机：关掉自己拉起的（先请它退出，超时强制结束）
+		d.vmStop()
+		<-d.vmDone
+	}
 	if t, ok := d.tun.(interface{ ProcessExit() }); ok {
 		t.ProcessExit()
 	}
@@ -368,6 +379,8 @@ type Status struct {
 	Direct *DirectStatus     `json:"direct,omitempty"`
 	// M4-3：闸门的状态、关闭原因、放行期剩余；分流出口的可用状态（不含出口 IP）。
 	Gate gatesm.Status `json:"gate"`
+	// M6-2a：由 abroadd 管理虚拟机时的管理器状态（阶段、重启次数、最近一次失败的原因）；虚拟机由外部启动时没有。
+	VMManager *vmmgr.Status `json:"vm_manager,omitempty"`
 	// M4-8：分流出口（正式的和开发用的）的摘要、可用状态、最近一次检查；各出口（含 main）的开流计数。
 	// 不含出口 IP、端点地址、配置。
 	Exits []ExitStatus          `json:"exits,omitempty"`
@@ -384,6 +397,10 @@ type Status struct {
 func (d *Daemon) Status() Status {
 	gs := d.gate.Status()
 	st := Status{GateOpen: gs.Open, Gate: gs, Protected: d.ppf.P.Protected(), Utun: d.tun.Name(), Events: d.events.List(), Hints: []Hint{}}
+	if d.vmm != nil {
+		vs := d.vmm.Status()
+		st.VMManager = &vs
+	}
 	if f, err := d.store.Load(); err != nil {
 		st.State, st.Corrupt = "UNKNOWN", true
 	} else {
