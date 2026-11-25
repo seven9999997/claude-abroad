@@ -144,6 +144,17 @@ func TestEndToEnd(t *testing.T) {
 	both("exit check", "exit", "check", "wg")
 	keep(mustOK(t, r.runWith(in{stdin: wgConf}, "--json", "exit", "add", "wg3", "--kind", "wireguard", "--stdin"), "exit add --json"))
 	split("exit rm", []string{"exit", "rm", "wg2"}, []string{"exit", "rm", "wg3"})
+	// 分享链接（M6-6c）：只从文件或标准输入读；写在参数里的拒绝、不发请求；输出里不回显密码。
+	link := "trojan://CliSecret99@tr.example.com:443?sni=tr.example.com#t"
+	sx := r.runWith(in{stdin: link + "\n"}, "exit", "add", "tl", "--kind", "sharelink", "--stdin")
+	keep(mustOK(t, sx, "exit add sharelink --stdin"))
+	if strings.Contains(sx.out+sx.err, "CliSecret99") {
+		t.Fatalf("不应回显分享链接：%+v", sx)
+	}
+	if x := r.run("exit", "add", "tl2", "--kind", "sharelink", link); x.code != ExitUsage || x.reqs != 0 {
+		t.Fatalf("链接写在参数里应拒绝、不发请求：%+v", x)
+	}
+	keep(mustOK(t, r.run("exit", "rm", "tl"), "exit rm tl"))
 
 	// 应用分流。
 	both("app set", "app", "set", "com.example.a", "block")

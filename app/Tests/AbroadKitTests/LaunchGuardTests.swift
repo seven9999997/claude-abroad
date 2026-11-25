@@ -131,3 +131,26 @@ final class Counter: @unchecked Sendable {
         #expect(t.requests.contains { $0.method == "POST" && $0.path == "/v1/envcheck/device" })
     }
 }
+
+// M6-6c：分享链接作为出口种类之一；提交时读文件、发 kind=sharelink，提交的那一刻清掉文件引用。
+@MainActor
+@Test func shareLinkExitKind() async throws {
+    #expect(ExitsModel.kinds.contains("sharelink"))
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sl-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let f = dir.appendingPathComponent("links.txt")
+    try "trojan://AppSecret1@tr.example.com:443#t\n".write(to: f, atomically: true, encoding: .utf8)
+    let t = FakeTransport { req in
+        req.method == "PUT" ? json(200, "{}") : json(200, "[]")
+    }
+    let m = ExitsModel(client: APIClient(transport: t))
+    m.formTag = "tr"
+    m.formKind = "sharelink"
+    m.formFile = f
+    await m.add()
+    #expect(m.formFile == nil, "提交的那一刻清掉")
+    let put = t.requests.first { $0.method == "PUT" }
+    let body = put?.body.map { String(decoding: $0, as: UTF8.self) } ?? ""
+    #expect(body.contains("\"sharelink\"") && body.contains("trojan:"), "请求体里的斜杠可能被转义：\(body)")
+}

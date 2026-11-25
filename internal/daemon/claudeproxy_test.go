@@ -361,7 +361,13 @@ func TestClaudeProxyGateClose(t *testing.T) {
 		t.Fatal("建立连接失败")
 	}
 	c.d.gate.AddReason(gatesm.ReasonExitCheck, "测试")
-	mustDropped(t, proxied, "闸门关")
+	// 只读不写：断开是在别的协程里异步做的，先写再等回显会和断开赛跑（-race 下偶发读到回显）。
+	_ = proxied.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, err := proxied.Read(make([]byte, 1)); err == nil {
+		t.Fatal("闸门关：走代理的已有连接应被断开")
+	} else if ne, ok := err.(net.Error); ok && ne.Timeout() {
+		t.Fatal("闸门关：走代理的已有连接 2 秒内没有被断开")
+	}
 	_ = direct.SetDeadline(time.Now().Add(2 * time.Second))
 	if !echoOK(direct) {
 		t.Fatal("经本机网络的连接不应受影响")

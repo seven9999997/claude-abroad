@@ -106,6 +106,14 @@ func (d *Daemon) handleExitPut(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errBody{"请求体不对：要是 {\"kind\":…,\"conf\":…}"})
 		return
 	}
+	if req.Kind == exitconf.ShareLink { // 分享链接（M6-6c）：转成订阅出口（Clash）存储和下发，原始链接不保存
+		y, err := exitconf.ShareLinksToClash(req.Conf)
+		if err != nil {
+			writeErr(w, http.StatusUnprocessableEntity, api.ErrorBody{Field: "conf", Error: "出口 " + tag + " 的分享链接：" + err.Error()})
+			return
+		}
+		req.Kind, req.Conf = exitconf.Clash, string(y)
+	}
 	if _, err := parseExit(req.Kind, req.Conf); err != nil {
 		// exitconf 的错误指出行号和指令，不回显配置里的值。
 		writeErr(w, http.StatusUnprocessableEntity, api.ErrorBody{Field: "conf", Error: "出口 " + tag + " 的配置：" + err.Error()})

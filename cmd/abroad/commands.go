@@ -808,7 +808,7 @@ func cmdExitAdd(a *app, args []string) int {
 	}
 	f, err := parseFlags(args, []string{"--kind", "--file"}, []string{"--stdin"}, nil)
 	if err != nil || len(f.pos) != 1 || f.vals["--kind"] == "" || (f.vals["--file"] == "") == !f.bools["--stdin"] {
-		return usageErr(a, "exit add <标签> --kind wireguard|openvpn|clash --file <配置文件>（或 --stdin）")
+		return usageErr(a, "exit add <标签> --kind wireguard|openvpn|clash|sharelink --file <配置文件>（或 --stdin）；sharelink 是每行一个的分享链接（ss、vmess、vless、trojan、hysteria2、tuic）")
 	}
 	path := f.vals["--file"]
 	if path == "" {

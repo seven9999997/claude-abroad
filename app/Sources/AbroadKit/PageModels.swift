@@ -77,7 +77,8 @@ public final class ExitsModel: PageModel {
     @Published public var formKind = "wireguard"
     @Published public var formFile: URL?
 
-    public static let kinds = ["wireguard", "openvpn", "clash"]
+    /// 出口种类；sharelink 是存着分享链接的文本文件（每行一个；M6-6c，后台转成订阅出口）。
+    public static let kinds = ["wireguard", "openvpn", "clash", "sharelink"]
 
     /// 没有出口时的说明。
     public var emptyText: String? { state == .loaded && rows.isEmpty ? L10n.noExits : nil }
