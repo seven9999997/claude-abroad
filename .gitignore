@@ -34,6 +34,7 @@ node_modules/
 
 # 各阶段脚本的输出、误放的编译产物
 /scripts/*/out/
+/scripts/m6/*/out/
 /abroadd
 /cmd/abroadd/abroadd
 

@@ -1,0 +1,13 @@
+# scripts/m6/e2e 的 run.sh、restore.sh 会执行的全部改动命令（扩展正则，每行一条；输出里仓库的绝对路径先换成 <仓库>）。
+# 安装、卸载的命令由 scripts/m6/install/check-commands.sh 另外核对，这里只出现调用它们的那一行。
+^mkdir -p /Library/Application Support/claude-abroad-m6e$
+^chmod 755 /Library/Application Support/claude-abroad-m6e$
+^死人开关 [0-9]+ 秒后执行 <仓库>/scripts/m6/e2e/restore\.sh$
+^kill <死人开关的 PID>$
+^rm -f /Library/Application Support/claude-abroad-m6e/deadman_pid$
+^rm -rf /Library/Application Support/claude-abroad-m6e$
+^scripts/m6/install/(install|uninstall)\.sh$
+^/usr/sbin/systemsetup -settimezone <快照里的时区>$
+^/usr/bin/defaults write /Library/Preferences/com\.apple\.timezone\.auto Active -bool <快照里的值>（原来没有时 delete）$
+^/bin/launchctl asuser <UID> /usr/bin/sudo -u <用户> /usr/bin/defaults write -g (AppleLanguages -array <快照里的语言>|AppleLocale -string <快照里的地区格式>)（原来没有时 delete）$
+^/usr/bin/defaults write /Library/Preferences/\.GlobalPreferences AppleLanguages -array <快照里的语言>（原来没有时 delete）$
