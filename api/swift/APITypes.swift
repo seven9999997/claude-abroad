@@ -440,6 +440,7 @@ public struct DaemonLaunchGuardLayer: Codable, Sendable {
 }
 
 public struct DaemonLaunchGuardView: Codable, Sendable {
+    public var launchControl: Bool?
     public var allowed: Bool
     public var since: String?
     public var coverAll: Bool?
@@ -447,6 +448,7 @@ public struct DaemonLaunchGuardView: Codable, Sendable {
     public var coverage: [ClaudeprocCoverageRow]?
     public var recent: [ClaudeprocGuardRecord]?
     enum CodingKeys: String, CodingKey {
+        case launchControl = "launch_control"
         case allowed = "allowed"
         case since = "since"
         case coverAll = "cover_all"
@@ -708,6 +710,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var resolverLock: ResolverlockStatus?
     public var claudeCode: DaemonClaudeProxyStatus?
     public var integrity: IntegrityResult?
+    public var launchControl: Bool?
     public var prepare: DaemonPrepareStatus?
     public var exits: [DaemonExitStatus]?
     public var opens: [String: DaemonExitCounts]?
@@ -730,6 +733,7 @@ public struct DaemonStatus: Codable, Sendable {
         case resolverLock = "resolver_lock"
         case claudeCode = "claude_code"
         case integrity = "integrity"
+        case launchControl = "launch_control"
         case prepare = "prepare"
         case exits = "exits"
         case opens = "opens"

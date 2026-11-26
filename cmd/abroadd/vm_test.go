@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"reflect"
+	"strings"
 	"testing"
 
+	"claude-abroad/internal/claudeproc"
 	"claude-abroad/internal/daemon"
 	"claude-abroad/internal/resolverlock"
 	"claude-abroad/internal/vmmgr"
@@ -106,5 +109,28 @@ func TestClaudeSettingsWiring(t *testing.T) {
 	}
 	if RealClaudeProxyAddr != "127.0.0.1:47821" {
 		t.Fatal(RealClaudeProxyAddr)
+	}
+}
+
+// M6-4b-1 返工（必须改 1）：启动管控只有带 --launch-control 才接——不带时解析锁、托管设置、第三层、首次准备、本机代理端口
+// 全都没有（真实模式和 M6 之前相同，M2–M5 的真机脚本就是这样运行的）；带上是原来的行为。
+func TestLaunchControlParts(t *testing.T) {
+	g := &claudeproc.LaunchGuard{}
+	off := launchControlParts(realFlags{stateDir: "/st"}, g)
+	if off.lock != nil || off.settings != nil || off.guard != nil || off.firstRun || off.proxyAddr != "" {
+		t.Fatalf("不带 --launch-control 时不应有任何管控：%+v", off)
+	}
+	on := launchControlParts(realFlags{stateDir: "/st", launchControl: true}, g)
+	if on.lock == nil || on.lock.Dir != RealResolverDir || on.settings == nil || on.guard != g || !on.firstRun || on.proxyAddr != RealClaudeProxyAddr {
+		t.Fatalf("带上时应接上全部：%+v", on)
+	}
+}
+
+// --launch-control 是正式参数（发布构建也有）。
+func TestLaunchControlFlagInRelease(t *testing.T) {
+	var help bytes.Buffer
+	run([]string{"-h"}, &help, nil)
+	if !strings.Contains(help.String(), "launch-control") {
+		t.Fatal("发布构建应有 --launch-control")
 	}
 }

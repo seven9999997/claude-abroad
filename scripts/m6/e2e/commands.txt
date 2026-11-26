@@ -8,6 +8,9 @@
 ^rm -rf /Library/Application Support/claude-abroad-m6e$
 ^scripts/m6/install/(install|uninstall)\.sh$
 ^launchctl bootout system/com\.claude-abroad\.dev\.abroadd$
+^cp /bin/sleep /Library/Application Support/claude-abroad/fake-claude/claude-fake$
+^sudo -u <你> /Library/Application Support/claude-abroad/fake-claude/claude-fake 120（后台）$
+^rm -f /Library/Application Support/claude-abroad/fake-claude/claude-fake$
 ^launchctl bootstrap system /Library/LaunchDaemons/com\.claude-abroad\.dev\.abroadd\.plist$
 ^/Library/Application Support/claude-abroad/bin/abroad-rescue$
 ^/usr/sbin/systemsetup -settimezone <快照里的时区>$

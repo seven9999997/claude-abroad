@@ -4,7 +4,8 @@
 代替以后的 `SMAppService` 注册。M6-9 的端到端也从这里开始。
 
 > **安装不会断网，也不会结束任何程序。** 装完是“已回国”状态：不加载断网规则、不接管网络。
-> 默认是开发构建：abroadd 带 `--dev-skip-claude-kill`（回国、卸载时只预览、不结束 Claude 进程）和
+> 默认是开发构建：abroadd 带 `--launch-control`（打开启动管控）、`--dev-fake-claude-dir`（回国、卸载和第三层只针对
+> 安装目录下 `fake-claude` 里的测试进程，本机真实的 Claude 不受影响）和
 > `--dev-resolver-test-domain`（首次准备只锁测试域名 `lock-test.claude-abroad.invalid`，不写 Claude Code 的托管设置），
 > 本机真实的 Claude、Claude Code 不受影响。**启用**（应用里点“启用”或 `abroad up`）才会接管网络，那是 M6-9 的步骤。
 

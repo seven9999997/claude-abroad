@@ -59,7 +59,7 @@ done
 [ "$(readlink "$A/usr/local/bin/abroad")" = "$I/bin/abroad" ] && ok "a. 命令行链接指向安装位置（另存的应急命令行）" || bad "a. 命令行链接不对"
 D="$A/Library/LaunchDaemons/com.claude-abroad.dev.abroadd.plist"
 G="$A/Library/LaunchDaemons/com.claude-abroad.dev.guard.plist"
-for want in -- --dev-skip-claude-kill --dev-resolver-test-domain --vm-exec "$I/bin/abroad-vm" "--vm-user" "--integrity-manifest" "$I/integrity.json" \
+for want in -- --launch-control --dev-fake-claude-dir "$I/fake-claude" --dev-resolver-test-domain --vm-exec "$I/bin/abroad-vm" "--vm-user" "--integrity-manifest" "$I/integrity.json" \
   "--state-dir" "$I/state/abroadd" "--socket-dir" "/var/run/claude-abroad" "<key>KeepAlive</key><true/>"; do
   grep -qF -- "$want" "$D" || bad "a. abroadd 的 plist 里没有 $want"
 done

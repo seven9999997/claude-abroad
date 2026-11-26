@@ -96,6 +96,7 @@ type Daemon struct {
 	integrity    *integrity.Result
 	prepareSt    *PrepareStatus // 首次准备的结果（M6-8a；没打开时为 nil）
 	gs           *guardState
+	lgMu         sync.Mutex // 保护 lgStop、lgDone（卸载和退出都可能停第三层）
 	lgStop       func()
 	lgDone       chan struct{}
 	resolverLast string // 上一次解析锁自检的摘要（变化时才记事件）
@@ -370,10 +371,7 @@ func (d *Daemon) stopInternals(closeGate bool) {
 	if closeGate {
 		d.gate.AddReason(gatesm.ReasonState, "abroadd 退出")
 	}
-	if d.lgStop != nil { // 启动管控的第三层
-		d.lgStop()
-		<-d.lgDone
-	}
+	d.stopLaunchGuard()  // 启动管控的第三层
 	d.cproxy.stop()      // 第四层的本机代理端口（没配置时为 nil，stop 什么都不做）
 	if d.vmStop != nil { // 由 abroadd 管理的虚拟机：关掉自己拉起的（先请它退出，超时强制结束）
 		d.vmStop()
@@ -447,6 +445,8 @@ type Status struct {
 	ClaudeCode *ClaudeProxyStatus `json:"claude_code,omitempty"`
 	// M6-7：程序完整性校验的结果（接了校验时；不通过时只保留断网规则、不接管、不能启用）。
 	Integrity *integrity.Result `json:"integrity,omitempty"`
+	// M6-4b-1 返工：这次安装是否打开了启动管控（--launch-control）。没打开时解析锁、托管设置、第三层都“未启用”。
+	LaunchControl bool `json:"launch_control,omitempty"`
 	// M6-8a：首次准备（写入解析锁和托管设置）的结果（打开了首次准备时）。
 	Prepare *PrepareStatus `json:"prepare,omitempty"`
 	// M4-8：分流出口（正式的和开发用的）的摘要、可用状态、最近一次检查；各出口（含 main）的开流计数。
@@ -478,6 +478,7 @@ func (d *Daemon) Status() Status {
 		ir := *d.integrity
 		st.Integrity = &ir
 	}
+	st.LaunchControl = d.opts.Sys.LaunchControl
 	if d.prepareSt != nil {
 		ps := *d.prepareSt
 		st.Prepare = &ps

@@ -32,6 +32,7 @@ func newLGEnv(t *testing.T, mod func(*Options)) *lgEnv {
 	t.Helper()
 	e := &lgEnv{env: newEnv(t), w: claudeproc.NewFakeWorld(), sig: &lgSigner{teams: map[int]string{}}}
 	o := e.opts()
+	o.Sys.LaunchControl = true
 	o.Sys.LaunchGuard = &claudeproc.LaunchGuard{Procs: e.w, Info: e.w.Info, Sig: e.w, Self: os.Getpid(),
 		Judge: &claudeproc.AutoJudge{Signer: e.sig}, Interval: 20 * time.Millisecond, Grace: 50 * time.Millisecond}
 	if mod != nil {
@@ -196,5 +197,46 @@ func TestLaunchGuardAPI(t *testing.T) {
 	_ = json.Unmarshal(raw2, &v2)
 	if !v2.Allowed || v2.Layers[2].Effective {
 		t.Fatalf("没接第三层：%+v", v2)
+	}
+}
+
+// M6-4b-1 返工：没打开启动管控（真实模式不带 --launch-control）时，状态和 /v1/launchguard 写“未启用”（不是“未生效”）。
+func TestLaunchControlOff(t *testing.T) {
+	e := newEnv(t)
+	d := e.start(e.opts())
+	if st := status(t, d); st.LaunchControl || st.ResolverLock != nil || st.Prepare != nil {
+		t.Fatalf("没打开管控：%+v", st)
+	}
+	_, raw := call(t, d, "GET", "/v1/launchguard", nil)
+	var v LaunchGuardView
+	if json.Unmarshal(raw, &v) != nil || v.LaunchControl || !v.Allowed {
+		t.Fatalf("%s", raw)
+	}
+	for _, l := range v.Layers {
+		if l.Layer != 2 && (l.Effective || l.Note != LaunchControlOffNote) {
+			t.Fatalf("第 %d 层应写“未启用”：%+v", l.Layer, l)
+		}
+	}
+	e2 := newLGEnv(t, nil)
+	if st := status(t, e2.d); !st.LaunchControl {
+		t.Fatal("打开管控时状态应写 launch_control")
+	}
+}
+
+// M6-4b-1 建议改：接口只读（不改“这一段不允许”的起点），时间用 UTC。
+func TestLaunchGuardAPIReadOnlyUTC(t *testing.T) {
+	e := newLGEnv(t, nil)
+	e.addClaude(300, time.Now())
+	waitGone(t, e.w, 300)
+	before := e.d.gs.since
+	for i := 0; i < 3; i++ {
+		_, raw := call(t, e.d, "GET", "/v1/launchguard", nil)
+		var v LaunchGuardView
+		if json.Unmarshal(raw, &v) != nil || v.Since == nil || v.Since.Location() != time.UTC || len(v.Recent) == 0 || v.Recent[0].Time.Location() != time.UTC {
+			t.Fatalf("时间应是 UTC（不带本机时区偏移）：%s", raw)
+		}
+	}
+	if !e.d.gs.since.Equal(before) {
+		t.Fatal("读接口不应改起点")
 	}
 }

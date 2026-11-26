@@ -78,7 +78,7 @@ func identsUsed(t *testing.T, path string) map[string]bool {
 // M6-1 验收 c：开发参数的名字、假系统和假主代理的接线、agent 的开发出口，只出现在带 abroaddev 约束的文件里。
 func TestDevOnlyInTaggedFiles(t *testing.T) {
 	root := filepath.Join("..", "..")
-	devFlagNames := []string{"fake-system", "fake-main-proxy", "dev-skip-claude-kill", "dev-skip-region", "dev-resolver-test-domain", "outbound-open", "dev-agent"}
+	devFlagNames := []string{"fake-system", "fake-main-proxy", "dev-skip-claude-kill", "dev-skip-region", "dev-resolver-test-domain", "dev-fake-claude-dir", "outbound-open", "dev-agent"}
 	type rule struct {
 		dir     string
 		strs    []string // 字符串字面量里不能出现
@@ -86,7 +86,7 @@ func TestDevOnlyInTaggedFiles(t *testing.T) {
 		defines []string // 只能在开发文件里定义的类型或函数
 	}
 	rules := []rule{
-		{dir: "cmd/abroadd", strs: []string{"fake-system", "fake-main-proxy", "dev-skip-claude-kill", "dev-skip-region", "dev-resolver-test-domain"}, idents: []string{"NewFakeSystem", "WithFakeMainProxy"}},
+		{dir: "cmd/abroadd", strs: []string{"fake-system", "fake-main-proxy", "dev-skip-claude-kill", "dev-skip-region", "dev-resolver-test-domain", "dev-fake-claude-dir"}, idents: []string{"NewFakeSystem", "WithFakeMainProxy"}},
 		{dir: "cmd/abroad-vm", strs: []string{"outbound-open", "dev-agent"}, idents: []string{"CmdlineDev"}},
 		{dir: "cmd/abroad-agent", strs: []string{"dev-exits", "abroad.dev"}},
 		{dir: "internal/agent", strs: []string{"/v1/dev-exits", "/v1/dev/netns-probe", "/v1/dev/exit-peer"},

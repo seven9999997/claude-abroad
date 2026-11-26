@@ -415,7 +415,7 @@ public final class SettingsModel: PageModel {
     override public func load() async {
         let o = await client.status()
         state = LoadState.from(o)
-        if case .ok(let st) = o { security = st.security; resolverLock = st.resolverLock; claudeCode = st.claudeCode; integrity = st.integrity; prepare = st.prepare }
+        if case .ok(let st) = o { security = st.security; resolverLock = st.resolverLock; claudeCode = st.claudeCode; integrity = st.integrity; prepare = st.prepare; launchControlOn = st.launchControl ?? (st.resolverLock != nil || st.claudeCode != nil) }
         switch await client.restorePreview() {
         case .ok(let pv):
             processes = pv.processes ?? []
@@ -444,8 +444,13 @@ public final class SettingsModel: PageModel {
     public var cliPath: String { L10n.cliPath }
     public var cliUsage: String { L10n.cliUsage }
     /// 启动管控的文字：现在允许与否、四层各自是否生效、第三层的覆盖范围、最近拦截；总带“登录时打开”的提示。
+    /// 这次安装打开了启动管控（M6-4b-1 返工；没打开时解析锁、第四层、启动管控都显示“未启用”）。状态里没有
+    /// launch_control 时（没打开时后台不输出它，旧版本的后台也没有）看有没有解析锁或第四层的状态：没打开时这两项都没有。
+    @Published public private(set) var launchControlOn = true
+
     public var launchControlText: String {
         guard let g = launchGuard else { return L10n.launchGuardUnknown }
+        if !launchControlOn { return L10n.launchControlOff }
         var lines = [g.allowed ? L10n.launchGuardAllowed : L10n.launchGuardBlocked]
         for l in g.layers ?? [] { lines.append(L10n.launchGuardLayer(l.name, l.effective) + ((l.note ?? "").isEmpty ? "" : "（" + (l.note ?? "") + "）")) }
         for c in g.coverage ?? [] { lines.append(L10n.launchGuardCoverage(c.name, c.status, c.reason)) }
@@ -455,6 +460,7 @@ public final class SettingsModel: PageModel {
     }
     /// 第一层（域名解析锁）的状态文字：生效、未写入、未生效（哪些域名什么问题）、有冲突。
     public var resolverLockText: String {
+        if !launchControlOn { return L10n.launchControlOff }
         guard let l = resolverLock else { return L10n.resolverLockUnknown }
         var parts: [String] = []
         if !l.written {
@@ -470,6 +476,7 @@ public final class SettingsModel: PageModel {
     }
     /// 第四层的状态文字：生效、未写入、未生效（托管设置的问题或端口没在听）、有冲突；总带覆盖范围那句。
     public var claudeCodeText: String {
+        if !launchControlOn { return L10n.launchControlOff }
         guard let c = claudeCode else { return L10n.claudeCodeUnknown }
         var parts: [String] = []
         let s = c.settings

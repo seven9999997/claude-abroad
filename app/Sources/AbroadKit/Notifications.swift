@@ -7,6 +7,8 @@ import Foundation
 
 public enum NotificationKind: String, Sendable, Equatable, CaseIterable {
     case protectionLost, protectionRestored, switchRolledBack, switchRollbackIncomplete, restoreDone, regionReady
+    /// 启动管控的第三层结束了刚打开的 Claude（M6-4b-1 返工）。
+    case launchBlocked
 }
 
 public struct AppNotification: Sendable, Equatable {
@@ -95,6 +97,15 @@ public final class Notifier {
         return (String(detail[..<r.lowerBound]), String(detail[r.upperBound...]))
     }
     private var regionWritten = false
+    /// 最近一次读到的状态（RESTORED、ENABLING……），拦下通知按它选文字。
+    private var lastState: String?
+    /// 最近一次发“拦下”通知的时刻：桌面版一次启动有好几个进程被拦，短时间内的合成一条。
+    private var lastBlockedAt: Date?
+    /// 合并“拦下”通知的窗口；比这更早的“拦下”事件（补发的旧事件）不通知。
+    public static let blockedMergeWindow: TimeInterval = 10
+    public static let blockedMaxAge: TimeInterval = 30
+    /// 当前时间（测试注入）。
+    public var now: () -> Date = { Date() }
 
     public init(sender: NotificationSender = NullNotificationSender(), opener: ClaudeOpener = NullClaudeOpener(), preference: NotificationPreference = MemoryPreference()) {
         self.sender = sender
@@ -111,6 +122,7 @@ public final class Notifier {
 
     /// 读到状态。reconnect 为真时（刚连上或重连后）只建立基线、不通知（补发的当前状态不当作新事件）。
     public func observe(status st: DaemonStatus, reconnect: Bool) {
+        lastState = st.state
         if reconnect || gateOpen == nil {
             gateOpen = st.gateOpen
             lastClosedCode = st.gateOpen ? nil : st.gate.reasons?.first
@@ -127,7 +139,7 @@ public final class Notifier {
 
     /// 事件流里的一条（data 是 EventRecord 的 JSON：seq、source、kind、detail）。同一个 seq 只处理一次。
     public func observe(event ev: SSEEvent) {
-        struct Rec: Decodable { var seq: Int64?; var source: String?; var kind: String?; var detail: String? }
+        struct Rec: Decodable { var seq: Int64?; var source: String?; var kind: String?; var time: String?; var detail: String? }
         guard let r = try? JSONDecoder().decode(Rec.self, from: Data(ev.data.utf8)) else { return }
         if let s = r.seq ?? ev.id.flatMap({ Int64($0) }) {
             if s <= lastSeq { return }
@@ -152,9 +164,24 @@ public final class Notifier {
             if notify { emit(.protectionRestored, L10n.notifyProtectionRestored) }
         case ("state", "region_synced"):
             regionWritten = true
+        case ("launchguard", "blocked"):
+            let t = now()
+            if let s = r.time, let at = Self.parseTime(s), t.timeIntervalSince(at) > Self.blockedMaxAge { return } // 补发的旧事件
+            if let last = lastBlockedAt, t.timeIntervalSince(last) < Self.blockedMergeWindow { return } // 合成一条
+            lastBlockedAt = t
+            let restored = lastState == "RESTORED" || lastState == "RESTORING"
+            emit(.launchBlocked, restored ? L10n.notifyLaunchBlockedRestored : L10n.notifyLaunchBlockedEnv)
         default:
             break // 其余（包括出口检查“无法判断”一类）不通知
         }
+    }
+
+    static func parseTime(_ s: String) -> Date? {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = f.date(from: s) { return d }
+        f.formatOptions = [.withInternetDateTime]
+        return f.date(from: s)
     }
 
     /// 更换主代理的结果（操作的结果）。

@@ -60,6 +60,8 @@ type AutoJudge struct {
 	Signer ProcSigner
 	Bundle procinfo.BundleReader // .app 目录 → Bundle ID（桌面版那一类）
 	Max    int                   // 缓存容量；0 用 DefaultSignCacheSize
+	// FakeDir：开发构建只认这个目录下的进程（真实判定不用；见 fakedir.go）。
+	FakeDir string
 
 	mu    sync.Mutex
 	m     map[procKey]*list.Element
@@ -153,6 +155,12 @@ func underInstallDir(p string) bool {
 //
 // node、bun 跑包里的 JS（npm 安装，含 IDE 插件用 node 起的）确认不了，不能。其余不是 Claude。
 func (j *AutoJudge) Judge(p procinfo.Proc) AutoResult {
+	if j.FakeDir != "" {
+		if underDir(p.Path, j.FakeDir) {
+			return AutoResult{Kill: true, Kind: KindNative, Reason: fakeReason}
+		}
+		return AutoResult{}
+	}
 	if p.Path == "" {
 		return AutoResult{Reason: "读不到可执行文件"}
 	}

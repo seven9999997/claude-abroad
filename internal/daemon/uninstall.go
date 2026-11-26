@@ -99,11 +99,7 @@ func (d *Daemon) runUninstall(ctx context.Context) (UninstallResult, error) {
 		add("解除 Claude 启动管控", false, "")
 		return res, usererror.Wrap("记下已卸载", err, "请重试卸载。")
 	}
-	if d.lgStop != nil { // 第三层不再结束任何进程
-		d.lgStop()
-		<-d.lgDone
-		d.lgStop = nil
-	}
+	d.stopLaunchGuard() // 第三层不再结束任何进程
 	d.events.Add("uninstall", "launch_control_removed", "")
 	add("解除 Claude 启动管控", true, strings.Join(notes, "；"))
 	// 3. 安装器那一侧

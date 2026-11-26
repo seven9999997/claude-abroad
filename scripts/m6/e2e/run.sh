@@ -156,6 +156,19 @@ if [ "${PHASE}" = 1 ]; then
   checkpoint P1 "在安装引导里添加来源（本地配置文件选 M6E_NODES 那份）→ 选节点 → 应用主代理（按提示在终端执行 sudo abroad …）→ 完成" c_mainproxy "从引导里配好主代理"
   checkpoint P2 "点“启用”（地区会变时确认框等 3 秒再确认）。这一步会接管本机网络" c_enabled "启用"
   checkpoint P3 "点“一键回国”并确认（开发构建只预览、不结束 Claude）" c_restored "回国：网络恢复、解析锁仍在"
+  # 第三层演练（M6-4b-1 返工）：开发安装带 --dev-fake-claude-dir，第三层只针对那个目录下的进程。已回国时在里面启动一个
+  # 测试进程（/bin/sleep 的副本，以你自己的身份运行），应在几秒内被结束；本机真实的 Claude 不受影响。
+  FAKE_DIR="/Library/Application Support/claude-abroad/fake-claude"
+  step "第三层演练：在测试目录里启动一个测试进程，看它被结束"
+  m6e_do cp /bin/sleep "${FAKE_DIR}/claude-fake"
+  if [ "$DRY_RUN" = 1 ]; then printf 'CHANGE: sudo -u <你> %s/claude-fake 120（后台）\n' "${FAKE_DIR}"; res L1 跳过 "空跑"; else
+    sudo -u "${SUDO_USER}" "${FAKE_DIR}/claude-fake" 120 &
+    fpid=$!
+    gone=0
+    for _ in $(seq 1 30); do kill -0 "${fpid}" 2>/dev/null || { gone=1; break; }; sleep 0.2; done
+    if [ "${gone}" = 1 ]; then res L1 通过 "回国后测试进程在 6 秒内被第三层结束"; else res L1 不通过 "测试进程 6 秒内没被结束（第三层没生效？）"; wait "${fpid}" 2>/dev/null; fi
+  fi
+  m6e_do rm -f "${FAKE_DIR}/claude-fake"
   checkpoint P4 "再点“启用”" c_enabled "再启用（带着启用状态重启，看开机时的 guard）"
   m6e_state_set phase reboot
   m6e_deadman_stop # 重启会结束死人开关；第二段开头重新启动

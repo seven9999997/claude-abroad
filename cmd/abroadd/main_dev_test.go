@@ -105,3 +105,14 @@ func TestFakeMainProxyRun(t *testing.T) {
 		t.Fatalf("退出码 %d：%s", rc, stderr.String())
 	}
 }
+
+// M6-4b-1 返工：--dev-fake-claude-dir 的组合检查（在取生产执行器之前就按参数错退出）。
+func TestFakeClaudeDirChecks(t *testing.T) {
+	dir := t.TempDir()
+	for _, c := range [][]string{{"--dev-fake-claude-dir", "rel"}, {"--dev-fake-claude-dir", "/"}, {"--dev-fake-claude-dir", "/fake", "--dev-skip-claude-kill"}} {
+		var stderr bytes.Buffer
+		if rc := run(append([]string{"--state-dir", dir}, c...), &stderr, nil); rc != 2 || !strings.Contains(stderr.String(), "--dev-fake-claude-dir") {
+			t.Errorf("%v：应按参数错退出：%d %s", c, rc, stderr.String())
+		}
+	}
+}

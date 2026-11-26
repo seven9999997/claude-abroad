@@ -56,6 +56,6 @@ private func settingsCC(_ cc: String?) async -> SettingsModel {
 @MainActor
 @Test func claudeCodeUnknown() async {
     let m = await settingsCC(nil)
-    #expect(m.claudeCodeText == L10n.claudeCodeUnknown)
+    #expect(m.claudeCodeText == L10n.launchControlOff) // 没打开启动管控（M6-4b-1 返工）
     #expect(L10n.claudeCodeScope == "只覆盖 Claude Code，不覆盖 Claude 桌面版和浏览器")
 }

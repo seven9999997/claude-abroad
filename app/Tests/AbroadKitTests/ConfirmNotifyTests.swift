@@ -233,14 +233,49 @@ func st(gate: Bool, env: String? = nil, reasons: [String] = []) -> DaemonStatus 
     #expect(o.calls == 0, "没有点击时不打开 Claude")
     n.userTappedOpenClaude()
     #expect(o.calls == 1)
-    // 六种都发过（保护断开、恢复、两种更换失败、回国完成、地区就绪）
-    #expect(Set(s.got.map(\.kind)) == Set(NotificationKind.allCases))
+    // 六种都发过（保护断开、恢复、两种更换失败、回国完成、地区就绪；拦下见 launchBlockedNotifications）
+    #expect(Set(s.got.map(\.kind)) == Set(NotificationKind.allCases).subtracting([.launchBlocked]))
     // 开关关掉后不发
     let count = s.got.count
     pref.enabled = false
     n.restoreDone(pending: [])
     n.observe(event: ev(10, "gate", "gate_closed", "main_exit：x"))
     #expect(s.got.count == count)
+}
+
+/// M6-4b-1 返工：拦下 Claude 时发通知；文字按状态区分；短时间内的多条合成一条；补发的旧事件不通知；开关关掉不发。
+@MainActor
+@Test func launchBlockedNotifications() {
+    let s = FakeSender()
+    let pref = MemoryPreference()
+    let n = Notifier(sender: s, preference: pref)
+    let base = ISO8601DateFormatter().date(from: "2026-11-22T00:00:00Z")!
+    var clock = base
+    n.now = { clock }
+    var restored = decodeStatus(statusJSON(state: "RESTORED", gate: false))
+    n.observe(status: restored, reconnect: true)
+    // 桌面版一次启动：好几个进程被拦，合成一条
+    n.observe(event: ev(1, "launchguard", "blocked", "现在不允许启动 Claude，已结束：Claude 桌面版"))
+    n.observe(event: ev(2, "launchguard", "blocked", "现在不允许启动 Claude，已结束：Claude 桌面版"))
+    clock = base.addingTimeInterval(5)
+    n.observe(event: ev(3, "launchguard", "blocked", "x"))
+    #expect(s.got.map(\.kind) == [.launchBlocked])
+    #expect(s.got[0].body == L10n.notifyLaunchBlockedRestored && s.got[0].title == L10n.notificationTitle(.launchBlocked))
+    // 窗口过后再打开：又一条；启用中（环境检测没通过）用另一句
+    clock = base.addingTimeInterval(20)
+    restored = decodeStatus(statusJSON(state: "ENABLING", gate: false))
+    n.observe(status: restored, reconnect: false)
+    n.observe(event: SSEEvent(id: "4", event: "launchguard", data: "{\"seq\":4,\"source\":\"launchguard\",\"kind\":\"blocked\",\"time\":\"2026-11-22T00:00:19Z\",\"detail\":\"x\"}"))
+    #expect(s.got.count == 2 && s.got[1].body == L10n.notifyLaunchBlockedEnv)
+    // 补发的旧事件（事件时间早于 30 秒）不通知
+    clock = base.addingTimeInterval(200)
+    n.observe(event: ev(5, "launchguard", "blocked", "x"))
+    #expect(s.got.count == 2)
+    // 开关关掉不发
+    pref.enabled = false
+    clock = base.addingTimeInterval(400)
+    n.observe(event: SSEEvent(id: "6", event: "launchguard", data: "{\"seq\":6,\"source\":\"launchguard\",\"kind\":\"blocked\",\"time\":\"2026-11-22T00:06:40Z\",\"detail\":\"x\"}"))
+    #expect(s.got.count == 2)
 }
 
 /// 通知的内容里搜不到出口 IP、订阅地址、节点地址（只用后台的原因和集中的文字表）。

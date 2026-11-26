@@ -82,7 +82,10 @@ final class Counter: @unchecked Sendable {
         switch req.path {
         case "/v1/launchguard": return json(200, lg)
         case "/v1/restore/preview": return json(200, "{\"processes\":[],\"will_kill\":true}")
-        default: return json(200, statusJSON(state: "RESTORED", gate: false))
+        default:
+            var j = statusJSON(state: "RESTORED", gate: false)
+            j.removeLast()
+            return json(200, j + ",\"launch_control\":true}")
         }
     }
     let m = SettingsModel(client: APIClient(transport: t))
@@ -153,4 +156,21 @@ final class Counter: @unchecked Sendable {
     let put = t.requests.first { $0.method == "PUT" }
     let body = put?.body.map { String(decoding: $0, as: UTF8.self) } ?? ""
     #expect(body.contains("\"sharelink\"") && body.contains("trojan:"), "请求体里的斜杠可能被转义：\(body)")
+}
+
+/// M6-4b-1 返工：没打开启动管控（状态里 launch_control 为假或缺省、也没有解析锁和第四层）时，启动管控、解析锁、第四层都写“未启用”。
+@MainActor
+@Test func settingsLaunchControlOff() async {
+    let t = FakeTransport { req in
+        switch req.path {
+        case "/v1/launchguard": return json(200, #"{"allowed":true,"layers":[],"coverage":[],"recent":[]}"#)
+        case "/v1/restore/preview": return json(200, "{\"processes\":[],\"will_kill\":true}")
+        default: return json(200, statusJSON(state: "RESTORED", gate: false))
+        }
+    }
+    let m = SettingsModel(client: APIClient(transport: t))
+    await m.load()
+    #expect(m.launchControlText == L10n.launchControlOff)
+    #expect(m.resolverLockText == L10n.launchControlOff)
+    #expect(m.claudeCodeText == L10n.launchControlOff)
 }

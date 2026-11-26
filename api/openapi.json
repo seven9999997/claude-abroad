@@ -733,6 +733,9 @@
             },
             "type": "array"
           },
+          "launch_control": {
+            "type": "boolean"
+          },
           "layers": {
             "items": {
               "$ref": "#/components/schemas/DaemonLaunchGuardLayer"
@@ -1208,6 +1211,9 @@
           },
           "integrity": {
             "$ref": "#/components/schemas/IntegrityResult"
+          },
+          "launch_control": {
+            "type": "boolean"
           },
           "opens": {
             "additionalProperties": {

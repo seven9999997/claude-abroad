@@ -66,6 +66,7 @@ type Scanner struct {
 	Bundle  procinfo.BundleReader        // .app 目录 → Bundle ID
 	Resolve func(string) (string, error) // 解析符号链接（nil 用 filepath.EvalSymlinks）
 	Self    int                          // abroadd 自己的进程号：它和它的后代不在清单里
+	FakeDir string                       // 开发构建：只认这个目录下的进程（真实判定不用；见 fakedir.go）
 }
 
 const (
@@ -204,6 +205,12 @@ func (s *Scanner) team(p string, cache map[string]teamResult) (string, error) {
 }
 
 func (s *Scanner) classify(p procinfo.Proc, teams map[string]teamResult) verdict {
+	if s.FakeDir != "" {
+		if underDir(p.Path, s.FakeDir) {
+			return verdict{match: true, app: appCode, reason: fakeReason}
+		}
+		return verdict{}
+	}
 	if p.Path == "" { // 读不到路径：只凭短名没法确认
 		if strings.EqualFold(p.Name, "claude") {
 			return verdict{app: appCode, unverified: noteUnsigned}

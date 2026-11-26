@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"claude-abroad/internal/daemon"
@@ -21,7 +22,9 @@ import (
 //   - --fake-main-proxy（只和 --fake-system 一起）：接上假的出口检查和假虚拟机（应用的集成测试、第一级走查用）；
 //   - --dev-skip-claude-kill：真实模式下恢复本机网络时不结束 Claude 进程（预览照常列出）；
 //   - --dev-skip-region：真实模式下不同步时区和语言（M2、M3 的真机脚本带它）；
-//   - --dev-resolver-test-domain：真实模式下 Claude 域名解析锁只管一个保留的测试域名（M6-3，M6-9 默认用；不影响 Claude）。
+//   - --dev-resolver-test-domain：真实模式下 Claude 域名解析锁只管一个保留的测试域名（M6-3，M6-9 默认用；不影响 Claude）；
+//   - --dev-fake-claude-dir <目录>：真实模式下回国结束 Claude 和第三层都只针对可执行文件在这个目录下的进程，真实的判定
+//     （Bundle ID、签名）整个不用，浏览器不列不结束（M6-4b-1 返工；真机脚本验证第三层时用，本机真实的 Claude 不受影响）。
 func init() {
 	addDevFlags = func(fs *flag.FlagSet, o *devOptions) {
 		fs.BoolVar(&o.fake, "fake-system", false, "开发构建：整套系统用内存里的假实现，不碰本机")
@@ -29,8 +32,17 @@ func init() {
 		fs.BoolVar(&o.skipKill, "dev-skip-claude-kill", false, "开发构建：恢复本机网络时不结束 Claude 进程（预览照常列出）")
 		fs.BoolVar(&o.skipRegion, "dev-skip-region", false, "开发构建：不同步时区和语言")
 		fs.BoolVar(&o.resolverTest, "dev-resolver-test-domain", false, "开发构建：Claude 域名解析锁只管一个保留的测试域名（不影响 Claude）")
+		fs.StringVar(&o.fakeClaudeDir, "dev-fake-claude-dir", "", "开发构建：回国结束 Claude 和第三层只针对这个目录下的进程（真实的 Claude 不受影响）")
 	}
 	runDev = func(o devOptions, stateDir string, stderr io.Writer, ready func(sock string, stop func())) (int, bool) {
+		if o.fakeClaudeDir != "" && (!filepath.IsAbs(o.fakeClaudeDir) || filepath.Clean(o.fakeClaudeDir) == "/") {
+			fmt.Fprintln(stderr, "abroadd：--dev-fake-claude-dir 要写绝对路径（不能是 /）")
+			return 2, true
+		}
+		if o.fakeClaudeDir != "" && o.skipKill {
+			fmt.Fprintln(stderr, "abroadd：--dev-fake-claude-dir 和 --dev-skip-claude-kill 不能一起用")
+			return 2, true
+		}
 		if o.fakeMain && !o.fake {
 			fmt.Fprintln(stderr, "abroadd：--fake-main-proxy 只能和 --fake-system 一起用")
 			return 2, true

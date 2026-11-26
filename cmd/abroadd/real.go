@@ -43,6 +43,8 @@ type realFlags struct {
 	vmExec, vmUser                                          string   // M6-2a：由 abroadd 管理虚拟机
 	vmArgs                                                  []string // 传给 abroad-vm run 的其他参数
 	manifest, manifestBase                                  string   // 完整性清单（M6-7）
+	launchControl                                           bool     // 打开启动管控（--launch-control）
+	fakeClaudeDir                                           string   // 开发构建：只针对这个目录下的进程
 }
 
 // checkRealFlags 是真实模式参数的检查（纯函数，M2-9b-2 决定 7、8）。
@@ -160,7 +162,7 @@ func lookupUser(name string) (string, string, error) {
 //   - 带：不结束任何进程的实现，预览照常如实列出，每次结束时打醒目日志（参数保留到 M6 的发布检查）。
 //
 // 同一个信号发送器也给启动管控的第三层（M6-4b）；带 --dev-skip-claude-kill 时第三层不接（不结束任何进程）。
-func claudeService(skip bool, logger *log.Logger) (*claudeproc.Service, *claudeproc.LaunchGuard, error) {
+func claudeService(skip bool, fakeDir string, logger *log.Logger) (*claudeproc.Service, *claudeproc.LaunchGuard, error) {
 	logf := func(format string, a ...any) { logger.Printf(format, a...) }
 	if skip {
 		svc := claudeproc.NewSystemService(nil, logf)
@@ -171,7 +173,29 @@ func claudeService(skip bool, logger *log.Logger) (*claudeproc.Service, *claudep
 	if err != nil {
 		return nil, nil, err
 	}
-	return claudeproc.NewSystemService(sig, logf), claudeproc.NewSystemLaunchGuard(sig), nil
+	svc, lg := claudeproc.NewSystemService(sig, logf), claudeproc.NewSystemLaunchGuard(sig)
+	if fakeDir != "" { // 开发构建：只针对指定目录下的进程（真实判定不用）
+		claudeproc.RestrictToDir(svc, lg, fakeDir)
+		logger.Printf("!!!!!!!! 开发构建：回国结束 Claude 和第三层只针对 %s 下的进程（真实的 Claude 不受影响）!!!!!!!!", fakeDir)
+	}
+	return svc, lg, nil
+}
+
+// controlParts 是启动管控的几样东西（M6-4b-1 返工）：只有带 --launch-control 才有——首次准备（写解析锁和托管设置）、
+// 第三层、本机代理端口。不带时都为空：真实模式和 M6 之前完全相同（M2–M5 的真机脚本就是这样运行的）。
+type controlParts struct {
+	lock      *resolverlock.Lock
+	settings  *claudecfg.Settings
+	guard     *claudeproc.LaunchGuard
+	firstRun  bool
+	proxyAddr string
+}
+
+func launchControlParts(f realFlags, guard *claudeproc.LaunchGuard) controlParts {
+	if !f.launchControl {
+		return controlParts{}
+	}
+	return controlParts{lock: resolverLock(f), settings: claudeSettings(f), guard: guard, firstRun: true, proxyAddr: RealClaudeProxyAddr}
 }
 
 // regionVM 选地区同步的虚拟机一侧：带 --dev-skip-region 时返回 nil，地区同步的依赖都不接（启用、应用主代理都不读
@@ -199,11 +223,12 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		f.stateDir = DefaultRealStateDir
 	}
 	logger := log.New(&redact.Writer{W: stderr}, "abroadd ", log.LstdFlags)
-	claude, launchGuard, err := claudeService(f.skipKill, logger)
+	claude, launchGuard, err := claudeService(f.skipKill, f.fakeClaudeDir, logger)
 	if err != nil {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)
 		return 1
 	}
+	ctl := launchControlParts(f, launchGuard)
 	dataSock := filepath.Join(f.vmDir, "data.sock")
 	dialer := &wire.Dialer{Config: wire.DefaultSessionConfig(), Dial: func(ctx context.Context) (net.Conn, error) {
 		var d net.Dialer
@@ -255,22 +280,23 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		VMRegion: regionVM(f, logger),         // 地区（M4-5）：Mac 一侧经 netR 执行，登录用户读 /dev/console 的属主
 		Env:      realEnvDeps(claude, direct), // 环境检测（M4-6a、6b）
 		// Claude 域名解析锁（M6-3）：状态接口和冲突检查读它；写入和删除不在这里。
-		ResolverLock: resolverLock(f),
+		// 启动管控（解析锁、托管设置、第三层、首次准备、本机代理端口）只有带 --launch-control 才接（M6-4b-1 返工）。
+		ResolverLock: ctl.lock,
 		// 第四层（M6-3b）：Claude Code 的托管设置（状态和冲突检查读它）。
-		ClaudeSettings: claudeSettings(f),
+		ClaudeSettings: ctl.settings,
 		// 启动管控的第三层（M6-4b）：不允许启动时每 200 毫秒扫描、结束确认过的 Claude 进程。
-		LaunchGuard: launchGuard,
+		LaunchGuard: ctl.guard, LaunchControl: f.launchControl,
 		// 程序完整性校验（M6-7）：清单的摘要在构建时写进程序；没给清单时不校验。
 		Integrity: integrityChecker(f),
 		// 首次准备（M6-8a）：第一次启动时写入解析锁和托管设置；开发构建只管测试域名时不写托管设置。
-		FirstRun: true, PrepareTestOnly: f.resolverTest,
+		FirstRun: ctl.firstRun, PrepareTestOnly: f.resolverTest,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)
 		return 1
 	}
 	d, err := daemon.Start(context.Background(), daemon.Options{StateDir: f.stateDir, Sys: sys, Log: logger, SocketDir: f.socketDir,
-		ClaudeProxyAddr: RealClaudeProxyAddr, // 第四层的本机代理端口（M6-3b）
+		ClaudeProxyAddr: ctl.proxyAddr, // 第四层的本机代理端口（M6-3b；只有带 --launch-control）
 		// M6-2b：运行时目录沿用 socket 目录（/var/run/claude-abroad，重启后清空）：给开机时的 guard 写标记、收养它的启用引用。
 		RunDir: f.socketDir})
 	if err != nil {

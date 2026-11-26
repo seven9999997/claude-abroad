@@ -7,7 +7,8 @@
 #             系统命令（dscl、dscacheutil、launchctl、chown、pfctl、scutil、networksetup）不执行，只记一行 SYS: 到日志。
 #
 # 安装只装文件、注册服务；不启用、不改本机网络（新装的 abroadd 状态是“已回国”，不加载断网规则）。
-# 默认是开发构建：abroadd 带 --dev-skip-claude-kill（不结束任何 Claude 进程）和 --dev-resolver-test-domain
+# 默认是开发构建：abroadd 带 --launch-control（打开启动管控）、--dev-fake-claude-dir（回国结束 Claude 和第三层只针对
+# 安装目录下 fake-claude 里的测试进程，本机真实的 Claude 不受影响）和 --dev-resolver-test-domain
 # （首次准备只锁测试域名、不写 Claude Code 的托管设置），本机真实的 Claude、Claude Code 不受影响。
 
 M6I_INSTALL="/Library/Application Support/claude-abroad"

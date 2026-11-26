@@ -52,6 +52,8 @@ type System struct {
 	DeviceHome fs.FS
 	// Integrity 是程序完整性校验（M6-7；nil 时不校验）。
 	Integrity *integrity.Checker
+	// LaunchControl 报告这次安装打开了启动管控（--launch-control；M6-4b-1 返工）。只用于状态显示“未启用”还是“未生效”。
+	LaunchControl bool
 	// FirstRun 打开首次准备（M6-8a：第一次启动时写入解析锁和托管设置）；测试和假系统默认关。
 	FirstRun bool
 	// PrepareTestOnly：首次准备只写测试目标（开发构建的 --dev-resolver-test-domain），不写 Claude Code 的托管设置。

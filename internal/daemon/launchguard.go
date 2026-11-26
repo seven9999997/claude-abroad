@@ -25,6 +25,9 @@ import (
 //   - D：回国中、已回国：所有确认过的都结束，不看启动时间；
 //   - 状态文件读不出：不结束（偏向不误杀；不泄漏不靠这一层）。
 
+// LaunchControlOffNote 是没打开启动管控时各层的说明。
+const LaunchControlOffNote = "未启用：这次安装没有打开启动管控"
+
 // GuardMarkerFile 是“本次开机 abroadd 已经启动过”的标记（运行目录里，内容是开机标识）。
 const GuardMarkerFile = "launchguard-boot"
 
@@ -55,8 +58,23 @@ func (d *Daemon) startLaunchGuard() {
 		d.events.Add("launchguard", "blocked", "现在不允许启动 Claude，已结束："+r.Name)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	d.lgStop, d.lgDone = cancel, make(chan struct{})
-	go func() { defer close(d.lgDone); g.Run(ctx) }()
+	done := make(chan struct{})
+	d.lgMu.Lock()
+	d.lgStop, d.lgDone = cancel, done
+	d.lgMu.Unlock()
+	go func() { defer close(done); g.Run(ctx) }()
+}
+
+// stopLaunchGuard 停掉第三层并等它退出（卸载和退出都走这里；只停一次，可以重复调用）。
+func (d *Daemon) stopLaunchGuard() {
+	d.lgMu.Lock()
+	stop, done := d.lgStop, d.lgDone
+	d.lgStop, d.lgDone = nil, nil
+	d.lgMu.Unlock()
+	if stop != nil {
+		stop()
+		<-done
+	}
 }
 
 // firstStartThisBoot：运行目录里没有本次开机的标记，并且能写下标记，才算开机后第一次启动。读写失败按崩溃后重启处理。
@@ -85,8 +103,13 @@ func (d *Daemon) firstStartThisBoot() bool {
 	return true
 }
 
-// guardPolicy 按状态表和口径算当前的启动管控（第三层每轮调用）。
-func (d *Daemon) guardPolicy() claudeproc.GuardPolicy {
+// guardPolicy 按状态表和口径算当前的启动管控（第三层每轮调用；会更新“这一段不允许”的起点）。
+func (d *Daemon) guardPolicy() claudeproc.GuardPolicy { return d.guardPolicyAt(true) }
+
+// guardPolicyPeek 是只读的版本（接口用）：不改“这一段不允许”的起点。
+func (d *Daemon) guardPolicyPeek() claudeproc.GuardPolicy { return d.guardPolicyAt(false) }
+
+func (d *Daemon) guardPolicyAt(update bool) claudeproc.GuardPolicy {
 	gs := d.gs
 	allowed, cover := true, false
 	f, err := d.store.Load()
@@ -109,6 +132,19 @@ func (d *Daemon) guardPolicy() claudeproc.GuardPolicy {
 	}
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
+	if !update { // 只读：按当前记下的起点给结论（还没开始这一段时起点就是现在）
+		if allowed {
+			return claudeproc.GuardPolicy{Allowed: true}
+		}
+		since := gs.since
+		if !gs.notAllowed {
+			since = d.guardNow()
+			if since.Before(gs.started) {
+				since = gs.started
+			}
+		}
+		return claudeproc.GuardPolicy{Since: since, CoverAll: cover || gs.bootFirst}
+	}
 	if allowed {
 		gs.notAllowed = false
 		gs.bootFirst = false // 开机后第一段“不允许”到此结束
@@ -143,24 +179,28 @@ type LaunchGuardLayer struct {
 
 // LaunchGuardView 是 GET /v1/launchguard 的应答（不含命令行参数和路径）。
 type LaunchGuardView struct {
-	Allowed  bool                     `json:"allowed"`             // 现在允许启动 Claude
-	Since    *time.Time               `json:"since,omitempty"`     // 这一段“不允许”开始的时刻
-	CoverAll bool                     `json:"cover_all,omitempty"` // 不看启动时间（回国、开机后第一次启动）
-	Layers   []LaunchGuardLayer       `json:"layers"`              // 四层各自是否生效
-	Coverage []claudeproc.CoverageRow `json:"coverage"`            // 第三层对各种安装方式的覆盖
-	Recent   []claudeproc.GuardRecord `json:"recent"`              // 最近的拦截
+	LaunchControl bool                     `json:"launch_control,omitempty"` // 这次安装打开了启动管控（--launch-control）
+	Allowed       bool                     `json:"allowed"`                  // 现在允许启动 Claude
+	Since         *time.Time               `json:"since,omitempty"`          // 这一段“不允许”开始的时刻
+	CoverAll      bool                     `json:"cover_all,omitempty"`      // 不看启动时间（回国、开机后第一次启动）
+	Layers        []LaunchGuardLayer       `json:"layers"`                   // 四层各自是否生效
+	Coverage      []claudeproc.CoverageRow `json:"coverage"`                 // 第三层对各种安装方式的覆盖
+	Recent        []claudeproc.GuardRecord `json:"recent"`                   // 最近的拦截
 }
 
 func (d *Daemon) launchGuardView() LaunchGuardView {
 	v := LaunchGuardView{Allowed: true, Coverage: claudeproc.Coverage(), Recent: []claudeproc.GuardRecord{}}
 	if g := d.opts.Sys.LaunchGuard; g != nil && d.gs != nil {
-		p := d.guardPolicy()
+		p := d.guardPolicyPeek()
 		v.Allowed, v.CoverAll = p.Allowed, p.CoverAll
 		if !p.Allowed {
-			s := p.Since
+			s := p.Since.UTC()
 			v.Since = &s
 		}
-		v.Recent = g.Records()
+		for _, r := range g.Records() { // 接口里的时间用 UTC（不带本机时区偏移）
+			r.Time = r.Time.UTC()
+			v.Recent = append(v.Recent, r)
+		}
 	}
 	lock := false
 	if lk := d.opts.Sys.ResolverLock; lk != nil {
@@ -172,6 +212,16 @@ func (d *Daemon) launchGuardView() LaunchGuardView {
 		{Layer: 2, Name: "启动拦截（系统扩展）", Effective: false, Note: "需要付费开发者账号和 Apple 的授权，暂不提供"},
 		{Layer: 3, Name: "发现即结束", Effective: d.opts.Sys.LaunchGuard != nil},
 		{Layer: 4, Name: "Claude Code 的本机代理", Effective: cc != nil && cc.Effective, Note: "只覆盖 Claude Code"},
+	}
+	if !d.opts.Sys.LaunchControl { // M6-4b-1 返工：这次安装没打开启动管控，第一、三、四层是“未启用”而不是“未生效”
+		v.LaunchControl = false
+		for i := range v.Layers {
+			if v.Layers[i].Layer != 2 {
+				v.Layers[i].Note = LaunchControlOffNote
+			}
+		}
+	} else {
+		v.LaunchControl = true
 	}
 	return v
 }

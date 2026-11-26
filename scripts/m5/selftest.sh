@@ -111,4 +111,10 @@ out=$(M5_CRITERIA_DOC="${TMP}/crit-evil.md" scripts/m5/check-criteria.sh 2>&1); 
 devout=$(scripts/lib/devflags-selftest.sh m5 --dev-skip-claude-kill 2>&1)
 while IFS= read -r l; do case "$l" in ✓*) ok "M6-1 ${l#✓ }" ;; ✗*) bad "M6-1 ${l#✗ }" ;; esac; done <<<"$devout"
 
+# M6-4b-1 返工：这份脚本启动的 abroadd 不打开启动管控（不带 --launch-control）：不做首次准备、不写解析锁和托管设置、不接第三层。
+if grep -q -- '--launch-control' scripts/m5/launchd.plist.tmpl scripts/m5/run.sh; then
+  bad "启动 abroadd 的参数里不能有 --launch-control（会写入解析锁和托管设置，旧脚本不会删）"
+else
+  ok "启动 abroadd 的参数里没有 --launch-control（不打开启动管控）"
+fi
 [ $fails = 0 ] && echo "✓ 自测全部通过" || { echo "✗ 自测有 ${fails} 处不通过"; exit 1; }

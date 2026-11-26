@@ -88,9 +88,15 @@ func (g *LaunchGuard) Tick() []GuardRecord {
 		return nil // 扫描失败：这一轮不结束任何进程
 	}
 	g.Judge.Prune(procs)
+	pol := g.Policy() // 先读策略：已经允许时，待发的 KILL 一并作废（M6-4b-1 建议改）
 	g.mu.Lock()
 	if g.pending == nil {
 		g.pending, g.blocked = map[procKey]time.Time{}, map[procKey]bool{}
+	}
+	if pol.Allowed {
+		clear(g.pending)
+		g.mu.Unlock()
+		return nil
 	}
 	// 宽限期到了还在的：KILL
 	var kill []procKey
@@ -103,10 +109,6 @@ func (g *LaunchGuard) Tick() []GuardRecord {
 	g.mu.Unlock()
 	for _, k := range kill {
 		g.signal(k.pid, k.start, syscall.SIGKILL)
-	}
-	pol := g.Policy()
-	if pol.Allowed {
-		return nil
 	}
 	grace := dur(g.Grace, DefaultGuardGrace)
 	var out []GuardRecord

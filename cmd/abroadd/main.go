@@ -39,6 +39,7 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 	fs.Var(&vmArgs, "vm-arg", "和 --vm-exec 一起：传给 abroad-vm run 的其他参数（如 --image-dir=…），可重复；--state-dir 固定用 --vm-dir")
 	manifest := fs.String("integrity-manifest", "", "完整性清单（可选；M6-7）：校验不通过时只保留断网规则、不接管、不能启用")
 	manifestBase := fs.String("integrity-base", "", "完整性清单里相对路径的根（和 --integrity-manifest 一起）")
+	launchControl := fs.Bool("launch-control", false, "打开启动管控（M6-4b-1 返工）：首次准备写入 Claude 域名解析锁和 Claude Code 的托管设置、接上第三层（发现即结束）、监听本机代理端口。只有开发安装和正式安装带它；不带时真实模式和 M6 之前完全相同")
 	sockDir := fs.String("socket-dir", "", "本地接口 socket 的目录（目录属主 root、组和其他人不能写；socket 0666，级别按对端 uid 判）；空时放在状态目录里、只认属主")
 	var dev devOptions
 	if addDevFlags != nil { // 只有开发构建有（devflags_dev.go）
@@ -62,13 +63,15 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 	}
 	return runReal(realFlags{stateDir: *stateDir, vmDir: *vmDir, pfUser: *pfUser, mainStore: *mainStore,
 		exitHost: *exitHost, skipKill: dev.skipKill, skipRegion: dev.skipRegion, socketDir: *sockDir, resolverTest: dev.resolverTest,
-		vmExec: *vmExec, vmUser: *vmUser, vmArgs: vmArgs, manifest: *manifest, manifestBase: *manifestBase}, stderr, ready)
+		vmExec: *vmExec, vmUser: *vmUser, vmArgs: vmArgs, manifest: *manifest, manifestBase: *manifestBase,
+		launchControl: *launchControl, fakeClaudeDir: dev.fakeClaudeDir}, stderr, ready)
 }
 
 // devOptions 是开发构建的参数（默认构建里全是零值）。
 type devOptions struct {
 	fake, fakeMain, skipKill, skipRegion bool
-	resolverTest                         bool // 解析锁只管测试域名（M6-3）
+	resolverTest                         bool   // 解析锁只管测试域名（M6-3）
+	fakeClaudeDir                        string // 回国结束和第三层只针对这个目录下的进程（M6-4b-1 返工）
 }
 
 // addDevFlags、runDev 由带 abroaddev 构建标签的 devflags_dev.go 设置；默认（发布）构建里为 nil。

@@ -55,6 +55,7 @@ private func settings(_ lock: String?) async -> SettingsModel {
 @MainActor
 @Test func resolverLockUnknown() async {
     let m = await settings(nil)
-    #expect(m.resolverLockText == L10n.resolverLockUnknown)
+    // 状态里既没有解析锁也没有第四层、也没有 launch_control：这次安装没打开启动管控（M6-4b-1 返工）
+    #expect(m.resolverLockText == L10n.launchControlOff)
     #expect(m.resolverLockWarn == false)
 }

@@ -167,3 +167,23 @@ func TestGuardRun(t *testing.T) {
 		t.Fatal("Run 应结束它")
 	}
 }
+
+// M6-4b-1 建议改：发了 TERM、还没到 KILL 的时候策略变成允许，待发的 KILL 作废。
+func TestGuardAllowedCancelsPendingKill(t *testing.T) {
+	r := newGuardRig(t)
+	r.setPolicy(GuardPolicy{CoverAll: true})
+	r.addClaude(200, ExitOnKill)
+	r.g.Tick()
+	r.setPolicy(GuardPolicy{Allowed: true})
+	r.advance(2 * time.Second)
+	r.g.Tick()
+	if sigLog(r.w) != "TERM 200" || !r.w.Alive(200) {
+		t.Fatalf("变成允许后不应再发 KILL：%s", sigLog(r.w))
+	}
+	r.setPolicy(GuardPolicy{CoverAll: true}) // 再不允许：从 TERM 重新来
+	r.advance(10 * time.Millisecond)
+	r.g.Tick()
+	if sigLog(r.w) != "TERM 200,TERM 200" {
+		t.Fatalf("重新不允许时先发 TERM：%s", sigLog(r.w))
+	}
+}

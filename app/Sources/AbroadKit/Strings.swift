@@ -206,6 +206,7 @@ public enum L10n {
     public static func actionExit(_ tag: String) -> String { "分流出口 " + tag }
     public static let launchControl = "启动管控"
     // M6-3：第一层（Claude 域名解析锁）
+    public static let launchControlOff = "未启用：这次安装没有打开启动管控（开发用的运行方式）"
     public static let resolverLockTitle = "第一层：Claude 域名解析锁"
     public static let resolverLockUnknown = "后台没有报告解析锁的状态"
     public static let resolverLockNotWritten = "还没有写入（首次准备时写入）"
@@ -310,6 +311,7 @@ public enum L10n {
         case .switchRollbackIncomplete: return "更换主代理失败"
         case .restoreDone: return "已回国"
         case .regionReady: return "地区已就绪"
+        case .launchBlocked: return "已阻止 Claude 启动"
         }
     }
     public static func notifyProtectionLost(_ reason: String, _ detail: String) -> String {
@@ -334,6 +336,9 @@ public enum L10n {
     public static let notifySwitchRollbackIncomplete = "恢复原来的主代理没有完成，稍后会自动重试"
     public static let notifyRestoreDone = "本机网络已恢复"
     public static func notifyRestorePending(_ items: [String]) -> String { "本机网络已恢复；还没还原：" + items.joined(separator: "、") + "（后台会自动重试）" }
+    // M6-4b-1 返工：启动管控拦下 Claude 时的通知（回国状态那一句取自设计 10.2 第三层）。
+    public static let notifyLaunchBlockedRestored = "现在是本机网络（已回国），不允许启动 Claude。要使用 Claude，请先启用 Claude 出国；如果不再使用，可以在设置里一键卸载。"
+    public static let notifyLaunchBlockedEnv = "环境检测通过前不允许启动 Claude，刚打开的 Claude 已结束。检测通过后再打开。"
     public static let notifyRegionReady = "时区和语言已写入，环境检测通过，可以打开 Claude 了"
 
     public static func titleLine(_ phase: String) -> String { appName + "：" + phase }

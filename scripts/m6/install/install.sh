@@ -37,8 +37,8 @@ precheck() {
     [ -f "${SRC}/${f}" ] || reasons+=("缺少 ${SRC}/${f}：先以自己的身份执行 scripts/dev/integrity-build.sh --dev（要先有虚拟机镜像 guest/out）")
   done
   if [ -x "${SRC}/bin/abroadd" ] && [ "${M6I_MODE}" != test ]; then
-    "${SRC}/bin/abroadd" -h 2>&1 | grep -q -- '-dev-skip-claude-kill' ||
-      reasons+=("${SRC}/bin/abroadd 不是开发构建（认不出 --dev-skip-claude-kill）：请用 scripts/dev/integrity-build.sh --dev 构建")
+    "${SRC}/bin/abroadd" -h 2>&1 | grep -q -- '-dev-fake-claude-dir' ||
+      reasons+=("${SRC}/bin/abroadd 不是开发构建（认不出 --dev-fake-claude-dir）：请用 scripts/dev/integrity-build.sh --dev 构建")
   fi
   [ -d "${APPSRC}/Contents/MacOS" ] || reasons+=("缺少应用包 ${APPSRC}：先执行 scripts/dev/app-bundle.sh")
   [ -e "$(P "${INST}")" ] && reasons+=("${INST} 已经存在：已经装过，请先执行 sudo scripts/m6/install/uninstall.sh")
@@ -117,6 +117,9 @@ m6i_do dscacheutil -flushcache
 # ---- 状态目录、日志目录、本地接口目录 ----
 m6i_do mkdir -p "$(P "${STATE}/abroadd")" "$(P "${STATE}/vm")" "$(P "${STATE}/store")" "$(P "${M6I_LOGDIR}")"
 m6i_do chmod 700 "$(P "${STATE}/abroadd")" "$(P "${STATE}/vm")" "$(P "${STATE}/store")"
+# 开发构建的假 Claude 目录：回国结束 Claude 和第三层只针对这里的进程（端到端脚本放测试进程进来），本机真实的 Claude 不受影响。
+m6i_do mkdir -p "$(P "${INST}/fake-claude")"
+m6i_do chmod 755 "$(P "${INST}/fake-claude")"
 m6i_do chown "${M6I_USER}" "$(P "${STATE}/vm")"
 m6i_rec_set logdir 1
 m6i_do mkdir -p "$(P "${M6I_SOCK}")"
@@ -161,7 +164,7 @@ D_ARGS=("${INST}/bin/abroadd" --state-dir "${STATE}/abroadd" --vm-dir "${STATE}/
   --vm-exec "${INST}/bin/abroad-vm" --vm-user "${M6I_USER}" --vm-arg="--image-dir=${INST}/image"
   --vm-arg="--direct-sock=${STATE}/vm/direct.sock" --vm-arg=--direct-peer-uid=0
   --integrity-manifest "${INST}/integrity.json" --integrity-base "${INST}"
-  --dev-skip-claude-kill --dev-resolver-test-domain)
+  --launch-control --dev-fake-claude-dir "${INST}/fake-claude" --dev-resolver-test-domain)
 if [ "${M6I_MODE}" = dry ]; then
   m6i_say STATE "${M6I_LABEL_G}.plist：${GUARD_ARGS[*]}"
   m6i_say STATE "${M6I_LABEL_D}.plist：${D_ARGS[*]}"

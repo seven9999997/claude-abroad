@@ -13,6 +13,8 @@ CHANGE ^dscacheutil -flushcache$
 CHANGE ^mkdir -p /Library/Application Support/claude-abroad/state/abroadd /Library/Application Support/claude-abroad/state/vm /Library/Application Support/claude-abroad/state/store /var/log/claude-abroad$
 CHANGE ^chmod 700 /Library/Application Support/claude-abroad/state/abroadd /Library/Application Support/claude-abroad/state/vm /Library/Application Support/claude-abroad/state/store$
 CHANGE ^chown _abroad /Library/Application Support/claude-abroad/state/vm$
+CHANGE ^mkdir -p /Library/Application Support/claude-abroad/fake-claude$
+CHANGE ^chmod 755 /Library/Application Support/claude-abroad/fake-claude$
 CHANGE ^mkdir -p /var/run/claude-abroad$
 CHANGE ^chown root:wheel /var/run/claude-abroad$
 CHANGE ^chmod 755 /var/run/claude-abroad$
