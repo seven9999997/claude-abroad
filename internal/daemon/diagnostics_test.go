@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 	"testing/fstest"
 
 	"claude-abroad/internal/envcheck"
@@ -44,5 +45,44 @@ func TestDiagnosticsRedacted(t *testing.T) {
 	var dg Diagnostics
 	if json.Unmarshal(raw, &dg) != nil || dg.Version.Go == "" || dg.Status.State != "ENABLED" || len(dg.LaunchGuard.Layers) != 4 {
 		t.Fatalf("诊断包内容不全：%s", raw)
+	}
+}
+
+// M6-6a 补审返工：诊断包专用的处理——网址整段去掉（连主机名、路径一起；& 不会被转义拆开），时间一律 UTC。
+func TestDiagnosticsURLAndUTC(t *testing.T) {
+	e := newEnv(t)
+	d := e.start(e.opts())
+	d.events.Add("test", "url", "拉取 https://urlonlymark.example.com/a/b?x=1&y=2 失败；另一个 socks5://sockmark.example.net:1080")
+	_, raw := call(t, d, "GET", "/v1/diagnostics", nil)
+	s := string(raw)
+	for _, m := range []string{"urlonlymark", "sockmark", "/a/b", "y=2", "://"} {
+		if strings.Contains(s, m) {
+			t.Fatalf("诊断包里不应有 %q：%s", m, s)
+		}
+	}
+	if !strings.Contains(s, DiagURLPlaceholder) {
+		t.Fatal("网址应换成占位文字")
+	}
+	if !diagTimeRe.MatchString(s) {
+		t.Fatal("诊断包里应有时间")
+	}
+	for _, m := range diagTimeRe.FindAllString(s, -1) {
+		if !strings.HasSuffix(m, "Z") {
+			t.Fatalf("时间应是 UTC：%s", m)
+		}
+	}
+	var dg Diagnostics
+	if json.Unmarshal(raw, &dg) != nil {
+		t.Fatalf("替换后应仍是合法 JSON：%s", raw)
+	}
+}
+
+// 时间换算本身：带本机时区偏移的换成 UTC，同一时刻。
+func TestRenderDiagnosticsUTC(t *testing.T) {
+	loc := time.FixedZone("CST", 8*3600)
+	at := time.Date(2026, 11, 26, 20, 30, 0, 500, loc)
+	out, err := renderDiagnostics(Diagnostics{GeneratedAt: at})
+	if err != nil || !strings.Contains(out, `"generated_at": "2026-11-26T12:30:00.0000005Z"`) {
+		t.Fatalf("%v %s", err, out)
 	}
 }

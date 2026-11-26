@@ -96,6 +96,44 @@ func hostPort(u *url.URL) (string, int, error) {
 	return h, p, nil
 }
 
+// 不认识的参数一律拒绝（M6-6c 补审）：映射不全时让用户看到导入失败，而不是连到配置不对的地方。
+// 错误里只有参数名，不带值。
+var (
+	tlsParams       = []string{"sni", "peer", "alpn", "fp", "allowInsecure", "insecure"}
+	transportParams = []string{"type", "path", "host", "serviceName"}
+	// 取这些值时和没写一样（常见的链接会带上），别的值不认识。
+	noopValues = map[string][]string{"headerType": {"none"}, "encryption": {"none"}}
+)
+
+func checkParams(q url.Values, allowed ...[]string) error {
+	ok := map[string]bool{}
+	for _, xs := range allowed {
+		for _, x := range xs {
+			ok[x] = true
+		}
+	}
+	for k, vs := range q {
+		if ok[k] {
+			continue
+		}
+		v := ""
+		if len(vs) > 0 {
+			v = vs[0]
+		}
+		if v == "" {
+			continue
+		}
+		known := false
+		for _, nv := range noopValues[k] {
+			known = known || v == nv
+		}
+		if !known {
+			return fmt.Errorf("不认识的参数 %q（为免连到配置不对的地方，不导入）", k)
+		}
+	}
+	return nil
+}
+
 func parseURL(s string) (*url.URL, error) {
 	u, err := url.Parse(s)
 	if err != nil {
@@ -174,6 +212,9 @@ func parseSS(s string) (map[string]any, error) {
 		if q.Get("plugin") != "" {
 			return nil, fmt.Errorf("不支持带插件的 SS 链接")
 		}
+		if err := checkParams(q, []string{"plugin"}); err != nil {
+			return nil, err
+		}
 		rest = rest[:i]
 	}
 	var userinfo, hostport string
@@ -224,6 +265,16 @@ func parseVMess(s string) (map[string]any, error) {
 	if json.Unmarshal(b, &v) != nil {
 		return nil, fmt.Errorf("内容不是 JSON")
 	}
+	for k, x := range v {
+		switch k {
+		case "v", "ps", "add", "port", "id", "aid", "scy", "net", "host", "path", "tls", "sni":
+			continue
+		}
+		if x == nil || x == "" || (k == "type" && x == "none") {
+			continue
+		}
+		return nil, fmt.Errorf("不认识的参数 %q（为免连到配置不对的地方，不导入）", k)
+	}
 	str := func(k string) string {
 		switch x := v[k].(type) {
 		case string:
@@ -257,6 +308,9 @@ func parseVMess(s string) (map[string]any, error) {
 	if err := addTransport(p, q); err != nil {
 		return nil, err
 	}
+	if t := str("tls"); t != "" && t != "none" && t != "tls" {
+		return nil, fmt.Errorf("不支持的 tls %q", t)
+	}
 	if str("tls") == "tls" {
 		p["tls"] = true
 		if sni := firstNonEmpty(str("sni"), str("host")); sni != "" {
@@ -289,6 +343,9 @@ func parseVLESS(s string) (map[string]any, error) {
 		return nil, fmt.Errorf("缺少 uuid")
 	}
 	q := u.Query()
+	if err := checkParams(q, tlsParams, transportParams, []string{"flow", "security", "pbk", "sid"}); err != nil {
+		return nil, err
+	}
 	p := map[string]any{"name": name(u, "vless"), "type": "vless", "server": h, "port": port, "uuid": u.User.Username(), "udp": true}
 	if v := q.Get("flow"); v != "" {
 		p["flow"] = v
@@ -305,6 +362,9 @@ func parseVLESS(s string) (map[string]any, error) {
 			ro["short-id"] = v
 		}
 		p["reality-opts"] = ro
+	case "", "none":
+	default:
+		return nil, fmt.Errorf("不支持的 security %q", q.Get("security"))
 	}
 	if err := addTransport(p, q); err != nil {
 		return nil, err
@@ -326,6 +386,12 @@ func parseTrojan(s string) (map[string]any, error) {
 		return nil, fmt.Errorf("缺少密码")
 	}
 	q := u.Query()
+	if err := checkParams(q, tlsParams, transportParams, []string{"security"}); err != nil {
+		return nil, err
+	}
+	if sec := q.Get("security"); sec != "" && sec != "tls" {
+		return nil, fmt.Errorf("不支持的 security %q", sec)
+	}
 	p := map[string]any{"name": name(u, "trojan"), "type": "trojan", "server": h, "port": port, "password": u.User.Username(), "udp": true}
 	addTLS(p, q, "sni")
 	if err := addTransport(p, q); err != nil {
@@ -352,6 +418,9 @@ func parseHy2(s string) (map[string]any, error) {
 		pw += ":" + p2
 	}
 	q := u.Query()
+	if err := checkParams(q, tlsParams, []string{"obfs", "obfs-password"}); err != nil {
+		return nil, err
+	}
 	p := map[string]any{"name": name(u, "hysteria2"), "type": "hysteria2", "server": h, "port": port, "password": pw}
 	addTLS(p, q, "sni")
 	if v := q.Get("obfs"); v != "" {
@@ -376,6 +445,9 @@ func parseTUIC(s string) (map[string]any, error) {
 	}
 	pw, _ := u.User.Password()
 	q := u.Query()
+	if err := checkParams(q, tlsParams, []string{"congestion_control", "udp_relay_mode"}); err != nil {
+		return nil, err
+	}
 	p := map[string]any{"name": name(u, "tuic"), "type": "tuic", "server": h, "port": port, "uuid": u.User.Username(), "password": pw}
 	addTLS(p, q, "sni")
 	if v := q.Get("congestion_control"); v != "" {

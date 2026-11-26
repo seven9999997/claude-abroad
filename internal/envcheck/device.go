@@ -49,7 +49,7 @@ type DeviceReport struct {
 }
 
 // DeviceNote 是体检结果的说明。
-const DeviceNote = "随中文办公软件安装的字体可能让网页能看出这台电脑装过中文办公软件。体检只提示、不影响放行；不再需要时可以在“字体册”里停用。"
+const DeviceNote = "随中文办公软件安装的字体可能让网页能看出这台电脑装过中文办公软件。体检按字体文件名判断，可能不准；只提示、不影响放行；不再需要时可以在“字体册”里停用。"
 
 func matchFont(file string) (string, bool) {
 	ext := strings.ToLower(path.Ext(file))

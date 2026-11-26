@@ -137,3 +137,40 @@ func TestLANPrefixes(t *testing.T) {
 		t.Fatalf("LANPrefixes 的结果应能直接 Render：%v", err)
 	}
 }
+
+// M6-11a：第三组“回国拦截”——文本逐字固定（每段一行，立即拒绝，没有别的规则）；和别的字段同时给出时报错；
+// 求值：到这两段的出站命中拦截，到别处的不命中（由系统的主规则集决定）。
+func TestRenderReturnBlock(t *testing.T) {
+	got, err := Render(Config{ReturnBlock: AnthropicNets})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "block return out quick inet to 160.79.104.0/21\nblock return out quick inet6 to 2607:6bc0::/32\n"
+	if string(got) != want {
+		t.Fatalf("规则文本：\n%s", got)
+	}
+	for _, bad := range []Config{
+		{ReturnBlock: AnthropicNets, User: "_abroad"},
+		{ReturnBlock: AnthropicNets, Lockdown: true},
+		{ReturnBlock: AnthropicNets, UtunName: "utun5"},
+		{ReturnBlock: AnthropicNets, LAN: []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24")}},
+		{ReturnBlock: AnthropicNets, VMIfs: []string{"bridge100"}},
+		{ReturnBlock: []netip.Prefix{netip.MustParsePrefix("0.0.0.0/0")}},
+	} {
+		if _, err := Render(bad); err == nil {
+			t.Errorf("应报错：%+v", bad)
+		}
+	}
+	for _, c := range []struct {
+		dst     string
+		matched bool
+	}{
+		{"160.79.104.10", true}, {"160.79.111.255", true}, {"2607:6bc0::1", true}, {"2607:6bc0:ffff::5", true},
+		{"160.79.112.1", false}, {"1.1.1.1", false}, {"2606:4700::1111", false}, {"192.168.1.1", false},
+	} {
+		matched, pass, err := EvalMatch(got, Packet{If: "en0", Proto: "tcp", Dst: netip.MustParseAddr(c.dst), DstPort: 443})
+		if err != nil || matched != c.matched || (matched && pass) {
+			t.Errorf("%s：命中 %v 放行 %v（应命中 %v、命中时拦截）%v", c.dst, matched, pass, c.matched, err)
+		}
+	}
+}

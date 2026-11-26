@@ -33,7 +33,9 @@ func TestShareLinks(t *testing.T) {
 		typ  string
 		chk  func(p map[string]any) bool
 	}{
-		{"ss://" + ssUser + "@ss.example.com:8388#my%20ss", "ss", func(p map[string]any) bool { return p["cipher"] == "aes-256-gcm" && p["password"] == "S3cretPass" && p["name"] == "my ss" }},
+		{"ss://" + ssUser + "@ss.example.com:8388#my%20ss", "ss", func(p map[string]any) bool {
+			return p["cipher"] == "aes-256-gcm" && p["password"] == "S3cretPass" && p["name"] == "my ss"
+		}},
 		{"ss://" + ssOld + "#old", "ss", func(p map[string]any) bool { return p["server"] == "ss.example.com" && p["port"] == 8389 }},
 		{"vmess://" + vm, "vmess", func(p map[string]any) bool {
 			return p["network"] == "ws" && p["tls"] == true && p["servername"] == "cdn.example.com"
@@ -68,14 +70,14 @@ func TestShareLinks(t *testing.T) {
 // 不合法的：都拒绝，错误里不回显链接内容（密码）。
 func TestShareLinksInvalid(t *testing.T) {
 	bad := map[string]string{
-		"不认识的种类":   "socks5://u:SecretX1@h.example.com:1080",
-		"没有端口":     "trojan://SecretX2@tr.example.com#x",
+		"不认识的种类":    "socks5://u:SecretX1@h.example.com:1080",
+		"没有端口":      "trojan://SecretX2@tr.example.com#x",
 		"base64 不对": "vmess://@@@@SecretX3",
 		"带插件的 SS":   "ss://" + base64.RawURLEncoding.EncodeToString([]byte("aes-256-gcm:SecretX4")) + "@h.example.com:8388?plugin=obfs-local#x",
-		"缺密码":      "trojan://@tr.example.com:443",
-		"不是链接":     "SecretX5",
-		"空":        "\n\n# 只有注释\n",
-		"端口太大":     "trojan://SecretX6@tr.example.com:70000",
+		"缺密码":       "trojan://@tr.example.com:443",
+		"不是链接":      "SecretX5",
+		"空":         "\n\n# 只有注释\n",
+		"端口太大":      "trojan://SecretX6@tr.example.com:70000",
 	}
 	for name, link := range bad {
 		_, err := ShareLinksToClash(link)
@@ -87,6 +89,47 @@ func TestShareLinksInvalid(t *testing.T) {
 			if strings.Contains(err.Error(), s) {
 				t.Errorf("%s：错误里回显了链接内容：%v", name, err)
 			}
+		}
+	}
+}
+
+// M6-6c 补审：不认识的参数（及不认识的取值）一律拒绝，错误里只有参数名、不带值；常见的“等于没写”的取值照常导入。
+func TestShareLinksUnknownParams(t *testing.T) {
+	vmBad := base64.StdEncoding.EncodeToString([]byte(`{"v":"2","add":"vm.example.com","port":"443","id":"b831381d-6324-4d53-ad4f-8cda48b30811","tls":"tls","alpn":"SecretAL"}`))
+	vmTLS := base64.StdEncoding.EncodeToString([]byte(`{"v":"2","add":"vm.example.com","port":"443","id":"b831381d-6324-4d53-ad4f-8cda48b30811","tls":"xtls"}`))
+	bad := map[string]string{
+		"vless 不认识的参数":        "vless://b831381d-6324-4d53-ad4f-8cda48b30811@vl.example.com:443?security=tls&spx=SecretSP#x",
+		"vless 不认识的安全层":       "vless://b831381d-6324-4d53-ad4f-8cda48b30811@vl.example.com:443?security=xtls#x",
+		"vless 加密不是 none":     "vless://b831381d-6324-4d53-ad4f-8cda48b30811@vl.example.com:443?encryption=aes#x",
+		"grpc 的 mode":         "trojan://P@tr.example.com:443?type=grpc&serviceName=s&mode=multi#x",
+		"trojan 头部伪装":         "trojan://P@tr.example.com:443?headerType=http#x",
+		"trojan reality":      "trojan://P@tr.example.com:443?security=reality#x",
+		"hy2 证书指纹":            "hy2://P@hy.example.com:443?pinSHA256=SecretPin#x",
+		"tuic allow_insecure": "tuic://b831381d-6324-4d53-ad4f-8cda48b30811:P@tu.example.com:443?allow_insecure=1#x",
+		"ss 别的参数":             "ss://" + base64.RawURLEncoding.EncodeToString([]byte("aes-256-gcm:pw")) + "@h.example.com:8388?udp-over-tcp=1#x",
+		"vmess 不认识的字段":        "vmess://" + vmBad,
+		"vmess 不认识的 tls":      "vmess://" + vmTLS,
+	}
+	for name, link := range bad {
+		_, err := ShareLinksToClash(link)
+		if err == nil {
+			t.Errorf("%s：应拒绝", name)
+			continue
+		}
+		for _, s := range []string{"SecretSP", "SecretPin", "SecretAL"} {
+			if strings.Contains(err.Error(), s) {
+				t.Errorf("%s：错误里带了参数的值：%v", name, err)
+			}
+		}
+	}
+	ok := []string{
+		"vless://b831381d-6324-4d53-ad4f-8cda48b30811@vl.example.com:443?encryption=none&security=none&headerType=none&type=tcp#x",
+		"trojan://P@tr.example.com:443?security=tls&sni=tr.example.com&headerType=none#x",
+		"vless://b831381d-6324-4d53-ad4f-8cda48b30811@vl.example.com:443?spx=#x", // 空值等于没写
+	}
+	for _, link := range ok {
+		if _, err := ShareLinksToClash(link); err != nil {
+			t.Errorf("%s：应能导入：%v", link[:20], err)
 		}
 	}
 }

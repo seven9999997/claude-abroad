@@ -1,9 +1,11 @@
 package daemon
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"time"
@@ -87,13 +89,45 @@ func (d *Daemon) diagnostics(includeDomains bool) Diagnostics {
 
 // handleDiagnostics 是 GET /v1/diagnostics：整段脱敏后的诊断包（JSON）。命令行和应用把它存成文件交给用户。
 func (d *Daemon) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
-	raw, err := json.MarshalIndent(d.diagnostics(r.URL.Query().Get("include_domains") == "1"), "", "  ")
+	out, err := renderDiagnostics(d.diagnostics(r.URL.Query().Get("include_domains") == "1"))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, errBody{"生成诊断包失败"})
 		return
 	}
-	out := redact.String(string(raw))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, out)
 }
+
+// renderDiagnostics 把诊断包写成文本并做诊断包专用的处理（M6-6a 补审返工）：
+//   - 网址整段替换成 DiagURLPlaceholder（连主机名一起；通用的 redact 只去口令和参数，这里更严）；
+//   - 时间一律换成 UTC（不带本机时区）；
+//   - 最后再经 redact 统一脱敏一遍。
+func renderDiagnostics(dg Diagnostics) (string, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false) // & 不转义成 \u0026，网址才能整段认出来
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(dg); err != nil {
+		return "", err
+	}
+	s := diagURLRe.ReplaceAllString(buf.String(), DiagURLPlaceholder)
+	s = diagTimeRe.ReplaceAllStringFunc(s, func(m string) string {
+		t, err := time.Parse(time.RFC3339Nano, m)
+		if err != nil {
+			return m
+		}
+		return t.UTC().Format(time.RFC3339Nano)
+	})
+	return redact.String(s), nil
+}
+
+// DiagURLPlaceholder 是诊断包里网址的替换文字。
+const DiagURLPlaceholder = "[网址已去掉]"
+
+var (
+	// 任何“协议://”开头的一段，到空白、引号或反斜杠（JSON 转义）为止。
+	diagURLRe = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.\-]*://[^\s"\\]*`)
+	// RFC 3339 时间（带时区偏移）。
+	diagTimeRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2}|Z)`)
+)

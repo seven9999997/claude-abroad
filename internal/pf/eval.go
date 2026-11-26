@@ -33,16 +33,22 @@ type rule struct {
 // Eval 对 Render 输出的规则文本求值：按 quick 语义取第一条命中的规则。
 // 遇到不认识的行返回错误（不猜）；没有任何规则命中时不放行。
 func Eval(rules []byte, pkt Packet) (bool, error) {
+	matched, pass, err := EvalMatch(rules, pkt)
+	return matched && pass, err
+}
+
+// EvalMatch 同 Eval，另外报告有没有规则命中（M6-11a：回国拦截那一组只有拦截规则，没命中时由系统的主规则集决定）。
+func EvalMatch(rules []byte, pkt Packet) (matched, pass bool, err error) {
 	rs, table, err := parse(rules)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	for _, r := range rs {
 		if r.match(pkt, table) {
-			return r.pass, nil
+			return true, r.pass, nil
 		}
 	}
-	return false, nil
+	return false, false, nil
 }
 
 func parse(text []byte) ([]rule, []netip.Prefix, error) {
@@ -84,8 +90,8 @@ func parse(text []byte) ([]rule, []netip.Prefix, error) {
 		case "pass":
 			r.pass = true
 		case "block":
-			if next() != "drop" {
-				return nil, nil, bad("block 后应为 drop")
+			if a := next(); a != "drop" && a != "return" { // return：回国拦截那一组用“立即拒绝”（M6-11a）
+				return nil, nil, bad("block 后应为 drop 或 return")
 			}
 		default:
 			return nil, nil, bad("动作")

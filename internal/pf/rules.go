@@ -28,6 +28,16 @@ type Config struct {
 	// Lockdown 是最严的一组（M6-2b：开机时 guard 读不出 abroadd 另存的参数时用）：不放行任何用户、局域网和网桥，
 	// 只留本机回环和 DHCP。为真时 User、LAN、VMIfs、UtunName 必须都为空。
 	Lockdown bool
+	// ReturnBlock 是第三组“回国拦截”（M6-11a，设计 6.1、10.2）：回国后只拦到这些地址段的出站（立即拒绝，不是丢弃），
+	// 别的一概不管。非空时其余字段必须都为空。地址段来自 AnthropicNets（编译进程序、只能追加）。
+	ReturnBlock []netip.Prefix
+}
+
+// AnthropicNets 是回国拦截的地址段（M6-11a）：ARIN 登记给 Anthropic, PBC 的两段（2026-11-26 经 rdap.arin.net 查询：
+// NET-160-79-104-0-1 160.79.104.0/21，网络名 AP-2440；NET6-2607-6BC0-1 2607:6bc0::/32，网络名 ANTHROPIC-V6）。只能追加。
+var AnthropicNets = []netip.Prefix{
+	netip.MustParsePrefix("160.79.104.0/21"),
+	netip.MustParsePrefix("2607:6bc0::/32"),
 }
 
 // 名字只收明确的形式，挡住 pf 的保留字（any、all、self、inet6、unknown、纯数字……），
@@ -109,6 +119,9 @@ func sortPrefixes(in []netip.Prefix) []netip.Prefix {
 
 // Render 生成规则文本。输入不合法时返回错误，输出为空。
 func Render(c Config) ([]byte, error) {
+	if len(c.ReturnBlock) > 0 {
+		return renderReturnBlock(c)
+	}
 	if c.Lockdown && (c.User != "" || len(c.LAN) > 0 || len(c.VMIfs) > 0 || c.UtunName != "") {
 		return nil, errors.New("最严的一组不能带放行用户、局域网、网桥或 utun")
 	}
@@ -168,6 +181,26 @@ func Render(c Config) ([]byte, error) {
 		}
 	}
 	line("block drop out quick all")
+	return b.Bytes(), nil
+}
+
+// renderReturnBlock 是第三组“回国拦截”：每个地址段一行“立即拒绝”，没有别的规则（不命中的由系统的主规则集决定）。
+func renderReturnBlock(c Config) ([]byte, error) {
+	if c.Lockdown || c.User != "" || len(c.LAN) > 0 || len(c.VMIfs) > 0 || c.UtunName != "" {
+		return nil, errors.New("回国拦截那一组不能和放行用户、局域网、网桥、utun、最严的一组同时给出")
+	}
+	nets := sortPrefixes(c.ReturnBlock)
+	var b bytes.Buffer
+	for _, p := range nets {
+		if !p.IsValid() || p.Bits() < 8 {
+			return nil, fmt.Errorf("回国拦截的地址段不合法：%s", p)
+		}
+		fam := "inet"
+		if p.Addr().Is6() && !p.Addr().Is4In6() {
+			fam = "inet6"
+		}
+		fmt.Fprintf(&b, "block return out quick %s to %s\n", fam, p.Masked())
+	}
 	return b.Bytes(), nil
 }
 
