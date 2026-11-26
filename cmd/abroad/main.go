@@ -57,6 +57,10 @@ const usage = `用法：abroad [--json] [--yes] [--socket <路径>] <子命令> 
   sudo abroad exit add <标签> --kind wireguard|openvpn|clash --file <配置文件>
   sudo abroad exit rm <标签>
   app ls | set <应用> direct|block|main|proxy:<出口> | rm <应用>     应用分流（改成直连等放松保护的改动需要 sudo）
+  rules local ls | add <域名>… | rm <域名>…      本地域名名单：走本机网络、不经代理（添加是放松，需要 sudo）
+  rules pinned ls | add <域名>… | rm <域名>…     追加的置顶域名：永远走主代理（删除是放松，需要 sudo；内置的删不掉；不进解析锁）
+  rules offline ls | add <应用>… | rm <应用>…    离线放行名单：停用或闸门关着时仍可直连的应用（添加是放松，需要 sudo）
+  rules udp443 show | on | off                   拦截 UDP 443（关掉是放松，需要 sudo）
   region show | set <时区> <语言> [--locale <地区格式>] | auto      地区（地区会变时需要 sudo 和确认）
   engine ls | install <名字> | rollback <名字>
   launchguard                      启动管控：现在是否允许启动 Claude、四层是否生效
@@ -220,6 +224,9 @@ func (a *app) codeOf(resp apiclient.Response) int {
 	case api.CodeUnsupported:
 		fmt.Fprintf(a.stderr, "后台服务现在的模式不提供这项功能：%s\n", msg)
 		return ExitFail
+	case api.CodeRulesChanged:
+		fmt.Fprintf(a.stderr, "冲突：%s\n", msg)
+		return ExitBusy
 	case api.CodeUninstalled:
 		fmt.Fprintln(a.stderr, "Claude 出国已经一键卸载：要继续使用请重新安装。")
 		return ExitDenied

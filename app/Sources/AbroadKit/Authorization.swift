@@ -19,6 +19,10 @@ public enum SensitiveOperation: Sendable, Equatable {
     case exitRemove(tag: String)
     case appSet(app: String, action: String)
     case appRemove(app: String)
+    /// 规则里的名单（补齐一）：kind 是 local、pinned、offline。
+    case ruleListAdd(kind: String, item: String)
+    case ruleListRemove(kind: String, item: String)
+    case udp443(on: Bool)
 
     /// 在终端里执行的完整命令（不带 --yes：终端里照样打印预览、让用户确认）。
     public var terminalCommand: String {
@@ -39,6 +43,9 @@ public enum SensitiveOperation: Sendable, Equatable {
         case let .exitRemove(tag): return "sudo abroad exit rm \(Self.quote(tag))"
         case let .appSet(app, action): return "sudo abroad app set \(Self.quote(app)) \(Self.quote(action == "proxy:main" ? "main" : action))"
         case let .appRemove(app): return "sudo abroad app rm \(Self.quote(app))"
+        case let .ruleListAdd(kind, item): return "sudo abroad rules \(kind) add \(Self.quote(item))"
+        case let .ruleListRemove(kind, item): return "sudo abroad rules \(kind) rm \(Self.quote(item))"
+        case let .udp443(on): return "sudo abroad rules udp443 " + (on ? "on" : "off")
         }
     }
 

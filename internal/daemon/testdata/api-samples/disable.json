@@ -1,5 +1,12 @@
 200
 {
+  "builtin_pinned": [
+    "claude.ai",
+    "claude.com",
+    "anthropic.com",
+    "claudeusercontent.com",
+    "claudemcpcontent.com"
+  ],
   "events": [
     {
       "kind": "enabled",

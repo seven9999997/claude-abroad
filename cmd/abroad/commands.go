@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"claude-abroad/internal/api"
 	"claude-abroad/internal/apiclient"
 	"claude-abroad/internal/rules"
 
@@ -50,6 +51,17 @@ var commands = []command{
 	{path: []string{"app", "ls"}, route: "rules-get", run: cmdAppLs},
 	{path: []string{"app", "set"}, route: "rules-put", run: cmdAppSet},
 	{path: []string{"app", "rm"}, route: "rules-put", run: cmdAppRm},
+	// 补齐一：规则里的四项（先读后写、带条件头）
+	{path: []string{"rules", "local", "ls"}, route: "rules-get", run: cmdRulesList("local")},
+	{path: []string{"rules", "local", "add"}, route: "rules-put", run: cmdRulesAdd("local")},
+	{path: []string{"rules", "local", "rm"}, route: "rules-put", run: cmdRulesRm("local")},
+	{path: []string{"rules", "pinned", "ls"}, route: "rules-get", run: cmdRulesList("pinned")},
+	{path: []string{"rules", "pinned", "add"}, route: "rules-put", run: cmdRulesAdd("pinned")},
+	{path: []string{"rules", "pinned", "rm"}, route: "rules-put", run: cmdRulesRm("pinned")},
+	{path: []string{"rules", "offline", "ls"}, route: "rules-get", run: cmdRulesList("offline")},
+	{path: []string{"rules", "offline", "add"}, route: "rules-put", run: cmdRulesAdd("offline")},
+	{path: []string{"rules", "offline", "rm"}, route: "rules-put", run: cmdRulesRm("offline")},
+	{path: []string{"rules", "udp443"}, route: "rules-put", run: cmdRulesUDP443},
 	{path: []string{"region", "show"}, route: "region-get", run: cmdRegionShow},
 	{path: []string{"region", "set"}, route: "region-put", run: cmdRegionSet},
 	{path: []string{"region", "auto"}, route: "region-put", run: cmdRegionAuto},
@@ -923,25 +935,59 @@ func cmdExitRm(a *app, args []string) int {
 // ---- 应用分流 ----
 
 func (a *app) currentRules() (*rules.Config, int) {
+	c, _, code := a.currentRulesTag()
+	return c, code
+}
+
+// currentRulesTag 读当前规则和它的标识（ETag，条件写入用）。
+func (a *app) currentRulesTag() (*rules.Config, string, int) {
 	resp, code := a.call("GET", "/v1/rules", nil)
 	if code != ExitOK {
-		return nil, code
+		return nil, "", code
 	}
 	c, err := rules.Parse(resp.Body)
 	if err != nil {
 		fmt.Fprintln(a.stderr, "读不懂后台服务给的规则")
-		return nil, ExitFail
+		return nil, "", ExitFail
 	}
-	return c, ExitOK
+	return c, resp.ETag, ExitOK
 }
 
-func (a *app) putRules(c *rules.Config) (apiclient.Response, int) {
-	b, err := c.Marshal()
-	if err != nil {
-		fmt.Fprintln(a.stderr, err)
-		return apiclient.Response{}, ExitFail
+// RulesRetries 是规则提交冲突时重读重做的最多次数（补齐一，architect 2026-11-27）。
+const RulesRetries = 3
+
+// modifyRules 是规则的“先读后写”：读当前规则和标识，交给 edit 在读到的文档上改（edit 返回 false 表示没有变化、不提交），
+// 带 If-Match 整份提交。后台回 rules_changed（读和写之间被别处改过）时重新读取、在新文档上重做同一处修改，最多
+// RulesRetries 次，仍冲突就报错（退出码按“冲突”）；冲突时后台什么都不改，所以不会留下半截。
+func (a *app) modifyRules(edit func(c *rules.Config) (changed bool)) (resp apiclient.Response, changed bool, code int) {
+	for try := 0; try < RulesRetries; try++ {
+		c, tag, code := a.currentRulesTag()
+		if code != ExitOK {
+			return resp, false, code
+		}
+		if !edit(c) {
+			return resp, false, ExitOK
+		}
+		b, err := c.Marshal()
+		if err != nil {
+			fmt.Fprintln(a.stderr, err)
+			return resp, false, ExitFail
+		}
+		a.route = "rules-put" // 放松被拒时按“这一次需要 sudo”提示（查看类子命令也会走到这里）
+		resp, err = a.client.DoIf(a.ctx, "PUT", "/v1/rules?drop_affected=1", tag, b)
+		if err != nil {
+			return resp, false, a.connErr(err)
+		}
+		if apiclient.ErrorCodeOf(resp.Body) == api.CodeRulesChanged {
+			continue // 别处刚改过：重读重做
+		}
+		if code := a.codeOf(resp); code != ExitOK {
+			return resp, false, code
+		}
+		return resp, true, ExitOK
 	}
-	return a.call("PUT", "/v1/rules?drop_affected=1", b)
+	fmt.Fprintf(a.stderr, "规则在这期间一直被别处改动，重试 %d 次都没能提交，这次没有改动。请稍后再试。\n", RulesRetries)
+	return resp, false, ExitBusy
 }
 
 func cmdAppLs(a *app, args []string) int {
@@ -979,21 +1025,19 @@ func cmdAppSet(a *app, args []string) int {
 	if err != nil {
 		return usageErr(a, "动作只能是 direct、block、main 或 proxy:<出口>")
 	}
-	c, code := a.currentRules()
-	if code != ExitOK {
-		return code
-	}
 	id := rules.NormalizeAppID(rules.AppID(args[0]))
-	found := false
-	for i := range c.Rules {
-		if c.Rules[i].App == id {
-			c.Rules[i].Action, found = action, true
+	resp, _, code := a.modifyRules(func(c *rules.Config) bool {
+		found := false
+		for i := range c.Rules {
+			if c.Rules[i].App == id {
+				c.Rules[i].Action, found = action, true
+			}
 		}
-	}
-	if !found {
-		c.Rules = append(c.Rules, rules.Rule{App: id, Action: action})
-	}
-	resp, code := a.putRules(c)
+		if !found {
+			c.Rules = append(c.Rules, rules.Rule{App: id, Action: action})
+		}
+		return true
+	})
 	if code != ExitOK {
 		return code
 	}
@@ -1004,25 +1048,29 @@ func cmdAppRm(a *app, args []string) int {
 	if len(args) != 1 {
 		return usageErr(a, "app rm <应用>")
 	}
-	c, code := a.currentRules()
+	id := rules.NormalizeAppID(rules.AppID(args[0]))
+	missing := false
+	resp, _, code := a.modifyRules(func(c *rules.Config) bool {
+		var keep []rules.Rule
+		for _, r := range c.Rules {
+			if r.App != id {
+				keep = append(keep, r)
+			}
+		}
+		if len(keep) == len(c.Rules) {
+			missing = true
+			return false
+		}
+		missing = false
+		c.Rules = keep
+		return true
+	})
 	if code != ExitOK {
 		return code
 	}
-	id := rules.NormalizeAppID(rules.AppID(args[0]))
-	var keep []rules.Rule
-	for _, r := range c.Rules {
-		if r.App != id {
-			keep = append(keep, r)
-		}
-	}
-	if len(keep) == len(c.Rules) {
+	if missing {
 		fmt.Fprintf(a.stderr, "没有 %s 的规则\n", id)
 		return ExitFail
-	}
-	c.Rules = keep
-	resp, code := a.putRules(c)
-	if code != ExitOK {
-		return code
 	}
 	return a.out(resp, func() { fmt.Fprintf(a.stdout, "已删除 %s 的规则（改走默认）\n", id) })
 }

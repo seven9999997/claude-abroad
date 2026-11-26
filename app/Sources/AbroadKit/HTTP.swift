@@ -7,17 +7,21 @@ public struct HTTPRequest: Sendable, Equatable {
     public var path: String
     public var body: Data?
     public var contentType: String
+    /// 条件写入（规则，补齐一）：非空时带 If-Match 头。
+    public var ifMatch: String?
 
-    public init(method: String, path: String, body: Data? = nil, contentType: String = "application/json") {
+    public init(method: String, path: String, body: Data? = nil, contentType: String = "application/json", ifMatch: String? = nil) {
         self.method = method
         self.path = path
         self.body = body
         self.contentType = contentType
+        self.ifMatch = ifMatch
     }
 
     /// 请求的字节（Connection: close：一次连接一个请求）。
     public var bytes: Data {
         var s = "\(method) \(path) HTTP/1.1\r\nHost: abroadd\r\nConnection: close\r\nAccept: */*\r\n"
+        if let ifMatch, !ifMatch.isEmpty, !ifMatch.contains("\r"), !ifMatch.contains("\n") { s += "If-Match: \(ifMatch)\r\n" }
         if let body { s += "Content-Type: \(contentType)\r\nContent-Length: \(body.count)\r\n" }
         s += "\r\n"
         var d = Data(s.utf8)

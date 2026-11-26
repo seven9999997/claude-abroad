@@ -25,13 +25,14 @@ const (
 	CodeUnavailable              ErrorCode = "unavailable"                // 503：暂时不可用（状态文件损坏、订阅数到上限等）
 	CodeInternal                 ErrorCode = "internal"                   // 500 及其他
 	CodeUninstalled              ErrorCode = "uninstalled"                // 409：已经一键卸载过（M6-5a），要继续使用请重新安装
+	CodeRulesChanged             ErrorCode = "rules_changed"              // 412：规则在读取之后被改过（条件写入，补齐一），重新读取后再改
 )
 
 // ErrorCodes 是全部代码（生成 Swift 的枚举、测试核对用）。
 var ErrorCodes = []ErrorCode{
 	CodeNeedsAuthorization, CodeNeedsConfirm, CodeConfirmInvalid, CodeBusy, CodeInUse, CodeViaHostRequired, CodeLANUnconfirmed,
 	CodeSwitchRolledBack, CodeSwitchRollbackIncomplete, CodeNoBaseline, CodeUnsupported, CodeInvalid, CodeNotFound, CodeTooLarge,
-	CodeNotEnabled, CodeUnavailable, CodeInternal, CodeUninstalled,
+	CodeNotEnabled, CodeUnavailable, CodeInternal, CodeUninstalled, CodeRulesChanged,
 }
 
 // ErrorBody 是所有出错应答的形式。error 是给人看的文字（“做什么失败了：原因。下一步”），code 是稳定的代码；
@@ -60,6 +61,8 @@ func DefaultCode(status int) ErrorCode {
 		return CodeUnsupported
 	case http.StatusServiceUnavailable:
 		return CodeUnavailable
+	case http.StatusPreconditionFailed:
+		return CodeRulesChanged
 	}
 	return CodeInternal
 }

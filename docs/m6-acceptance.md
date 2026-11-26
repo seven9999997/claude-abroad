@@ -147,7 +147,7 @@
 | 4.3：不分配假地址的名单“内置、可增删”，含投屏和局域网发现的域名 | 名单写死：`time*.apple.com`、`captive.apple.com`、`*.lan`、`*.local`；没有接口改 | 没有做 | — | 加不了自己的域名；投屏类域名照样分配假地址，个别投屏可能不通 |
 | 5.1：可选“继承父进程” | 识别器有这个字段，但 abroadd 没有打开 | 没有做 | — | 不能给“终端里启动的所有程序”统一设规则，只能按每个程序的路径设 |
 | 5.1：共享、系统进程在界面上单独显示并说明 | 应用分流页和普通应用列在一起 | 没有做 | — | 不容易看出改 `nsurlsessiond` 这类进程会影响很多应用 |
-| 4.2、5.2：拦截 UDP 443；`offline_allow`、`local_domains`、`pinned_extra` | 规则引擎都实现了，应用和命令行没有入口，只能调 `PUT /v1/rules` | 改了做法（只经接口） | — | 普通使用时实际改不了这几项 |
+| 4.2、5.2：拦截 UDP 443；`offline_allow`、`local_domains`、`pinned_extra` | **已补**（2026-11-27，M6 之后的补齐一）：命令行 `abroad rules local|pinned|offline ls|add|rm`、`rules udp443 show|on|off`，应用“应用分流”页的“域名与其他规则”；规则提交带条件头（读和写之间被别处改过时不覆盖）。测试 `go:cmd/abroad#TestCLIRuleLists`、`go:cmd/abroad#TestCLIRulesConflictRetry`、`go:internal/daemon#TestRulesConditionalWrite`、`swift:ruleListsLoadAddRemoveToggle`、`swift:ruleListsConflictReloadsNoRetry` | 已补 | — | — |
 | 4.2、7.2：首页和菜单栏的“UDP 不可用”、节点列表标出是否支持 UDP | 没有 | 没有做 | — | 主代理不支持 UDP 时，语音、视频、游戏不通，界面上看不出原因 |
 | 5.2、11.2：标出正在回退到主代理的规则；“分流出口回退”“UDP 不可用”的通知 | 没有；通知只有保护断开和恢复、更换主代理回滚、回国、地区就绪、拦下 Claude、完整性 | 没有做 | — | 分流出口坏了、流量改走主代理时界面上看不到 |
 | 6.1：pf 规则连续被清掉时通知并指出可能是哪个软件 | 有事件 `repeatedly_cleared`，应用不转成通知，也不指认软件 | 部分做了 | — | 只能在事件里看到 |

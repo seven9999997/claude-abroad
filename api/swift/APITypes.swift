@@ -44,6 +44,7 @@ public enum ApiErrorCode: String, Codable, Sendable, CaseIterable {
     case unavailable = "unavailable"
     case `internal` = "internal"
     case uninstalled = "uninstalled"
+    case rulesChanged = "rules_changed"
 }
 
 public struct ApiErrorBody: Codable, Sendable {
@@ -767,6 +768,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var launchControl: Bool?
     public var prepare: DaemonPrepareStatus?
     public var returnBlock: DaemonReturnBlockStatus?
+    public var builtinPinned: [String]?
     public var exits: [DaemonExitStatus]?
     public var opens: [String: DaemonExitCounts]?
     public var region: DaemonRegionStatus?
@@ -792,6 +794,7 @@ public struct DaemonStatus: Codable, Sendable {
         case launchControl = "launch_control"
         case prepare = "prepare"
         case returnBlock = "return_block"
+        case builtinPinned = "builtin_pinned"
         case exits = "exits"
         case opens = "opens"
         case region = "region"

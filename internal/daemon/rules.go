@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"claude-abroad/internal/api"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"io/fs"
@@ -160,16 +162,18 @@ func (d *Daemon) handleGetRules(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusRequestEntityTooLarge, errBody{"请求体超过 64 KiB"})
 		return
 	}
+	cur := d.currentRules()
+	w.Header().Set("ETag", `"`+RulesTag(cur)+`"`) // 条件写入的标识（补齐一）：两种格式同一个值
 	switch r.URL.Query().Get("format") {
 	case "", "yaml":
 	case "json": // M5-9：应用用（字段与 YAML 一一对应；JSON 是 YAML 的子集，可以原样 PUT 回来）
-		writeJSON(w, http.StatusOK, d.currentRules().ToFile())
+		writeJSON(w, http.StatusOK, cur.ToFile())
 		return
 	default:
 		writeErr(w, http.StatusBadRequest, api.ErrorBody{Error: "format 只能是 yaml 或 json", Field: "format"})
 		return
 	}
-	b, err := d.currentRules().Marshal()
+	b, err := cur.Marshal()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, errBody{err.Error()})
 		return
@@ -185,6 +189,13 @@ func (d *Daemon) handlePutRules(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeJSON(w, http.StatusRequestEntityTooLarge, errBody{"请求体超过 64 KiB"})
+		return
+	}
+	// 条件写入（补齐一，architect 2026-11-27）：带了 If-Match 且和当前规则的标识不一致 → 412 rules_changed，什么都不改；
+	// 在解析、分级、授权之前判断（旧文档里的放松不能因为带了 sudo 就把别人刚做的改动冲掉）。不带时行为照旧。
+	ifMatch, conditional := rulesIfMatch(r)
+	if conditional && ifMatch != RulesTag(d.currentRules()) {
+		writeRulesChanged(w)
 		return
 	}
 	drop := false
@@ -207,11 +218,18 @@ func (d *Daemon) handlePutRules(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := d.m.Exclusive(func() error {
 		// 规则引用的分流出口都要已配置（m4-plan v2.11 决定 2）：在忙标记里查，不会和出口的删除交叉。
+		if conditional && ifMatch != RulesTag(d.currentRules()) { // 检查和写入之间被别的写入抢先
+			return errRulesChanged
+		}
 		if err := UnknownExitRefs(next, d.exitKnown); err != nil {
 			return errUnknownExit{err}
 		}
 		return d.applyRules(next, drop)
 	}); err != nil {
+		if errors.Is(err, errRulesChanged) {
+			writeRulesChanged(w)
+			return
+		}
 		code := http.StatusInternalServerError
 		var ue errUnknownExit
 		switch {
@@ -265,4 +283,34 @@ func (d *Daemon) wireRules() {
 		return f.OrigDNS
 	}
 	_ = dp.SetRules(c, false)
+}
+
+// RulesTag 是规则内容的标识（条件写入用，补齐一）：规范化之后（Marshal 的 YAML）的 SHA-256 前 16 位十六进制。不另存状态，
+// abroadd 重启后不变；YAML、JSON 两种读法同一个值；同样的内容提交两次不变。
+func RulesTag(c *rules.Config) string {
+	b, err := c.Marshal()
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:8])
+}
+
+// rulesIfMatch 取 If-Match（去掉引号和弱标记）；没有这个头时 ok 为假。
+func rulesIfMatch(r *http.Request) (tag string, ok bool) {
+	v := strings.TrimSpace(r.Header.Get("If-Match"))
+	if v == "" {
+		return "", false
+	}
+	v = strings.TrimPrefix(v, "W/")
+	return strings.Trim(v, `"`), true
+}
+
+var errRulesChanged = errors.New("规则在读取之后被改过")
+
+// RulesChangedText 是条件写入冲突时的说明。
+const RulesChangedText = "规则在你读取之后被别处改过，这次没有改动。请重新读取后再改。"
+
+func writeRulesChanged(w http.ResponseWriter) {
+	writeErr(w, http.StatusPreconditionFailed, api.ErrorBody{Code: api.CodeRulesChanged, Error: RulesChangedText})
 }

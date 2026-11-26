@@ -144,6 +144,7 @@ struct AppsPage: View {
                     Text(L10n.proxyNoDirect)
                 }
                 .font(.caption).foregroundStyle(.secondary)
+                RuleListsSection(model: model)
             }
             .padding()
         }
@@ -159,6 +160,44 @@ struct AppsPage: View {
         case nil: return L10n.actionDefault
         case let a? where a.hasPrefix("proxy:"): return L10n.actionExit(String(a.dropFirst("proxy:".count)))
         case let a?: return a
+        }
+    }
+}
+
+/// 规则里的四项（补齐一）：本地域名名单、置顶域名（内置只读、追加可删）、离线放行名单、拦截 UDP 443。文字都来自文字表。
+struct RuleListsSection: View {
+    @ObservedObject var model: AppsModel
+
+    var body: some View {
+        GroupBox(L10n.rulesListsTitle) {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(AppsModel.RuleList.allCases, id: \.self) { l in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(AppsModel.title(l)).bold()
+                        Text(AppsModel.help(l)).font(.caption).foregroundStyle(.secondary)
+                        if l == .pinned {
+                            Text(L10n.rulesPinnedBuiltin + "：" + model.builtinPinned.joined(separator: L10n.listSeparator))
+                                .font(.caption)
+                        }
+                        ForEach(model.items(l), id: \.self) { item in
+                            HStack {
+                                Text(item).font(.callout.monospaced())
+                                Spacer()
+                                Button(L10n.delete) { Task { await model.deleteListItem(l, item) } }.disabled(model.busy)
+                            }
+                        }
+                        HStack {
+                            TextField(L10n.rulesAddPlaceholder, text: Binding(get: { model.drafts[l] ?? "" }, set: { model.drafts[l] = $0 }))
+                            Button(L10n.rulesAddPlaceholder) { Task { await model.addDraft(l) } }
+                                .disabled(model.busy || (model.drafts[l] ?? "").trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                    }
+                }
+                Toggle(L10n.rulesUDP443Title, isOn: Binding(get: { model.rules?.blockUDP443 ?? false },
+                                                              set: { v in Task { await model.setBlockUDP443(v) } }))
+                    .disabled(model.busy || model.rules == nil)
+                Text(L10n.rulesUDP443Help).font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 }

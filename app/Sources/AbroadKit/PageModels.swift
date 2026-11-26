@@ -157,11 +157,114 @@ public final class AppsModel: PageModel {
 
     public var actions: [String] { Self.fixedActions + exitTags.map { "proxy:" + $0 } }
 
+    /// 内置的置顶域名（状态里的 builtin_pinned；和规则引擎、解析锁同一个来源）。只读显示，没有删除按钮。
+    @Published public private(set) var builtinPinned: [String] = []
+
+    /// 规则里的三个名单（补齐一）；rawValue 和命令行的子命令一致。
+    public enum RuleList: String, Sendable, CaseIterable {
+        case local, pinned, offline
+    }
+
+    public func items(_ l: RuleList) -> [String] {
+        guard let r = rules else { return [] }
+        switch l {
+        case .local: return r.localDomains
+        case .pinned: return r.pinnedExtra
+        case .offline: return r.offlineAllow
+        }
+    }
+
+    public static func title(_ l: RuleList) -> String {
+        switch l {
+        case .local: return L10n.rulesLocalTitle
+        case .pinned: return L10n.rulesPinnedTitle
+        case .offline: return L10n.rulesOfflineTitle
+        }
+    }
+
+    public static func help(_ l: RuleList) -> String {
+        switch l {
+        case .local: return L10n.rulesLocalHelp
+        case .pinned: return L10n.rulesPinnedHelp
+        case .offline: return L10n.rulesOfflineHelp
+        }
+    }
+
+    /// 比较用的形式（只为“重复添加、删除不存在的项不提交”；合法性由后台判定）。
+    static func key(_ s: String) -> String {
+        var t = s.trimmingCharacters(in: .whitespaces).lowercased()
+        while t.hasSuffix(".") { t.removeLast() }
+        return t
+    }
+
+    static func get(_ doc: RulesDoc, _ l: RuleList) -> [String] {
+        switch l {
+        case .local: return doc.localDomains
+        case .pinned: return doc.pinnedExtra
+        case .offline: return doc.offlineAllow
+        }
+    }
+
+    static func set(_ doc: inout RulesDoc, _ l: RuleList, _ xs: [String]) {
+        switch l {
+        case .local: doc.localDomains = xs
+        case .pinned: doc.pinnedExtra = xs
+        case .offline: doc.offlineAllow = xs
+        }
+    }
+
+    /// 各名单输入框里还没提交的内容。
+    @Published public var drafts: [RuleList: String] = [:]
+
+    /// 提交输入框里的内容（提交后清空输入框）。
+    public func addDraft(_ l: RuleList) async {
+        let v = drafts[l] ?? ""
+        drafts[l] = ""
+        await addItem(l, v)
+    }
+
+    /// 加一项（先读后写，带条件头）。
+    public func addItem(_ l: RuleList, _ raw: String) async {
+        let item = raw.trimmingCharacters(in: .whitespaces)
+        guard !item.isEmpty else { return }
+        await submit(op: .ruleListAdd(kind: l.rawValue, item: item)) { doc in
+            var xs = Self.get(doc, l)
+            if !xs.contains(where: { Self.key($0) == Self.key(item) }) { xs.append(item) }
+            Self.set(&doc, l, xs)
+        }
+    }
+
+    /// 删一项。内置的置顶域名不在追加名单里：按状态里的内置名单拦下，不发请求。
+    public func deleteListItem(_ l: RuleList, _ item: String) async {
+        if l == .pinned {
+            let k = Self.key(item)
+            let base = k.hasPrefix("*.") ? String(k.dropFirst(2)) : k
+            if !items(.pinned).contains(where: { Self.key($0) == k }) && builtinPinned.contains(base) {
+                notice = Notice(kind: .error, text: ErrorText(raw: L10n.rulesBuiltinReadonly))
+                return
+            }
+        }
+        await submit(op: .ruleListRemove(kind: l.rawValue, item: item)) { doc in
+            Self.set(&doc, l, Self.get(doc, l).filter { Self.key($0) != Self.key(item) })
+        }
+    }
+
+    /// 拦截 UDP 443 的开关。
+    public func setBlockUDP443(_ on: Bool) async {
+        await submit(op: .udp443(on: on)) { doc in doc.blockUDP443 = on }
+    }
+
     override public func load() async {
-        let r = await client.rules()
+        let tr = await client.rulesTagged()
+        let r: Outcome<RulesDoc>
+        switch tr {
+        case .ok(let t): r = .ok(t.doc)
+        default: r = tr.mapError()
+        }
         state = LoadState.from(r)
         guard case .ok(let doc) = r else { return }
         rules = doc
+        if case .ok(let st) = await client.status() { builtinPinned = st.builtinPinned ?? [] }
         var apps: [DaemonAppView] = []
         if case .ok(let a) = await client.apps() { apps = a.apps ?? [] }
         if case .ok(let xs) = await client.exits() { exitTags = xs.map(\.tag) } else { exitTags = [] }
@@ -202,21 +305,31 @@ public final class AppsModel: PageModel {
         await setRule(app: id, action: action)
     }
 
-    /// 先读后写：提交前重新读一次规则，在刚读到的文档上应用修改再 PUT（不拿加载时缓存的文档整份覆盖，
-    /// 免得冲掉别的客户端或终端里刚做的修改，包括页面上不显示的 local_domains、pinned_extra）。重新读失败时不提交。
+    /// 先读后写：提交前重新读一次规则和它的标识，在刚读到的文档上应用修改，带条件头 PUT（补齐一）。没有变化时不提交。
+    /// 后台回 rules_changed（读和写之间被别处改过、什么都没改）时重新加载并提示，不自动重试（要用户再点一次）。
     private func submit(op: SensitiveOperation, _ mutate: (inout RulesDoc) -> Void) async {
         busy = true
         defer { busy = false }
         authorizationReason = nil
-        let fresh = await client.rules()
-        guard case .ok(var doc) = fresh else {
+        let fresh = await client.rulesTagged()
+        guard case .ok(let t) = fresh else {
             state = LoadState.from(fresh)
             notice = Notice(kind: .error, text: fresh.errorText ?? ErrorText(raw: L10n.loadFailed))
             return
         }
+        var doc = t.doc
         mutate(&doc)
-        let o = await client.putRules(doc, dropAffected: dropAffected)
-        if case .needsAuthorization(let t) = o { authorizationReason = t }
+        if doc == t.doc {
+            notice = Notice(kind: .info, text: ErrorText(raw: L10n.rulesNoChange))
+            return
+        }
+        let o = await client.putRules(doc, dropAffected: dropAffected, ifMatch: t.tag)
+        if case .failed(_, let e) = o, e.code == .rulesChanged {
+            await load()
+            notice = Notice(kind: .info, text: ErrorText(raw: L10n.rulesChangedReloaded, code: .rulesChanged))
+            return
+        }
+        if case .needsAuthorization(let e) = o { authorizationReason = e }
         if await handle(o, op: op) { await load() }
     }
 }

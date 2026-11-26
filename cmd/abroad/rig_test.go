@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"net/http"
 	"context"
 	"encoding/json"
 	"net"
@@ -39,6 +40,8 @@ type rig struct {
 	sub  []byte // 订阅地址抓到的内容
 	mu   sync.Mutex
 	urls []string // 抓过的订阅地址
+	// trace 在命令行每个请求发出前被调用（补齐一：核对规则提交带 If-Match、在读和写之间插入别处的改动）。
+	trace func(method, path string, h http.Header)
 }
 
 type rigOpt struct {
@@ -124,7 +127,7 @@ func (r *rig) run(args ...string) res { return r.runWith(in{}, args...) }
 func (r *rig) runWith(i in, args ...string) res {
 	r.t.Helper()
 	var out, errb bytes.Buffer
-	cl := &apiclient.Client{Socket: r.d.SocketPath(), Timeout: 30 * time.Second}
+	cl := &apiclient.Client{Socket: r.d.SocketPath(), Timeout: 30 * time.Second, Trace: r.trace}
 	a := &app{stdin: strings.NewReader(i.stdin), stdout: &out, stderr: &errb, client: cl, ctx: i.ctx, skipLocalCheck: i.skip,
 		isAdmin:    func() bool { return r.peer.Load() != consoleUID },
 		isTerminal: func() bool { return i.tty }}

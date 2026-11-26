@@ -480,6 +480,9 @@ type Status struct {
 	Prepare *PrepareStatus `json:"prepare,omitempty"`
 	// M6-11a：回国拦截（回国后 pf 只拦 Anthropic 的地址段）。打开了首次准备时才有。
 	ReturnBlock *ReturnBlockStatus `json:"return_block,omitempty"`
+	// 补齐一：内置的置顶域名（基础域名，和规则引擎、解析锁同一个来源 rules.BuiltinPinnedBases）。删不掉，命令行和应用据此
+	// 拦下“删除内置置顶域名”、只读显示。管控开不开都有。
+	BuiltinPinned []string `json:"builtin_pinned"`
 	// M4-8：分流出口（正式的和开发用的）的摘要、可用状态、最近一次检查；各出口（含 main）的开流计数。
 	// 不含出口 IP、端点地址、配置。
 	Exits []ExitStatus          `json:"exits,omitempty"`
@@ -510,6 +513,7 @@ func (d *Daemon) Status() Status {
 		st.Integrity = &ir
 	}
 	st.LaunchControl = d.opts.Sys.LaunchControl
+	st.BuiltinPinned = rules.BuiltinPinnedBases()
 	st.BrowsersLeft = d.browsersLeft()
 	if p := d.prepareSt.Load(); p != nil {
 		ps := *p

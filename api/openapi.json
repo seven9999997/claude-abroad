@@ -41,7 +41,8 @@
           "not_enabled",
           "unavailable",
           "internal",
-          "uninstalled"
+          "uninstalled",
+          "rules_changed"
         ],
         "type": "string"
       },
@@ -1276,6 +1277,12 @@
       "DaemonStatus": {
         "properties": {
           "browsers_left": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "builtin_pinned": {
             "items": {
               "type": "string"
             },

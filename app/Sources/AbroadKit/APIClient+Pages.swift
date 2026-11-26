@@ -50,6 +50,12 @@ public struct RulesDoc: Codable, Sendable, Equatable {
     }
 }
 
+/// 规则和读取时的标识。
+public struct TaggedRules: Sendable, Equatable {
+    public var doc: RulesDoc
+    public var tag: String
+}
+
 /// GET /v1/envcheck 的设置（关掉的警告项）。
 public struct EnvSettings: Codable, Sendable, Equatable {
     public var disabled: [String]
@@ -76,8 +82,26 @@ extension APIClient {
     // 在联网的应用与规则
     public func apps() async -> Outcome<DaemonAppsView> { await get("/v1/apps") }
     public func rules() async -> Outcome<RulesDoc> { await get("/v1/rules?format=json") }
-    public func putRules(_ doc: RulesDoc, dropAffected: Bool) async -> Outcome<Empty> {
-        await call(json("PUT", "/v1/rules?drop_affected=" + (dropAffected ? "1" : "0"), doc))
+    /// 规则和它的标识（ETag；条件写入用，补齐一）。
+    public func rulesTagged() async -> Outcome<TaggedRules> {
+        let req = HTTPRequest(method: "GET", path: "/v1/rules?format=json")
+        let resp: HTTPResponse
+        do {
+            resp = try await transport.send(req)
+        } catch let e as ConnectionError {
+            return .unreachable(e)
+        } catch {
+            return .unreachable(.protocolError("连接出错"))
+        }
+        let o: Outcome<RulesDoc> = Self.map(resp, request: req)
+        if case .ok(let doc) = o { return .ok(TaggedRules(doc: doc, tag: resp.headers["etag"] ?? "")) }
+        return o.mapError()
+    }
+    /// 提交规则：ifMatch 是读取时的标识（我们自己的提交一律带上；后台回 rules_changed 时什么都没改）。
+    public func putRules(_ doc: RulesDoc, dropAffected: Bool, ifMatch: String) async -> Outcome<Empty> {
+        var req = json("PUT", "/v1/rules?drop_affected=" + (dropAffected ? "1" : "0"), doc)
+        req.ifMatch = ifMatch
+        return await call(req)
     }
 
     // 环境检测

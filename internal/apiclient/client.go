@@ -35,12 +35,15 @@ type Client struct {
 	Timeout time.Duration // 单个请求的时限（0 用 5 分钟：启用、换主代理可能要一阵）
 	// Requests 记下发出的请求数（测试用：本地检查拦下时应为 0）。
 	Requests int
+	// Trace 在每个请求发出前被调用（测试用：核对规则的提交都带 If-Match）；可为 nil。
+	Trace func(method, path string, h http.Header)
 }
 
 // Response 是一次请求的应答。
 type Response struct {
 	Code int
 	Body []byte
+	ETag string // 应答的 ETag（规则的条件写入用，补齐一）；没有时为空
 }
 
 func (c *Client) httpClient(timeout time.Duration) *http.Client {
@@ -78,6 +81,11 @@ func (c *Client) classify(err error) error {
 
 // Do 发一个请求。body 为 nil 表示没有请求体；不是 []byte 时按 JSON 编码。
 func (c *Client) Do(ctx context.Context, method, path string, body any) (Response, error) {
+	return c.DoIf(ctx, method, path, "", body)
+}
+
+// DoIf 同 Do，ifMatch 非空时带 If-Match 头（规则的条件写入，补齐一）。
+func (c *Client) DoIf(ctx context.Context, method, path, ifMatch string, body any) (Response, error) {
 	var rd io.Reader
 	switch b := body.(type) {
 	case nil:
@@ -93,6 +101,12 @@ func (c *Client) Do(ctx context.Context, method, path string, body any) (Respons
 	req, err := http.NewRequestWithContext(ctx, method, "http://abroadd"+path, rd)
 	if err != nil {
 		return Response{}, err
+	}
+	if ifMatch != "" {
+		req.Header.Set("If-Match", ifMatch)
+	}
+	if c.Trace != nil {
+		c.Trace(method, path, req.Header.Clone())
 	}
 	t := c.Timeout
 	if t <= 0 {
@@ -111,7 +125,7 @@ func (c *Client) Do(ctx context.Context, method, path string, body any) (Respons
 	if err != nil {
 		return Response{}, c.classify(err)
 	}
-	return Response{Code: resp.StatusCode, Body: b}, nil
+	return Response{Code: resp.StatusCode, Body: b, ETag: resp.Header.Get("ETag")}, nil
 }
 
 // ErrorText 取应答里的 {"error": "…"}（没有时为空）。

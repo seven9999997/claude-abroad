@@ -41,6 +41,11 @@ func abroadUsage() throws -> String {
         (.appSet(app: "path:/usr/bin/x", action: "direct"), "sudo abroad app set path:/usr/bin/x direct", "set <应用> direct|block|main|proxy:<出口>"),
         (.appRemove(app: "com.example.a"), "sudo abroad app rm com.example.a", "| rm <应用>"),
         (.appSet(app: "com.example.a", action: "proxy:wg"), "sudo abroad app set com.example.a proxy:wg", "set <应用> direct|block|main|proxy:<出口>"),
+        // 补齐一：规则里的四项
+        (.ruleListAdd(kind: "local", item: "intra.example"), "sudo abroad rules local add intra.example", "rules local ls | add <域名>… | rm <域名>…"),
+        (.ruleListRemove(kind: "pinned", item: "*.mine.example"), "sudo abroad rules pinned rm '*.mine.example'", "rules pinned ls | add <域名>… | rm <域名>…"),
+        (.ruleListAdd(kind: "offline", item: "com.example.nas"), "sudo abroad rules offline add com.example.nas", "rules offline ls | add <应用>… | rm <应用>…"),
+        (.udp443(on: false), "sudo abroad rules udp443 off", "rules udp443 show | on | off"),
     ]
     for (op, cmd, inHelp) in table {
         #expect(op.terminalCommand == cmd)
