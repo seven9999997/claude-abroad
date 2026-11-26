@@ -28,7 +28,7 @@ SNAP="/Library/Application Support/claude-abroad-install-snap"
 # 假的构建产物和应用包
 SRC="${TMP}/src"
 mkdir -p "${SRC}/bin" "${SRC}/image" "${TMP}/App.app/Contents/MacOS"
-for f in abroad abroadd abroad-guard abroad-vm; do printf '#!/bin/sh\n# %s\n' "$f" >"${SRC}/bin/$f"; chmod +x "${SRC}/bin/$f"; done
+for f in abroad abroad-rescue abroadd abroad-guard abroad-vm; do printf '#!/bin/sh\n# %s\n' "$f" >"${SRC}/bin/$f"; chmod +x "${SRC}/bin/$f"; done
 for f in Image initramfs.gz modloop rootfs.img; do printf 'img %s\n' "$f" >"${SRC}/image/$f"; done
 echo '{"version":1,"files":{}}' >"${SRC}/integrity.json"
 echo 'app' >"${TMP}/App.app/Contents/MacOS/ClaudeAbroad"
@@ -52,7 +52,7 @@ A=$(mkcase)
 mkdir -p "$A/etc/resolver" && echo 'nameserver 192.0.2.53' >"$A/etc/resolver/corp.example"
 tree "$A" >"$A/before.tree"
 if inst "$A"; then ok "a. 安装退出码 0"; else bad "a. 安装失败：$(cat "$A/install.err")"; fi
-for f in bin/abroad bin/abroadd bin/abroad-guard bin/abroad-vm image/Image image/initramfs.gz image/modloop image/rootfs.img integrity.json; do
+for f in bin/abroad bin/abroad-rescue bin/abroadd bin/abroad-guard bin/abroad-vm image/Image image/initramfs.gz image/modloop image/rootfs.img integrity.json; do
   cmp -s "${SRC}/$f" "$A$I/$f" || bad "a. 没装上 $f"
 done
 [ -f "$A/Applications/ClaudeAbroad.app/Contents/Info.plist" ] && ok "a. 应用装到了 /Applications" || bad "a. 应用没装上"

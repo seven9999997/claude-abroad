@@ -44,7 +44,24 @@ type ClaudeProxyStatus struct {
 	Port      int               `json:"port,omitempty"`
 	ListenErr string            `json:"listen_error,omitempty"` // 没在听的原因（端口被占用等）
 	Effective bool              `json:"effective"`              // 托管设置生效且端口在听
+	// 启动以来的计数和最近的连接（给第四层的真机实测 R21–R23 用；只有域名，不含地址）。
+	Accepted int64             `json:"accepted,omitempty"` // 启用时进入判定的连接数
+	Refused  int64             `json:"refused,omitempty"`  // 未启用时回 403 的连接数
+	Recent   []ClaudeProxyConn `json:"recent"`             // 最近的连接（最多 16 条，新的在前）
 }
+
+// ClaudeProxyConn 是经本机代理端口的一条连接（不含地址）。
+type ClaudeProxyConn struct {
+	At     time.Time `json:"at"`
+	App    string    `json:"app"`            // 识别出的程序（识别不出时 unknown，按 Claude 处理）
+	Claude bool      `json:"claude"`         // 是否按 Claude 处理
+	Host   string    `json:"host,omitempty"` // 目的域名（目的是 IP 时为空）
+	Action string    `json:"action"`         // 判定：proxy、direct、block；未启用时 refused
+	Exit   string    `json:"exit,omitempty"` // 走代理时的出口标签
+	OK     bool      `json:"ok"`             // 接通了
+}
+
+const cpRecentMax = 16
 
 type claudeProxy struct {
 	d         *Daemon
@@ -58,13 +75,16 @@ type claudeProxy struct {
 	port int
 	err  string
 
-	active  atomic.Int64
-	refused atomic.Int64 // 未启用时回 403 的次数
-	mu      sync.Mutex
-	conns   map[net.Conn]struct{}
-	wg      sync.WaitGroup
-	ctx     context.Context
-	cancel  context.CancelFunc
+	active   atomic.Int64
+	refused  atomic.Int64 // 未启用时回 403 的次数
+	accepted atomic.Int64 // 启用时进入判定的连接数
+	rmu      sync.Mutex
+	recent   []ClaudeProxyConn // 新的在前
+	mu       sync.Mutex
+	conns    map[net.Conn]struct{}
+	wg       sync.WaitGroup
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 // startClaudeProxy 在 Options.ClaudeProxyAddr 上监听（必须是回环地址）。监听失败（端口被占用）时 abroadd 照常启动，
@@ -316,6 +336,7 @@ func (cp *claudeProxy) handle(c net.Conn) {
 	}
 	if cp.d.fileState() != state.Enabled {
 		cp.refused.Add(1)
+		cp.record(ClaudeProxyConn{At: time.Now().UTC(), App: "-", Host: t.host, Action: "refused"})
 		writeProxyError(c, http.StatusForbidden, "not_enabled", cpNotEnabled)
 		return
 	}
@@ -332,7 +353,15 @@ func (cp *claudeProxy) handle(c net.Conn) {
 	}
 	pc := &prefixConn{Conn: c, r: rd}
 	isConnect := req.Method == http.MethodConnect
-	dp.proxy.ServeProxyFlow(cp.ctx, stack.ProxyFlow{Src: src, Local: local, Host: t.host, IP: t.ip, Port: t.port}, pc, func(ok bool) error {
+	cp.accepted.Add(1)
+	observe := func(app string, claude bool, dec rules.Decision, ok bool) {
+		rec := ClaudeProxyConn{At: time.Now().UTC(), App: app, Claude: claude, Host: t.host, Action: dec.Action.Kind.String(), OK: ok}
+		if dec.Action.Kind == rules.Proxy {
+			rec.Exit = dec.Action.Exit
+		}
+		cp.record(rec)
+	}
+	dp.proxy.ServeProxyFlow(cp.ctx, stack.ProxyFlow{Src: src, Local: local, Host: t.host, IP: t.ip, Port: t.port, Observe: observe}, pc, func(ok bool) error {
 		if !ok {
 			writeProxyError(c, http.StatusForbidden, "denied", "按规则拒绝，或闸门关着（Claude 只能走主代理）")
 			return nil
@@ -359,6 +388,21 @@ func rewritePlain(req *http.Request) []byte {
 	return b.Bytes()
 }
 
+func (cp *claudeProxy) record(c ClaudeProxyConn) {
+	cp.rmu.Lock()
+	defer cp.rmu.Unlock()
+	cp.recent = append([]ClaudeProxyConn{c}, cp.recent...)
+	if len(cp.recent) > cpRecentMax {
+		cp.recent = cp.recent[:cpRecentMax]
+	}
+}
+
+func (cp *claudeProxy) recentCopy() []ClaudeProxyConn {
+	cp.rmu.Lock()
+	defer cp.rmu.Unlock()
+	return append([]ClaudeProxyConn{}, cp.recent...)
+}
+
 // claudeCodeStatus 是第四层的状态：托管设置的自检加本机代理端口。
 func (d *Daemon) claudeCodeStatus() *ClaudeProxyStatus {
 	s := d.opts.Sys.ClaudeSettings
@@ -373,6 +417,10 @@ func (d *Daemon) claudeCodeStatus() *ClaudeProxyStatus {
 	}
 	if cp != nil {
 		st.Listening, st.Port, st.ListenErr = cp.listening()
+		st.Accepted, st.Refused, st.Recent = cp.accepted.Load(), cp.refused.Load(), cp.recentCopy()
+	}
+	if st.Recent == nil {
+		st.Recent = []ClaudeProxyConn{}
 	}
 	st.Effective = st.Settings != nil && st.Settings.Effective && st.Listening
 	return st

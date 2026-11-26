@@ -52,7 +52,8 @@ sudo -E scripts/m6/e2e/run.sh --after-reboot
 
 - B1 开机时的 guard：日志 `/var/log/claude-abroad/guard.log` 里这次开机加载了断网规则、完整性校验通过；
 - B2 abroadd 接管后恢复启用（最多等 3 分钟）；
-- P5 打开应用，一键回国；
+- 应急演练（E1–E3）：停掉后台服务（这时仍是断网的），执行应急程序 `abroad-rescue`（看过清单后输入 `rescue`），核对状态是已回国、本机网络恢复；再把后台服务注册回来，核对它不会重新接管；
+- P5 打开应用，确认显示“已回国”；
 - U1 卸载（提示时输入 `uninstall`）：和安装前的快照逐项一致；
 - R1 地区和开始前一致；最后执行 restore.sh 收尾。
 

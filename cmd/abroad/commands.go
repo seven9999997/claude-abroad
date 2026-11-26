@@ -401,8 +401,8 @@ func cmdRestore(a *app, args []string) int {
 		return usageErr(a, err.Error())
 	}
 	if f.bools["--force"] {
-		fmt.Fprintln(a.stdout, "restore --force：在以后的版本提供（M6 的应急路径；现在不做任何事）。请按各份脚本的 README 执行 restore.sh")
-		return ExitLater
+		fmt.Fprintln(a.stderr, "restore --force 改成了单独的应急程序：后台服务不在、或状态文件损坏时，先按应急文档停掉后台服务，再执行 sudo abroad-rescue。后台服务正常时请用 abroad restore。")
+		return ExitUsage
 	}
 	var body map[string]any
 	if f.bools["--kill-browsers"] { // 用户显式选择：同时结束确认过的浏览器（M6-4b-3）
@@ -1059,9 +1059,9 @@ func cmdLaunchGuard(a *app, args []string) int {
 				Note      string
 			} `json:"layers"`
 			Coverage []struct {
-				Name    string
-				Covered bool
-				Reason  string
+				Name   string
+				Status string
+				Reason string
 			} `json:"coverage"`
 			Recent []struct{} `json:"recent"`
 		}
@@ -1084,7 +1084,11 @@ func cmdLaunchGuard(a *app, args []string) int {
 		}
 		fmt.Fprintln(a.stdout, "第三层的覆盖范围：")
 		for _, c := range v.Coverage {
-			fmt.Fprintf(a.stdout, "  %s：%s\n", c.Name, c.Reason)
+			st := map[string]string{"covered": "覆盖", "not_covered": "不覆盖", "by_signature": "视签名而定"}[c.Status]
+			if st == "" {
+				st = "未知"
+			}
+			fmt.Fprintf(a.stdout, "  %s：%s。%s\n", c.Name, st, c.Reason)
 		}
 		if len(v.Recent) > 0 {
 			fmt.Fprintf(a.stdout, "最近拦下 %d 次\n", len(v.Recent))

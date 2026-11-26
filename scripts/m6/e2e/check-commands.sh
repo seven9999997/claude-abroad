@@ -3,7 +3,7 @@
 #   1. 每一条 CHANGE: 都在 commands.txt 的清单里；没有 pfctl、networksetup、route、ifconfig、pkill、killall、open
 #      （网络由 abroadd 和卸载脚本负责；应用由你自己打开）；kill 只对死人开关；
 #   2. 第一段：死人开关之前只有建状态目录；地区快照在安装之前；安装在第一个检查点之前；最后请你重启，并且取消了死人开关；
-#   3. 第二段：先启动死人开关，再核对 guard；卸载在回国检查点之后；最后执行 restore.sh（地区按快照还原、删状态目录）。
+#   3. 第二段：先启动死人开关，再核对 guard；应急演练先停后台服务、再执行应急程序、再注册回来；卸载在回国检查点之后；最后执行 restore.sh（地区按快照还原、删状态目录）。
 # 用法：scripts/m6/e2e/check-commands.sh <第一段空跑输出> <第二段空跑输出>
 set -uo pipefail
 cd "$(dirname "$0")/../../.." || exit 1
@@ -33,11 +33,14 @@ awk '
 awk '
   /^CHANGE: 死人开关/ { dm = NR }
   /^STEP: 核对 B1/ { if (!dm) print "核对 guard 之前应先启动死人开关"; b1 = NR }
+  /^CHANGE: launchctl bootout / { bo = NR }
+  /^CHANGE: \/Library\/Application Support\/claude-abroad\/bin\/abroad-rescue$/ { if (!bo) print "应急演练应先停掉后台服务"; rs = NR }
+  /^CHANGE: launchctl bootstrap / { if (!rs) print "应急程序之后才把后台服务注册回来"; bs = NR }
   /^STEP: 检查点 P5/ { p5 = NR }
   /^CHANGE: scripts\/m6\/install\/uninstall\.sh$/ { if (!un) { if (!p5) print "卸载应在回国检查点之后"; un = NR } }
   /^CHANGE: \/usr\/sbin\/systemsetup -settimezone/ { if (!un) print "地区还原应在卸载之后"; rg = NR }
   /^CHANGE: rm -rf \/Library\/Application Support\/claude-abroad-m6e$/ { if (!rg) print "删状态目录之前应先还原地区"; rm = NR }
-  END { if (!b1) print "第二段没有核对 guard"; if (!un) print "第二段没有卸载"; if (!rm) print "第二段最后没有执行 restore.sh" }' "$2" |
+  END { if (!rs || !bs) print "第二段没有应急演练"; if (!b1) print "第二段没有核对 guard"; if (!un) print "第二段没有卸载"; if (!rm) print "第二段最后没有执行 restore.sh" }' "$2" |
   while IFS= read -r l; do echo "✗ 第二段：$l"; done >>"$PAT.o"
 if [ -s "$PAT.o" ]; then cat "$PAT.o"; fails=$((fails + $(wc -l <"$PAT.o"))); fi
 rm -f "${PAT:?}.o"

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # M6-9 端到端脚本的自测（不用 root，不改网络和地区，不写系统路径）：
 #   a. 两段的空跑和 restore.sh 的空跑退出码 0，没有写状态目录；
-#   b. 命令核对通过；反例（碰网络、打开应用、清单外的命令、没有死人开关、卸载早于回国、重启前没取消死人开关）都被拦下；
+#   b. 命令核对通过；反例（碰网络、打开应用、清单外的命令、没有死人开关、卸载早于回国、重启前没取消死人开关、
+#      应急程序早于停掉后台服务、没有应急演练）都被拦下；
 #   c. --check-only 在没有确认 M5 通过、没有主代理节点时拒绝，并说明原因；
 #   d. 源码检查：run.sh、restore.sh、lib.sh 里没有 pfctl、networksetup、route、ifconfig、pkill、killall、open 命令；
 #   e. 开发安装脚本的自测、命令核对也通过（端到端依赖它们）。
@@ -33,6 +34,9 @@ grep -v '死人开关 ' "${TMP}/e1" >"${TMP}/n4"; neg "第一段没有死人开�
 awk '/^STEP: 检查点 P5/ { hold = $0; next } { print } /^CHANGE: scripts\/m6\/install\/uninstall\.sh$/ && hold { print hold; hold = "" }' "${TMP}/e2" >"${TMP}/n5"
 neg "卸载早于回国检查点" "${TMP}/e1" "${TMP}/n5"
 grep -v '^CHANGE: kill <死人开关的 PID>$' "${TMP}/e1" >"${TMP}/n6"; neg "重启前没取消死人开关" "${TMP}/n6" "${TMP}/e2"
+awk '/^CHANGE: launchctl bootout / { hold = $0; next } { print } /bin\/abroad-rescue$/ && hold { print hold; hold = "" }' "${TMP}/e2" >"${TMP}/n7"
+neg "应急程序早于停掉后台服务" "${TMP}/e1" "${TMP}/n7"
+grep -v 'bin/abroad-rescue$' "${TMP}/e2" >"${TMP}/n8"; neg "第二段没有应急演练" "${TMP}/e1" "${TMP}/n8"
 
 # ---- c. 前提检查 ----
 env -u M6E_M5_PASSED -u M6E_NODES scripts/m6/e2e/run.sh --check-only >/dev/null 2>"${TMP}/c1"; rc=$?

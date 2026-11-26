@@ -261,7 +261,15 @@ func TestDialFollowsCurrentMachine(t *testing.T) {
 	cancel, _ := runSup(t, s)
 	defer cancel()
 	next(t, f)
-	c, err := s.Dial(context.Background(), 1081)
+	// 虚拟机建好之后，监护器要再过一会儿才标成“运行中”：等到能拨通（最多 2 秒），不靠时序碰运气。
+	var c net.Conn
+	var err error
+	for i := 0; i < 200; i++ {
+		if c, err = s.Dial(context.Background(), 1081); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	if err != nil || c.(*taggedConn).id != 0 {
 		t.Fatalf("应拨到第一台：%v", err)
 	}

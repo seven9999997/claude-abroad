@@ -129,7 +129,7 @@ var ErrCorrupt = errors.New("状态文件已损坏")
 
 func corrupt(why string) error {
 	return usererror.New("读取状态文件", "文件已损坏或不安全（"+why+"）",
-		"为了安全，Claude 出国按“未恢复”处理并保持断网保护；请执行 sudo abroad restore --force，或重新安装后执行一键卸载。",
+		"为了安全，Claude 出国按“未恢复”处理并保持断网保护；"+RescueHint+"，或重新安装后执行一键卸载。",
 		ErrCorrupt)
 }
 

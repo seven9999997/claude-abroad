@@ -77,7 +77,7 @@ final class Counter: @unchecked Sendable {
 
 @MainActor
 @Test func settingsLaunchGuardText() async {
-    let lg = #"{"allowed":false,"since":"2026-11-25T12:00:00Z","cover_all":true,"layers":[{"layer":1,"name":"Claude 域名解析锁","effective":true},{"layer":2,"name":"启动拦截（系统扩展）","effective":false,"note":"暂不提供"},{"layer":3,"name":"发现即结束","effective":true},{"layer":4,"name":"Claude Code 的本机代理","effective":false,"note":"只覆盖 Claude Code"}],"coverage":[{"kind":"npm","name":"Claude Code（npm 安装）","covered":false,"reason":"签名确认不了"}],"recent":[{"time":"2026-11-25T12:00:01Z","pid":7,"kind":"native","name":"Claude Code"}]}"#
+    let lg = #"{"allowed":false,"since":"2026-11-25T12:00:00Z","cover_all":true,"layers":[{"layer":1,"name":"Claude 域名解析锁","effective":true},{"layer":2,"name":"启动拦截（系统扩展）","effective":false,"note":"暂不提供"},{"layer":3,"name":"发现即结束","effective":true},{"layer":4,"name":"Claude Code 的本机代理","effective":false,"note":"只覆盖 Claude Code"}],"coverage":[{"kind":"npm","name":"Claude Code（npm 安装）","status":"not_covered","reason":"签名确认不了"}],"recent":[{"time":"2026-11-25T12:00:01Z","pid":7,"kind":"native","name":"Claude Code"}]}"#
     let t = FakeTransport { req in
         switch req.path {
         case "/v1/launchguard": return json(200, lg)
@@ -90,7 +90,7 @@ final class Counter: @unchecked Sendable {
     let text = m.launchControlText
     #expect(text.hasPrefix(L10n.launchGuardBlocked))
     #expect(text.contains(L10n.launchGuardLayer("Claude 域名解析锁", true)))
-    #expect(text.contains(L10n.launchGuardCoverage("Claude Code（npm 安装）", "签名确认不了")))
+    #expect(text.contains(L10n.launchGuardCoverage("Claude Code（npm 安装）", "not_covered", "签名确认不了")))
     #expect(text.contains(L10n.launchGuardRecent(1)))
     #expect(text.hasSuffix(L10n.loginItemHint))
 }

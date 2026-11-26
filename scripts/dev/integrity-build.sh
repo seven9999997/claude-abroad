@@ -2,7 +2,7 @@
 # 带完整性校验的构建（M6-7）：先编译清单里的程序，生成完整性清单，再把清单的摘要经 -ldflags 写进 abroadd 和
 # abroad-guard 编译出来。只编译和写 scripts/dev/out/integrity/：不安装、不注册系统服务、不运行产物。
 #
-# 清单包含：abroad（命令行）、abroad-vm，以及 guest/out/ 下已经构建好的虚拟机镜像（有就加）。
+# 清单包含：abroad（命令行）、abroad-rescue（应急程序）、abroad-vm，以及 guest/out/ 下已经构建好的虚拟机镜像（有就加）。
 # 不包含 abroadd、abroad-guard 自己（它们的内容取决于清单的摘要）。
 #
 # 用法：scripts/dev/integrity-build.sh          # 发布构建（不带开发参数）
@@ -21,11 +21,12 @@ rm -rf "${OUT}"
 mkdir -p "${OUT}/bin" "${OUT}/image"
 
 go build ${TAGS[@]+"${TAGS[@]}"} -trimpath -o "${OUT}/bin/abroad" ./cmd/abroad
+go build -trimpath -o "${OUT}/bin/abroad-rescue" ./cmd/abroad-rescue # 应急程序没有开发构建（M6-5b）
 go build ${TAGS[@]+"${TAGS[@]}"} -trimpath -o "${OUT}/bin/abroad-vm" ./cmd/abroad-vm
 scripts/dev/sign.sh "${OUT}/bin/abroad-vm" >/dev/null # 虚拟化授权（ad-hoc）：要在生成清单之前，签名会改文件内容
 go build -o "${OUT}/abroad-dev" ./cmd/abroad-dev
 
-FILES=(bin/abroad bin/abroad-vm)
+FILES=(bin/abroad bin/abroad-rescue bin/abroad-vm)
 for f in guest/out/Image guest/out/initramfs.gz guest/out/modloop guest/out/rootfs.img; do
   [[ -f "$f" ]] || continue
   cp "$f" "${OUT}/image/"

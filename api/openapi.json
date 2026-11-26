@@ -104,9 +104,6 @@
       },
       "ClaudeprocCoverageRow": {
         "properties": {
-          "covered": {
-            "type": "boolean"
-          },
           "kind": {
             "type": "string"
           },
@@ -115,13 +112,16 @@
           },
           "reason": {
             "type": "string"
+          },
+          "status": {
+            "type": "string"
           }
         },
         "required": [
-          "covered",
           "kind",
           "name",
-          "reason"
+          "reason",
+          "status"
         ],
         "type": "object"
       },
@@ -298,8 +298,46 @@
         ],
         "type": "object"
       },
+      "DaemonClaudeProxyConn": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "app": {
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "claude": {
+            "type": "boolean"
+          },
+          "exit": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action",
+          "app",
+          "at",
+          "claude",
+          "ok"
+        ],
+        "type": "object"
+      },
       "DaemonClaudeProxyStatus": {
         "properties": {
+          "accepted": {
+            "format": "int64",
+            "type": "integer"
+          },
           "effective": {
             "type": "boolean"
           },
@@ -310,6 +348,16 @@
             "type": "boolean"
           },
           "port": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonClaudeProxyConn"
+            },
+            "type": "array"
+          },
+          "refused": {
             "format": "int64",
             "type": "integer"
           },

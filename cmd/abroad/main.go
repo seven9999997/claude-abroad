@@ -42,7 +42,7 @@ const usage = `用法：abroad [--json] [--yes] [--socket <路径>] <子命令> 
   status [--watch]                 状态（--watch 持续显示事件，Ctrl+C 退出）
   check [--device]                 立即重新跑一轮环境检测
   up | down                        启用 | 停用
-  sudo abroad restore [--force] [--kill-browsers]   一键回国（两步确认）
+  sudo abroad restore [--kill-browsers]   一键回国（两步确认；后台服务不在时用 sudo abroad-rescue）
   sudo abroad uninstall            卸载
   apps                             在联网的应用
   main show | nodes | check | exit 主代理：当前选择、全部节点、检查、出口的 IP 和地区

@@ -1,0 +1,13 @@
+# scripts/m6/layer4 的 run.sh、restore.sh 会执行的全部改动命令（扩展正则；仓库路径先换成 <仓库>）。
+# 只写、删 Claude Code 托管设置目录里我们自己的分片，起、停本脚本自己的回环监听；不碰网络、pf、abroadd 的状态。
+^mkdir -p /Library/Application Support/claude-abroad-m6l$
+^chmod 755 /Library/Application Support/claude-abroad-m6l$
+^死人开关 [0-9]+ 秒后执行 <仓库>/scripts/m6/layer4/restore\.sh$
+^mkdir -p /Library/Application Support/ClaudeCode/managed-settings\.d$
+^install -m 644 -o root -g wheel <内容：abroad-dev claude-settings content --port (47821|47898|47897)> /Library/Application Support/ClaudeCode/managed-settings\.d/claude-abroad\.json$
+^本脚本的监听 (decoy 127\.0\.0\.1:47899（count）|deny 127\.0\.0\.1:47897（deny）)$
+^rm -f /Library/Application Support/ClaudeCode/managed-settings\.d/claude-abroad\.json（内容和本脚本写入的一致才删）$
+^kill -TERM <(decoy|deny)\.pid 里的 PID>$
+^kill <死人开关的 PID>$
+^rm -f /Library/Application Support/claude-abroad-m6l/deadman_pid$
+^rm -rf /Library/Application Support/claude-abroad-m6l$

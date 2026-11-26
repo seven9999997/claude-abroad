@@ -7,6 +7,9 @@
 ^rm -f /Library/Application Support/claude-abroad-m6e/deadman_pid$
 ^rm -rf /Library/Application Support/claude-abroad-m6e$
 ^scripts/m6/install/(install|uninstall)\.sh$
+^launchctl bootout system/com\.claude-abroad\.dev\.abroadd$
+^launchctl bootstrap system /Library/LaunchDaemons/com\.claude-abroad\.dev\.abroadd\.plist$
+^/Library/Application Support/claude-abroad/bin/abroad-rescue$
 ^/usr/sbin/systemsetup -settimezone <快照里的时区>$
 ^/usr/bin/defaults write /Library/Preferences/com\.apple\.timezone\.auto Active -bool <快照里的值>（原来没有时 delete）$
 ^/bin/launchctl asuser <UID> /usr/bin/sudo -u <用户> /usr/bin/defaults write -g (AppleLanguages -array <快照里的语言>|AppleLocale -string <快照里的地区格式>)（原来没有时 delete）$

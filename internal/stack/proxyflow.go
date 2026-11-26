@@ -18,6 +18,9 @@ type ProxyFlow struct {
 	Host  string         // 目的域名（已校验；为空时用 IP）
 	IP    netip.Addr     // 目的地址（Host 为空时）
 	Port  uint16
+	// Observe 在判定、拨号之后调用一次（可为 nil）：连接方识别成哪个程序、是否按 Claude 处理、判定结果、是否接通。
+	// 给第四层的状态和真机实测（R23）用。
+	Observe func(app string, claude bool, dec rules.Decision, ok bool)
 }
 
 // ServeProxyFlow 用和接管流量同一个判定入口（decide）、同一个拨号入口（dispatch，含闸门复查、直连拨号、开代理流）、
@@ -69,6 +72,9 @@ func (p *Proxy) ServeProxyFlow(ctx context.Context, f ProxyFlow, conn net.Conn, 
 		p.countSniff(res.Kind)
 	}
 	up, dec := p.dispatch(fctx, entry, r, p.decide(r), false)
+	if f.Observe != nil {
+		f.Observe(string(r.who.App), r.who.Claude, dec, up != nil)
+	}
 	if up == nil {
 		if !accepted {
 			_ = accept(false)

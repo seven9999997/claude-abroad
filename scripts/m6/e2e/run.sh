@@ -176,7 +176,26 @@ m6e_arm_restore_trap "${RESTORE}"
 m6e_state_set phase 2
 check B1 c_guard_loaded "开机时的 guard"
 check B2 c_enabled "abroadd 接管后恢复启用" 180
-checkpoint P5 "打开应用，点“一键回国”并确认" c_restored "重启后回国"
+# 应急演练（M6-5b）：启用状态下停掉后台服务，执行应急程序，核对网络恢复、状态是已回国；再把后台服务注册回来。
+RESCUE="/Library/Application Support/claude-abroad/bin/abroad-rescue"
+D_PLIST=/Library/LaunchDaemons/com.claude-abroad.dev.abroadd.plist
+step "应急演练：停掉后台服务（这时还是断网的），执行应急程序（看过清单后输入 rescue）"
+m6e_do launchctl bootout system/com.claude-abroad.dev.abroadd
+if [ "$DRY_RUN" = 1 ]; then printf 'CHANGE: %s\n' "${RESCUE}"; else
+  if "${RESCUE}" </dev/tty; then res E1 通过 "应急程序走完"; else res E1 不通过 "应急程序退出码非零（输出见上）"; fi
+fi
+c_rescued() {
+  local st code
+  st=$(/usr/bin/python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get("state",""))' "/Library/Application Support/claude-abroad/state/abroadd/state.json" 2>/dev/null)
+  [ "${st}" = RESTORED ] || { echo "状态文件是 ${st:-读不出}"; return 1; }
+  code=$(curl -sS -m 8 -o /dev/null -w '%{http_code}' https://www.gstatic.com/generate_204 2>/dev/null)
+  [ "${code}" = 204 ] || { echo "本机网络还没恢复（直连探测 ${code:-无应答}）"; return 1; }
+  echo "状态文件是已回国、本机网络恢复"
+}
+check E2 c_rescued "应急程序之后" 15
+m6e_do launchctl bootstrap system "${D_PLIST}"
+check E3 c_restored "后台服务回来后仍是已回国（不重新接管）、解析锁仍在" 60
+checkpoint P5 "打开应用，确认显示“已回国”" c_restored "应用里是已回国"
 step "卸载（提示时输入 uninstall）"
 if [ "$DRY_RUN" = 1 ]; then printf 'CHANGE: scripts/m6/install/uninstall.sh\n'; else
   if bash scripts/m6/install/uninstall.sh; then res U1 通过 "卸载后和安装前的快照逐项一致"; else res U1 不通过 "卸载后和安装前的快照不一致（见上）"; fi

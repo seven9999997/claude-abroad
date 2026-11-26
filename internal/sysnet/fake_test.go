@@ -308,7 +308,7 @@ func TestNoExecInSources(t *testing.T) {
 	}
 }
 
-// M2-7d 决定 5、M2-9b-1 决定 3：全仓库非测试代码除 sysnet/exec.go 和 daemon/realexec.go 外没有对 ExecRunner 的引用。
+// M2-7d 决定 5、M2-9b-1 决定 3：全仓库非测试代码除 sysnet/exec.go、daemon/realexec.go 和应急程序的入口（M6-5b）外没有对 ExecRunner 的引用。
 func TestExecRunnerReferences(t *testing.T) {
 	root := filepath.Join("..", "..")
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
@@ -323,8 +323,9 @@ func TestExecRunnerReferences(t *testing.T) {
 		}
 		abs, _ := filepath.Abs(p)
 		self, _ := filepath.Abs("exec.go")
-		realexec, _ := filepath.Abs("../daemon/realexec.go") // M2-9b-1 决定 3：生产执行器只在这里取得
-		if abs == self || abs == realexec {
+		realexec, _ := filepath.Abs("../daemon/realexec.go")             // M2-9b-1 决定 3：生产执行器只在这里取得
+		rescueMain, _ := filepath.Abs("../../cmd/abroad-rescue/main.go") // M6-5b：应急程序的入口（只删 DNS、路由，恢复 IPv6、地区）
+		if abs == self || abs == realexec || abs == rescueMain {
 			return nil
 		}
 		inSysnet := filepath.Dir(abs) == filepath.Dir(self)

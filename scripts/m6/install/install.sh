@@ -33,7 +33,7 @@ if [ "${M6I_MODE}" = real ]; then mkdir -p "${OUT}"; M6I_LOG="${OUT}/install-${T
 
 precheck() {
   local reasons=() f
-  for f in bin/abroad bin/abroadd bin/abroad-guard bin/abroad-vm integrity.json image/Image image/initramfs.gz image/modloop image/rootfs.img; do
+  for f in bin/abroad bin/abroad-rescue bin/abroadd bin/abroad-guard bin/abroad-vm integrity.json image/Image image/initramfs.gz image/modloop image/rootfs.img; do
     [ -f "${SRC}/${f}" ] || reasons+=("缺少 ${SRC}/${f}：先以自己的身份执行 scripts/dev/integrity-build.sh --dev（要先有虚拟机镜像 guest/out）")
   done
   if [ -x "${SRC}/bin/abroadd" ] && [ "${M6I_MODE}" != test ]; then
@@ -92,7 +92,7 @@ trap 'exit 130' INT TERM HUP
 # ---- 程序和镜像 ----
 m6i_do mkdir -p "$(P "${INST}/bin")" "$(P "${INST}/image")"
 m6i_rec_set install_dir 1
-for f in abroad abroadd abroad-guard abroad-vm; do m6i_do cp "${SRC}/bin/${f}" "$(P "${INST}/bin/${f}")" || m6i_die "复制 ${f} 失败"; done
+for f in abroad abroad-rescue abroadd abroad-guard abroad-vm; do m6i_do cp "${SRC}/bin/${f}" "$(P "${INST}/bin/${f}")" || m6i_die "复制 ${f} 失败"; done
 for f in Image initramfs.gz modloop rootfs.img; do m6i_do cp "${SRC}/image/${f}" "$(P "${INST}/image/${f}")" || m6i_die "复制镜像 ${f} 失败"; done
 m6i_do cp "${SRC}/integrity.json" "$(P "${INST}/integrity.json")" || m6i_die "复制完整性清单失败"
 m6i_do chown -R root:wheel "$(P "${INST}")"

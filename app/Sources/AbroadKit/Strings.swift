@@ -231,7 +231,16 @@ public enum L10n {
     public static let launchGuardAllowed = "现在允许启动 Claude"
     public static let launchGuardBlocked = "现在不允许启动 Claude：打开后会被马上结束"
     public static func launchGuardLayer(_ name: String, _ on: Bool) -> String { name + "：" + (on ? "生效" : "未生效") }
-    public static func launchGuardCoverage(_ name: String, _ reason: String) -> String { "· " + name + "：" + reason }
+    public static func launchGuardCoverage(_ name: String, _ status: String, _ reason: String) -> String {
+        let s: String
+        switch status {
+        case "covered": s = "覆盖"
+        case "not_covered": s = "不覆盖"
+        case "by_signature": s = "视签名而定"
+        default: s = "未知"
+        }
+        return "· " + name + "：" + s + "。" + reason
+    }
     public static func launchGuardRecent(_ n: Int) -> String { "最近拦下 \(n) 次" }
     public static let loginItemHint = "如果 Claude 设了“登录时打开”，请在 Claude 的设置里关掉：开机时它会比 Claude 出国先起来，会被拦下"
     public static let claudeCodeTitle = "第四层：Claude Code 的本机代理"

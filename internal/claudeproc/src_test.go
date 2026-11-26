@@ -19,6 +19,7 @@ func TestNoOtherSignals(t *testing.T) {
 	root := filepath.Join("..", "..")
 	allowCtor := map[string]bool{
 		filepath.Join("cmd", "abroadd", "real.go"):                     true,
+		filepath.Join("cmd", "abroad-rescue", "main.go"):               true, // M6-5b：应急程序先结束 Claude
 		filepath.Join("internal", "claudeproc", "real_darwin_test.go"): true, // c：非 root 构造返回错误
 		filepath.Join("internal", "claudeproc", "signal_unix.go"):      true, // 定义处
 		filepath.Join("internal", "claudeproc", "signal_other.go"):     true,

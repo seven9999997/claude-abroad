@@ -248,11 +248,15 @@ func TestSourceNoExec(t *testing.T) {
 		if guardMain, _ := filepath.Abs("../../cmd/abroad-guard/main.go"); abs == guardMain {
 			return nil
 		}
+		// M6-5b：应急程序在自己的入口取得生产执行器（只清空和释放自己的锚点，见 cmd/abroad-rescue 的源码检查）。
+		if rescueMain, _ := filepath.Abs("../../cmd/abroad-rescue/main.go"); abs == rescueMain {
+			return nil
+		}
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch x := n.(type) {
 			case *ast.SelectorExpr:
 				if id, ok := x.X.(*ast.Ident); ok && id.Name == "pf" && x.Sel.Name == "ExecRunner" {
-					t.Errorf("%s 引用了 pf.ExecRunner（只有 internal/daemon/realexec.go 和 cmd/abroad-guard/main.go 可以）", p)
+					t.Errorf("%s 引用了 pf.ExecRunner（只有 internal/daemon/realexec.go、cmd/abroad-guard/main.go 和 cmd/abroad-rescue/main.go 可以）", p)
 				}
 			case *ast.Ident:
 				if inPF && x.Name == "ExecRunner" {

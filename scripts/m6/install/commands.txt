@@ -5,7 +5,7 @@
 CHANGE ^mkdir -p /Library/Application Support/claude-abroad-install-snap$
 CHANGE ^chmod 700 /Library/Application Support/claude-abroad-install-snap$
 CHANGE ^mkdir -p /Library/Application Support/claude-abroad/bin /Library/Application Support/claude-abroad/image$
-CHANGE ^cp <仓库>/scripts/dev/out/integrity/(bin/(abroad|abroadd|abroad-guard|abroad-vm)|image/(Image|initramfs\.gz|modloop|rootfs\.img)|integrity\.json) /Library/Application Support/claude-abroad/(bin/(abroad|abroadd|abroad-guard|abroad-vm)|image/(Image|initramfs\.gz|modloop|rootfs\.img)|integrity\.json)$
+CHANGE ^cp <仓库>/scripts/dev/out/integrity/(bin/(abroad|abroad-rescue|abroadd|abroad-guard|abroad-vm)|image/(Image|initramfs\.gz|modloop|rootfs\.img)|integrity\.json) /Library/Application Support/claude-abroad/(bin/(abroad|abroad-rescue|abroadd|abroad-guard|abroad-vm)|image/(Image|initramfs\.gz|modloop|rootfs\.img)|integrity\.json)$
 CHANGE ^chown -R root:wheel /Library/Application Support/claude-abroad$
 CHANGE ^chmod -R go-w /Library/Application Support/claude-abroad$
 CHANGE ^dscl \. -create /(Users|Groups)/_abroad( (PrimaryGroupID|UniqueID) [0-9]+| Password \*| UserShell /usr/bin/false| NFSHomeDirectory /var/empty| RealName claude-abroad| IsHidden 1)?$

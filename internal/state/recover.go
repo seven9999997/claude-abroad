@@ -13,7 +13,7 @@ import (
 //   - DISABLED：重建 utun、pf、路由、DNS，闸门保持关闭；
 //   - ENABLED：同样重建；运行中的地区同步被中断时接着写完；清 state 原因，立即补一轮复查；检查和开闸门交给复查循环（m4-plan v2.2 决定 4）；
 //   - RESTORING：先再结束一次 Claude（失败就停在 RESTORING），再从断点接着做；
-//   - 状态文件损坏：确保 pf 已加载，发事件，返回 ErrCorrupt（restore --force 的处理在 M6）。
+//   - 状态文件损坏：确保 pf 已加载，发事件，返回 ErrCorrupt（应急程序 abroad-rescue 处理，M6-5b）。
 func (m *Machine) Recover(ctx context.Context) error {
 	if !m.Store.HoldsLock() {
 		return notLocked("恢复上次的状态")
@@ -27,7 +27,7 @@ func (m *Machine) Recover(ctx context.Context) error {
 		m.notify(false)
 		m.emit(EvCorrupt, "状态文件损坏，按“未恢复”加载断网保护")
 		if aerr := m.D.PF.Apply(ctx, m.D.Tun.Name()); aerr != nil {
-			return usererror.Wrap("加载断网保护", aerr, "状态文件也已损坏，请执行 sudo abroad restore --force。")
+			return usererror.Wrap("加载断网保护", aerr, "状态文件也已损坏。"+RescueHint+"。")
 		}
 		return err
 	}

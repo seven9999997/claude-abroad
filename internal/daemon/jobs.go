@@ -130,7 +130,7 @@ func (d *Daemon) run(w http.ResponseWriter, r *http.Request, op string, async bo
 	}
 	if d.corrupt.Load() {
 		if _, err := d.store.Load(); err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, errBody{usererror.New("执行操作", "状态文件已损坏", "请执行 sudo abroad restore --force。", ErrCorruptMode).Error()})
+			writeJSON(w, http.StatusServiceUnavailable, errBody{usererror.New("执行操作", "状态文件已损坏", state.RescueHint+"。", ErrCorruptMode).Error()})
 			return
 		}
 		d.corrupt.Store(false)

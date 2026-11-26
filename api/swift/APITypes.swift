@@ -94,12 +94,12 @@ public struct ClaudecfgStatus: Codable, Sendable {
 public struct ClaudeprocCoverageRow: Codable, Sendable {
     public var kind: String
     public var name: String
-    public var covered: Bool
+    public var status: String
     public var reason: String
     enum CodingKeys: String, CodingKey {
         case kind = "kind"
         case name = "name"
-        case covered = "covered"
+        case status = "status"
         case reason = "reason"
     }
 }
@@ -199,18 +199,43 @@ public struct DaemonBaselineSummary: Codable, Sendable {
     }
 }
 
+public struct DaemonClaudeProxyConn: Codable, Sendable {
+    public var at: String
+    public var app: String
+    public var claude: Bool
+    public var host: String?
+    public var action: String
+    public var exit: String?
+    public var ok: Bool
+    enum CodingKeys: String, CodingKey {
+        case at = "at"
+        case app = "app"
+        case claude = "claude"
+        case host = "host"
+        case action = "action"
+        case exit = "exit"
+        case ok = "ok"
+    }
+}
+
 public struct DaemonClaudeProxyStatus: Codable, Sendable {
     public var settings: ClaudecfgStatus?
     public var listening: Bool
     public var port: Int64?
     public var listenError: String?
     public var effective: Bool
+    public var accepted: Int64?
+    public var refused: Int64?
+    public var recent: [DaemonClaudeProxyConn]?
     enum CodingKeys: String, CodingKey {
         case settings = "settings"
         case listening = "listening"
         case port = "port"
         case listenError = "listen_error"
         case effective = "effective"
+        case accepted = "accepted"
+        case refused = "refused"
+        case recent = "recent"
     }
 }
 

@@ -196,18 +196,27 @@ func (j *AutoJudge) bySignature(p procinfo.Proc, kind Kind, okReason, badReason 
 
 // CoverageRow 是一种安装方式的覆盖情况。
 type CoverageRow struct {
-	Kind    Kind   `json:"kind"`
-	Name    string `json:"name"`
-	Covered bool   `json:"covered"` // 第三层（发现即结束）一定覆盖（为假时看 Reason：可能视签名而定）
-	Reason  string `json:"reason"`
+	Kind   Kind           `json:"kind"`
+	Name   string         `json:"name"`
+	Status CoverageStatus `json:"status"` // 第三层（发现即结束）覆盖不覆盖：界面按取值显示，不解析 Reason
+	Reason string         `json:"reason"`
 }
+
+// CoverageStatus 是第三层对一种安装方式的覆盖：覆盖、不覆盖、视签名而定。
+type CoverageStatus string
+
+const (
+	CoverageCovered     CoverageStatus = "covered"
+	CoverageNotCovered  CoverageStatus = "not_covered"
+	CoverageBySignature CoverageStatus = "by_signature"
+)
 
 // coverage 是覆盖范围的唯一来源（文字只写在这里）。
 var coverage = []CoverageRow{
-	{KindDesktop, "Claude 桌面版", true, "按 Bundle ID 和运行中进程的签名确认，可以自动结束"},
-	{KindNative, "Claude Code（原生安装，含 IDE 插件带的）", true, "按运行中进程的签名确认，可以自动结束"},
-	{KindNPM, "Claude Code（npm 安装，含 IDE 插件用 node 启动的）", false, "签名确认不了，第三层不覆盖，由第一层（解析锁）和第四层（本机代理）兜着"},
-	{KindHomebrew, "Claude Code（Homebrew 安装）", false, "视签名而定：运行中进程的签名是 Anthropic 的可以自动结束；否则不覆盖，由第一层（解析锁）和第四层（本机代理）兜着"},
+	{KindDesktop, "Claude 桌面版", CoverageCovered, "按 Bundle ID 和运行中进程的签名确认，可以自动结束"},
+	{KindNative, "Claude Code（原生安装，含 IDE 插件带的）", CoverageCovered, "按运行中进程的签名确认，可以自动结束"},
+	{KindNPM, "Claude Code（npm 安装，含 IDE 插件用 node 启动的）", CoverageNotCovered, "签名确认不了，第三层不覆盖，由第一层（解析锁）和第四层（本机代理）兜着"},
+	{KindHomebrew, "Claude Code（Homebrew 安装）", CoverageBySignature, "运行中进程的签名是 Anthropic 的可以自动结束；否则不覆盖，由第一层（解析锁）和第四层（本机代理）兜着"},
 }
 
 // Coverage 返回每种安装方式第三层覆盖不覆盖、原因（给 M6-4b 的状态接口和界面用）。

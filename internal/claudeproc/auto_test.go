@@ -250,16 +250,16 @@ func TestIDListShared(t *testing.T) {
 // f. 覆盖范围：每种安装方式一行，齐全；npm、Homebrew 写明由第一层和第四层兜着；文字只在一处。
 func TestCoverage(t *testing.T) {
 	rows := Coverage()
-	want := map[Kind]bool{KindDesktop: true, KindNative: true, KindNPM: false, KindHomebrew: false}
+	want := map[Kind]CoverageStatus{KindDesktop: CoverageCovered, KindNative: CoverageCovered, KindNPM: CoverageNotCovered, KindHomebrew: CoverageBySignature}
 	if len(rows) != len(want) {
 		t.Fatalf("%v", rows)
 	}
 	for _, r := range rows {
 		cov, ok := want[r.Kind]
-		if !ok || r.Covered != cov || r.Name == "" || r.Reason == "" {
+		if !ok || r.Status != cov || r.Name == "" || r.Reason == "" {
 			t.Fatalf("%+v", r)
 		}
-		if !cov && (!strings.Contains(r.Reason, "第一层（解析锁）") || !strings.Contains(r.Reason, "第四层（本机代理）")) {
+		if cov != CoverageCovered && (!strings.Contains(r.Reason, "第一层（解析锁）") || !strings.Contains(r.Reason, "第四层（本机代理）")) {
 			t.Fatalf("不覆盖的应写明兜底：%+v", r)
 		}
 	}
@@ -268,8 +268,8 @@ func TestCoverage(t *testing.T) {
 	if r := j.Judge(proc(600, nodeBin, "/x/node_modules/@anthropic-ai/claude-code/cli.js")); r.Reason != rows[2].Reason {
 		t.Fatalf("原因应来自覆盖表：%q", r.Reason)
 	}
-	if !strings.Contains(rows[3].Reason, "视签名而定") {
-		t.Fatalf("Homebrew 应视签名而定：%q", rows[3].Reason)
+	if rows[3].Kind != KindHomebrew || rows[3].Status != CoverageBySignature {
+		t.Fatalf("Homebrew 应视签名而定：%+v", rows[3])
 	}
 	// 文字只在 auto.go 的覆盖表里写一次
 	b, _ := os.ReadFile("auto.go")

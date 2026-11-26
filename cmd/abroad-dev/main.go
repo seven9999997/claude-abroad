@@ -114,11 +114,13 @@ func main() {
 			os.Exit(identSample(os.Args[2:], os.Stdout, os.Stderr))
 		case "claude-facts":
 			os.Exit(claudeFacts(os.Args[2:], os.Stdout, os.Stderr))
+		case "claude-settings":
+			os.Exit(claudeSettingsCmd(os.Args[2:], os.Stdout, os.Stderr))
 		case "integrity-manifest":
 			os.Exit(integrityManifest(os.Args[2:], os.Stdout, os.Stderr))
 		}
 	}
-	fmt.Fprintln(os.Stderr, "用法：abroad-dev probe|exit-flows|socks|upstream|apply-main-proxy|tunsim|daemon-sim|pf-render|r3|direct-probe|ident-sample|claude-facts|integrity-manifest …（见源码头注释）")
+	fmt.Fprintln(os.Stderr, "用法：abroad-dev probe|exit-flows|socks|upstream|apply-main-proxy|tunsim|daemon-sim|pf-render|r3|direct-probe|ident-sample|claude-facts|integrity-manifest|claude-settings …（见源码头注释）")
 	os.Exit(2)
 }
 

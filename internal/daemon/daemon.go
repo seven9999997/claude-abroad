@@ -560,7 +560,7 @@ func (d *Daemon) op(fn func(ctx context.Context) error, allowCorrupt bool) http.
 func (d *Daemon) exec(w http.ResponseWriter, r *http.Request, fn func(ctx context.Context) error, allowCorrupt bool) error {
 	if !allowCorrupt && d.corrupt.Load() {
 		if _, err := d.store.Load(); err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, errBody{usererror.New("执行操作", "状态文件已损坏", "请执行 sudo abroad restore --force。", ErrCorruptMode).Error()})
+			writeJSON(w, http.StatusServiceUnavailable, errBody{usererror.New("执行操作", "状态文件已损坏", state.RescueHint+"。", ErrCorruptMode).Error()})
 			return ErrCorruptMode
 		}
 		d.corrupt.Store(false)

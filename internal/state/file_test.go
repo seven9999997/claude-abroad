@@ -110,7 +110,7 @@ func checkCorrupt(t *testing.T, name string, s *Store) {
 		t.Fatalf("%s：读成了 RESTORED", name)
 	}
 	// usererror 的固定格式：“做什么失败：原因。下一步”。
-	if msg := err.Error(); !strings.HasPrefix(msg, "读取状态文件失败：") || !strings.Contains(msg, "restore --force") {
+	if msg := err.Error(); !strings.HasPrefix(msg, "读取状态文件失败：") || !strings.Contains(msg, "abroad-rescue") {
 		t.Fatalf("%s：不是 usererror 的格式：%s", name, msg)
 	}
 }

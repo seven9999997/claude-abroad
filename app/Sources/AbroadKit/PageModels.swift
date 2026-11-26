@@ -448,7 +448,7 @@ public final class SettingsModel: PageModel {
         guard let g = launchGuard else { return L10n.launchGuardUnknown }
         var lines = [g.allowed ? L10n.launchGuardAllowed : L10n.launchGuardBlocked]
         for l in g.layers ?? [] { lines.append(L10n.launchGuardLayer(l.name, l.effective) + ((l.note ?? "").isEmpty ? "" : "（" + (l.note ?? "") + "）")) }
-        for c in g.coverage ?? [] { lines.append(L10n.launchGuardCoverage(c.name, c.reason)) }
+        for c in g.coverage ?? [] { lines.append(L10n.launchGuardCoverage(c.name, c.status, c.reason)) }
         if let r = g.recent, !r.isEmpty { lines.append(L10n.launchGuardRecent(r.count)) }
         lines.append(L10n.loginItemHint)
         return lines.joined(separator: "\n")

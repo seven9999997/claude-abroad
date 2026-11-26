@@ -590,3 +590,55 @@ func TestClaudeProxyHandshakeTimeout(t *testing.T) {
 		t.Fatal("名额没有释放")
 	}
 }
+
+// 状态里的计数和最近连接（真机实测 R21–R23 据此核对）：识别出的程序、是否按 Claude 处理、去向；未启用时记 refused。不含地址。
+func TestClaudeProxyRecent(t *testing.T) {
+	c := newCPEnv(t)
+	for _, x := range []struct {
+		base   int
+		target string
+	}{{24000, "claude.ai:443"}, {22000, "www.example.org:443"}, {23000, "intranet.corp.example:443"}} {
+		code, conn := c.connect(t, x.base, x.target)
+		if code != 200 || !echoOK(conn) {
+			t.Fatalf("%s：%d", x.target, code)
+		}
+		conn.Close()
+	}
+	st := status(t, c.d).ClaudeCode
+	if st == nil || st.Accepted != 3 || st.Refused != 0 || len(st.Recent) != 3 {
+		t.Fatalf("计数或记录不对：%+v", st)
+	}
+	want := []ClaudeProxyConn{
+		{App: string(rules.Unknown), Claude: true, Host: "intranet.corp.example", Action: "proxy", Exit: "main", OK: true},
+		{App: "com.app.c", Claude: false, Host: "www.example.org", Action: "direct", OK: true},
+		{App: "com.anthropic.claudecode", Claude: true, Host: "claude.ai", Action: "proxy", Exit: "main", OK: true},
+	}
+	for i, w := range want {
+		g := st.Recent[i]
+		g.At = time.Time{}
+		if g != w {
+			t.Fatalf("第 %d 条：%+v，应为 %+v", i, g, w)
+		}
+	}
+	post(t, c.d, "/v1/disable", 200)
+	code, conn := c.connect(t, 24000, "api.anthropic.com:443")
+	if conn != nil {
+		conn.Close()
+	}
+	if code != 403 {
+		t.Fatalf("停用后应 403：%d", code)
+	}
+	st = status(t, c.d).ClaudeCode
+	if st.Refused != 1 || st.Recent[0].Action != "refused" || st.Recent[0].Host != "api.anthropic.com" {
+		t.Fatalf("停用后应记 refused：%+v", st.Recent[0])
+	}
+	for i := 0; i < cpRecentMax+5; i++ {
+		_, conn := c.connect(t, 24000, "api.anthropic.com:443")
+		if conn != nil {
+			conn.Close()
+		}
+	}
+	if n := len(status(t, c.d).ClaudeCode.Recent); n != cpRecentMax {
+		t.Fatalf("最近连接最多 %d 条：%d", cpRecentMax, n)
+	}
+}

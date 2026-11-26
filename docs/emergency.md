@@ -8,7 +8,28 @@
 2. 终端里执行 `abroad restore`（回国）或 `sudo abroad uninstall`（卸载）；
 3. 应用被删掉时，另存的命令行还在：`sudo "/Library/Application Support/claude-abroad/bin/abroad" restore`。
 
-只有这三条都不行时，才按下面手动恢复。下面每一条都只撤 Claude 出国自己加的东西，可以重复执行。
+## 应急程序：后台服务不在、或状态文件损坏时
+
+正常途径不行（命令行说连不上后台服务，或说“状态文件已损坏”）时，用应急程序 `abroad-rescue`。它以 root 按固定顺序做：
+先列出要结束的 Claude 进程、你确认后结束它们（结束不了就停下，不碰网络）→ 把状态写成“已回国” → 清空 Claude 出国自己的
+断网规则 → 删 DNS 设置和接管路由 → 按记录恢复 IPv6、时区和语言。每一步都打印出来；中途停下时处理后再执行一次即可。
+它不删 Claude 域名解析锁和 Claude Code 的托管设置（那是“回国后 Claude 连不上”的管控，只有卸载才解除）。
+
+1. 后台服务还在运行（哪怕卡住）时应急程序会拒绝，先停掉它（开发安装的服务名；会结束它管着的虚拟机，不会结束 Claude）：
+
+   ```sh
+   sudo launchctl bootout system/com.claude-abroad.dev.abroadd
+   ```
+
+2. 执行应急程序，看过清单后输入 `rescue` 确认：
+
+   ```sh
+   sudo "/Library/Application Support/claude-abroad/bin/abroad-rescue"
+   ```
+
+3. 之后要彻底卸载时，再按开发安装的说明执行卸载脚本；只想先恢复网络的话到这里就可以了。后台服务下次被拉起来时看到“已回国”，不会重新接管。
+
+应急程序也用不了（程序被删了、报错走不下去）时，才按下面手动恢复。下面每一条都只撤 Claude 出国自己加的东西，可以重复执行。
 
 ## 第一步：先退出 Claude
 

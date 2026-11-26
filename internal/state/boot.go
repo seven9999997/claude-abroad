@@ -24,7 +24,7 @@ func Boot(ctx context.Context, s *Store, p PF, onEvent func(Event)) error {
 		onEvent(Event{Kind: EvCorrupt, Detail: "状态文件损坏，按“未恢复”加载断网保护"})
 	}
 	if err := p.Apply(ctx, ""); err != nil {
-		return usererror.Wrap("开机加载断网保护", err, "请执行 sudo abroad restore --force，或重启电脑。")
+		return usererror.Wrap("开机加载断网保护", err, RescueHint+"，或重启电脑。")
 	}
 	return nil
 }

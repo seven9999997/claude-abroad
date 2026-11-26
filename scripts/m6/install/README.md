@@ -29,7 +29,7 @@ sudo scripts/m6/install/install.sh
    命令行链接、`/etc/resolver`、Claude Code 的托管设置目录各自是否存在和内容摘要；专用用户、两个服务是否注册、
    pf 锚点里的规则数、DNS 键、各网络服务的 IPv6）。卸载后再拍一份，逐项对照。
 2. 程序、镜像和完整性清单装到 `/Library/Application Support/claude-abroad/`（root 所有，组和其他人不能写）。
-   其中 `bin/abroad` 就是应急文档里说的另存的命令行。
+   其中 `bin/abroad` 就是应急文档里说的另存的命令行，`bin/abroad-rescue` 是应急程序（后台服务不在时恢复网络）。
 3. 建专用用户 `_abroad`（无 shell、无主目录、隐藏），虚拟机以它运行，pf 只放行它的出站。
 4. 状态目录 `…/claude-abroad/state/`（abroadd、虚拟机、主代理存储），日志目录 `/var/log/claude-abroad/`，
    本地接口目录 `/var/run/claude-abroad/`（开机时被清空，abroadd 和 guard 会自己重建）。

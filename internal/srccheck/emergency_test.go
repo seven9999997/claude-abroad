@@ -36,6 +36,11 @@ func TestEmergencyDocInSync(t *testing.T) {
 			t.Errorf("应急文档里没有 %q（代码改了、文档没跟着改？）", w)
 		}
 	}
+	// M6-5b：先应急程序、后手动步骤；应急程序的位置和开发安装一致。
+	r := strings.Index(doc, "/Library/Application Support/claude-abroad/bin/abroad-rescue")
+	if r < 0 || r > strings.Index(doc, "## 第一步") {
+		t.Error("应急程序应写在手动步骤之前，位置是安装目录的 bin/abroad-rescue")
+	}
 	i := strings.Index(doc, "## 第一步")
 	if i < 0 || !strings.Contains(doc[i:i+80], "退出 Claude") {
 		t.Fatal("第一步应是“先退出 Claude”")

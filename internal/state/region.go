@@ -179,35 +179,9 @@ func (m *Machine) restoreRegion(ctx context.Context) error {
 	if err := m.setStep(StepRestoreRegion); err != nil {
 		return err
 	}
-	o := *f.Region.Original
-	cur, rerr := m.D.Locale.Read(ctx)
-	unknown := rerr != nil
-	p := RegionPending{}
-	if unknown || !cur.SysLangs.Equal(o.SysLangs) {
-		if err := m.D.Locale.SetSystem(ctx, o.SysLangs); err != nil {
-			sl := o.SysLangs
-			p.Items, p.SysLangs = append(p.Items, ItemSystem), &sl
-		}
-	}
-	if o.User != "" && (unknown || cur.User != o.User || !cur.UserLangs.Equal(o.UserLangs) || !cur.UserLocale.Equal(o.UserLocale)) {
-		if err := m.D.Locale.SetUser(ctx, o.User, o.UserLangs, o.UserLocale); err != nil {
-			ul, uc := o.UserLangs, o.UserLocale
-			p.Items, p.User, p.UserLangs, p.UserLocale = append(p.Items, ItemUser), o.User, &ul, &uc
-			if errors.Is(err, sysnet.ErrNoConsoleUser) || errors.Is(err, sysnet.ErrConsoleChanged) {
-				m.emit(EvRegionUserSkipped, "没有人登录或登录的用户换了：用户的语言和地区格式等原来的用户登录后再写回")
-			}
-		}
-	}
-	if unknown || !cur.AutoTZ.Equal(o.AutoTZ) {
-		if err := m.D.Locale.SetAutoTZ(ctx, o.AutoTZ); err != nil {
-			a := o.AutoTZ
-			p.Items, p.AutoTZ = append(p.Items, ItemAutoTZ), &a
-		}
-	}
-	if unknown || cur.Timezone != o.Timezone {
-		if err := m.D.Locale.SetTimezone(ctx, o.Timezone); err != nil {
-			p.Items, p.Timezone = append(p.Items, ItemTimezone), o.Timezone
-		}
+	p, userSkipped := RestoreRegion(ctx, m.D.Locale, *f.Region.Original)
+	if userSkipped {
+		m.emit(EvRegionUserSkipped, "没有人登录或登录的用户换了：用户的语言和地区格式等原来的用户登录后再写回")
 	}
 	if len(p.Items) == 0 {
 		// 这一轮全部写回了：上一次中断前留下的待还原文件（或上一周期没来得及删的）已经没有意义。
@@ -396,4 +370,38 @@ func (m *Machine) ReapplyRegion(ctx context.Context) error {
 		return err
 	}
 	return m.writeMac(ctx, cur, region.Desired(*f.Region.Original, *f.Region.Target), false)
+}
+
+// RestoreRegion 按原值逐项写回地区（只改和原值不同的项；读不出当前值时全部写），返回没能写回的项（M4-5；M6-5b 的
+// 应急程序也用它）。userSkipped 表示没有人登录或登录的用户换了，用户那一项留到原来的用户登录后。
+func RestoreRegion(ctx context.Context, loc sysnet.MacRegion, o sysnet.MacLocale) (p RegionPending, userSkipped bool) {
+	cur, rerr := loc.Read(ctx)
+	unknown := rerr != nil
+	if unknown || !cur.SysLangs.Equal(o.SysLangs) {
+		if err := loc.SetSystem(ctx, o.SysLangs); err != nil {
+			sl := o.SysLangs
+			p.Items, p.SysLangs = append(p.Items, ItemSystem), &sl
+		}
+	}
+	if o.User != "" && (unknown || cur.User != o.User || !cur.UserLangs.Equal(o.UserLangs) || !cur.UserLocale.Equal(o.UserLocale)) {
+		if err := loc.SetUser(ctx, o.User, o.UserLangs, o.UserLocale); err != nil {
+			ul, uc := o.UserLangs, o.UserLocale
+			p.Items, p.User, p.UserLangs, p.UserLocale = append(p.Items, ItemUser), o.User, &ul, &uc
+			if errors.Is(err, sysnet.ErrNoConsoleUser) || errors.Is(err, sysnet.ErrConsoleChanged) {
+				userSkipped = true
+			}
+		}
+	}
+	if unknown || !cur.AutoTZ.Equal(o.AutoTZ) {
+		if err := loc.SetAutoTZ(ctx, o.AutoTZ); err != nil {
+			a := o.AutoTZ
+			p.Items, p.AutoTZ = append(p.Items, ItemAutoTZ), &a
+		}
+	}
+	if unknown || cur.Timezone != o.Timezone {
+		if err := loc.SetTimezone(ctx, o.Timezone); err != nil {
+			p.Items, p.Timezone = append(p.Items, ItemTimezone), o.Timezone
+		}
+	}
+	return p, userSkipped
 }

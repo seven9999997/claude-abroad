@@ -12,7 +12,10 @@ import (
 // LockName 是状态目录下的锁文件名。
 const LockName = "state.lock"
 
-// ErrLocked 是锁被别的进程（abroadd、开机 guard、restore --force）拿着。
+// RescueHint 是状态文件损坏、要走应急恢复时给用户的下一步（M6-5b：应急程序只在后台服务不在时运行）。
+const RescueHint = "请先按应急文档停掉后台服务，再执行 sudo abroad-rescue（应急恢复）"
+
+// ErrLocked 是锁被别的进程（abroadd、开机 guard、应急程序 abroad-rescue）拿着。
 var ErrLocked = errors.New("状态文件被别的进程占用")
 
 // ErrNotLocked 是没持锁就调用了要求持锁的操作（Recover、Boot）。

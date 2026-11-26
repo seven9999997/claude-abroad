@@ -309,12 +309,20 @@ func TestLater(t *testing.T) {
 	r := newRig(t, rigOpt{})
 	for _, args := range [][]string{
 		{"engine", "install", "sing-box"}, {"engine", "rollback", "sing-box"}, // check --device 在 M6-6a 提供了
-		{"restore", "--force"}, // --kill-browsers 在 M6-4b-3、uninstall 在 M6-5a 提供了
-	} {
+	} { // --kill-browsers 在 M6-4b-3、uninstall 在 M6-5a 提供了；restore --force 在 M6-5b 改成了 abroad-rescue（见下）
 		x := r.run(args...)
 		if x.code != ExitLater || x.reqs != 0 || !strings.Contains(x.out, "以后的版本") {
 			t.Errorf("%v：%+v", args, x)
 		}
+	}
+}
+
+// M6-5b：restore --force 指向应急程序 abroad-rescue，参数错的退出码，不发请求。
+func TestRestoreForcePointsToRescue(t *testing.T) {
+	r := newRig(t, rigOpt{})
+	x := r.run("restore", "--force")
+	if x.code != ExitUsage || x.reqs != 0 || !strings.Contains(x.out+x.err, "abroad-rescue") {
+		t.Fatalf("%+v", x)
 	}
 }
 

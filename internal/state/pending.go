@@ -98,6 +98,9 @@ func (p RegionPending) Labels() string {
 }
 
 // overlay 把待还原的值盖到 o 上（下一次启用时原值以待还原文件为准）。
+// Apply 把待还原的项盖到 o 上（o 一般是当前读到的地区），得到要写回的目标（M6-5b 的应急程序用）。
+func (p RegionPending) Apply(o sysnet.MacLocale) sysnet.MacLocale { return p.overlay(o) }
+
 func (p RegionPending) overlay(o sysnet.MacLocale) sysnet.MacLocale {
 	if p.has(ItemTimezone) {
 		o.Timezone = p.Timezone
