@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"claude-abroad/internal/api"
+	"claude-abroad/internal/procinfo"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -97,6 +98,16 @@ type AppView struct {
 	Conns  int      `json:"conns"`
 	Exits  []string `json:"exits"`
 	Reason string   `json:"reason"`
+	// Kind 是种类（补齐四：app、system、path、unknown）；Shared 是“被很多应用共用”的系统进程的说明（不是时为空）。
+	Kind   string `json:"kind,omitempty"`
+	Shared string `json:"shared,omitempty"`
+}
+
+// AppKindView 是只有规则、现在不在联网的应用的种类（补齐四）。
+type AppKindView struct {
+	App    string `json:"app"`
+	Kind   string `json:"kind"`
+	Shared string `json:"shared,omitempty"`
 }
 
 // AppsView 是 GET /v1/apps。
@@ -105,6 +116,8 @@ type AppsView struct {
 	Truncated bool      `json:"truncated,omitempty"`
 	// Fallbacks 是正在回退到主代理的规则（补齐二：规则指向的分流出口现在不可用）。
 	Fallbacks []RuleFallback `json:"fallbacks,omitempty"`
+	// RuleKinds 是规则里出现、现在不在联网的应用的种类（补齐四：界面不自己猜）。
+	RuleKinds []AppKindView `json:"rule_kinds,omitempty"`
 }
 
 // sanitizeApp 把应用 ID 里的用户目录换成 ~（path:/Users/<名字>/… → path:~/…）。
@@ -139,7 +152,18 @@ func (d *Daemon) handleApps(w http.ResponseWriter, r *http.Request) {
 		list, v.Truncated = dp.Apps(MaxApps)
 		for _, a := range list {
 			id := sanitizeApp(string(a.App))
-			v.Apps = append(v.Apps, AppView{App: id, Name: appName(id), Conns: a.Conns, Exits: a.Exits, Reason: a.Reason})
+			v.Apps = append(v.Apps, AppView{App: id, Name: appName(id), Conns: a.Conns, Exits: a.Exits, Reason: a.Reason,
+				Kind: procinfo.AppKind(a.App), Shared: procinfo.SharedSystem[string(a.App)]})
+		}
+	}
+	live := map[string]bool{}
+	for _, a := range v.Apps {
+		live[a.App] = true
+	}
+	for _, r := range d.currentRules().Rules {
+		id := sanitizeApp(string(r.App))
+		if !live[id] {
+			v.RuleKinds = append(v.RuleKinds, AppKindView{App: id, Kind: procinfo.AppKind(r.App), Shared: procinfo.SharedSystem[string(r.App)]})
 		}
 	}
 	v.Fallbacks = d.ruleFallbacks()

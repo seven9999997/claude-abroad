@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -454,5 +455,41 @@ func TestEnvSkipRegion(t *testing.T) {
 				t.Fatalf("不应有地区命令：%s", c)
 			}
 		}
+	}
+}
+
+// 补齐四验收 b、c、d：每一轮都进历史；接口最新的在前、清空之后为空；写不下只记事件，检测结果不变；诊断包里有这份历史，
+// 而且不含每一项的说明。
+func TestEnvHistoryAPI(t *testing.T) {
+	e := newEnvEnv(t, false)
+	if code, _ := call(t, e.d, "POST", "/v1/envcheck/run", nil); code != 200 {
+		t.Fatal("检测")
+	}
+	e.k.warnFail.Store(true)
+	call(t, e.d, "POST", "/v1/envcheck/run", nil)
+	var v EnvHistoryView
+	_, b := call(t, e.d, "GET", "/v1/envcheck/history", nil)
+	if json.Unmarshal(b, &v) != nil || len(v.Entries) != 2 || !v.Entries[0].At.After(v.Entries[1].At) && !v.Entries[0].At.Equal(v.Entries[1].At) {
+		t.Fatalf("两轮结果不同，应两条、最新的在前：%s", b)
+	}
+	if strings.Contains(string(b), "警告") || strings.Contains(string(b), "看看") {
+		t.Fatalf("历史里不应有说明：%s", b)
+	}
+	_, db := call(t, e.d, "GET", "/v1/diagnostics", nil)
+	if !strings.Contains(string(db), `"envcheck_history"`) || strings.Contains(string(db), "探测经主代理回显") && strings.Contains(string(db[strings.Index(string(db), `"envcheck_history"`):]), "探测经主代理回显") {
+		t.Fatalf("诊断包里应有历史、历史部分不含说明")
+	}
+	if code, cb := call(t, e.d, "DELETE", "/v1/envcheck/history", nil); code != 200 || !strings.Contains(string(cb), `"entries":[]`) {
+		t.Fatalf("清空：%d %s", code, cb)
+	}
+	// 写不下（历史文件的位置被一个目录占着，改名失败）：只记事件，检测照常
+	if err := os.Mkdir(filepath.Join(e.dir, envcheck.RunHistoryFileName), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := call(t, e.d, "POST", "/v1/envcheck/run", nil); code != 200 {
+		t.Fatal("写不下时检测照常")
+	}
+	if !hasEvent(e.d, "envcheck", "history_failed") {
+		t.Fatal("写不下应记事件")
 	}
 }

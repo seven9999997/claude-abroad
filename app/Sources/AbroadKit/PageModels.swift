@@ -145,6 +145,18 @@ public struct AppRow: Sendable, Equatable, Identifiable {
     public var action: String? // 已有规则时的动作；没有规则时走默认
     /// 补齐二：这条规则正在回退到主代理时的说明（规则指向的分流出口现在不可用）；没有时为 nil。
     public var fallback: String? = nil
+    /// 补齐四：种类（app、system、path、unknown；旧后台不给时为 nil）和共用系统进程的说明。
+    public var kind: String? = nil
+    public var shared: String? = nil
+    public var isSystem: Bool { kind == "system" }
+}
+
+/// 给共用的系统进程设规则之前的提醒（补齐四）。
+public struct SharedRulePrompt: Sendable, Equatable {
+    public var app: String
+    public var action: String?
+    public var note: String
+    public var text: String { L10n.sharedRuleWarn(note) }
 }
 
 @MainActor
@@ -277,9 +289,15 @@ public final class AppsModel: PageModel {
         if case .ok(let st) = await client.status() { builtinPinned = st.builtinPinned ?? [] }
         var apps: [DaemonAppView] = []
         var fallbacks: [DaemonRuleFallback] = []
-        if case .ok(let a) = await client.apps() { apps = a.apps ?? []; fallbacks = a.fallbacks ?? [] }
+        var ruleKinds: [DaemonAppKindView] = []
+        if case .ok(let a) = await client.apps() { apps = a.apps ?? []; fallbacks = a.fallbacks ?? []; ruleKinds = a.ruleKinds ?? [] }
         if case .ok(let xs) = await client.exits() { exitTags = xs.map(\.tag) } else { exitTags = [] }
         rows = Self.merge(apps: apps, rules: doc, fallbacks: fallbacks)
+        // 补齐四：种类和共用说明都由后台给（在联网的在 apps 里，只有规则的在 rule_kinds 里）
+        var kinds: [String: (String?, String?)] = [:]
+        for a in apps { kinds[a.app] = (a.kind, a.shared) }
+        for k in ruleKinds { kinds[k.app] = (k.kind, k.shared) }
+        for i in rows.indices { if let k = kinds[rows[i].app] { rows[i].kind = k.0; rows[i].shared = k.1 } }
     }
 
     /// 在联网的应用和已有规则合并：先列在联网的（带规则的动作），再列只有规则的。
@@ -304,6 +322,30 @@ public final class AppsModel: PageModel {
     static func displayName(_ app: String) -> String {
         app.hasPrefix("path:") ? (app as NSString).lastPathComponent : app
     }
+
+    /// 普通应用和系统进程分开（系统进程放在后面单列；旧后台不给种类时都算普通的）。
+    public var appRows: [AppRow] { rows.filter { !$0.isSystem } }
+    public var systemRows: [AppRow] { rows.filter(\.isSystem) }
+
+    /// 给共用的系统进程设规则或删规则之前的提醒（确认才提交，取消不发请求）。
+    @Published public private(set) var sharedPrompt: SharedRulePrompt?
+
+    /// 界面上改规则的入口：共用的系统进程先提醒，其余直接提交。action 为 nil 表示删规则。
+    public func requestRule(app: String, action: String?) async {
+        if let note = rows.first(where: { $0.app == app })?.shared, !note.isEmpty {
+            sharedPrompt = SharedRulePrompt(app: app, action: action, note: note)
+            return
+        }
+        if let action { await setRule(app: app, action: action) } else { await removeRule(app: app) }
+    }
+
+    public func confirmShared() async {
+        guard let p = sharedPrompt else { return }
+        sharedPrompt = nil
+        if let a = p.action { await setRule(app: p.app, action: a) } else { await removeRule(app: p.app) }
+    }
+
+    public func cancelShared() { sharedPrompt = nil }
 
     /// 改一个应用的规则（收紧直接提交；放松的由后台要求本人授权并给出原因）。
     public func setRule(app: String, action: String) async {
@@ -365,7 +407,48 @@ public struct EnvRow: Sendable, Equatable, Identifiable {
 }
 
 @MainActor
+/// 环境检测历史的一行（补齐四）：时间、总判定、和更早一条相比变了的项。
+public struct EnvHistoryRow: Sendable, Equatable, Identifiable {
+    public var id: String { at }
+    public var at: String
+    public var text: String
+    public var changed: String?
+}
+
 public final class EnvModel: PageModel {
+    /// 补齐四：历史（最新的在前）和它自己的加载状态（不可达、失败、成功）。
+    @Published public private(set) var history: [EnvHistoryRow] = []
+    @Published public private(set) var historyState: LoadState = .loading
+    public var historyEmptyText: String? { historyState == .loaded && history.isEmpty ? L10n.envHistoryEmpty : nil }
+
+    public func loadHistory() async {
+        let o = await client.envHistory()
+        historyState = LoadState.from(o)
+        guard case .ok(let v) = o else { return }
+        history = Self.historyRows(v.entries ?? [])
+    }
+
+    public func clearHistory() async {
+        let o = await client.clearEnvHistory()
+        if case .ok(let v) = o { history = Self.historyRows(v.entries ?? []); notice = nil } else { _ = await handle(o, op: nil) }
+    }
+
+    /// 每条和更早的那一条（列表里的下一条）相比，标出结果变了的项。
+    static func historyRows(_ es: [EnvcheckRunEntry]) -> [EnvHistoryRow] {
+        es.enumerated().map { i, e in
+            var changed: String?
+            if i + 1 < es.count {
+                let prev = Dictionary((es[i + 1].items ?? []).map { ($0.id, $0.result) }, uniquingKeysWith: { a, _ in a })
+                let ch = (e.items ?? []).compactMap { it -> String? in
+                    let p = prev[it.id]
+                    return p == it.result ? nil : it.id + " " + (p ?? "") + "→" + it.result
+                }
+                if !ch.isEmpty { changed = L10n.envHistoryChanged(ch) }
+            }
+            return EnvHistoryRow(at: e.at, text: L10n.envHistoryLine(e.at, e.hard, e.lastSeen == e.at ? nil : e.lastSeen), changed: changed)
+        }
+    }
+
     @Published public private(set) var hardRows: [EnvRow] = []
     @Published public private(set) var warnRows: [EnvRow] = []
     @Published public private(set) var hard = "" // 硬性项总判定
@@ -377,6 +460,7 @@ public final class EnvModel: PageModel {
         let r = await client.envcheck()
         state = LoadState.from(r)
         if case .ok(let rep) = r { apply(rep) }
+        await loadHistory()
     }
 
     func apply(_ rep: EnvcheckReport) {

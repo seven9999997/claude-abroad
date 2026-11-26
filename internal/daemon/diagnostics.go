@@ -34,6 +34,8 @@ type Diagnostics struct {
 	// ClaudeDomains 是 Claude 访问过的域名（M6-12）：默认只放条数；用户显式选择（?include_domains=1）才放清单——
 	// 里面会有用户让 Claude Code 访问过的网站。
 	ClaudeDomains DiagnosticDomains `json:"claude_domains"`
+	// EnvHistory 是环境检测的历史（补齐四：只有时间、总判定、各项的标识和结果）。
+	EnvHistory []envcheck.RunEntry `json:"envcheck_history,omitempty"`
 }
 
 // DiagnosticDomains 是诊断包里的 Claude 访问域名。
@@ -71,6 +73,7 @@ func (d *Daemon) diagnostics(includeDomains bool) Diagnostics {
 			dg.EnvCheck = &rep
 		}
 	}
+	dg.EnvHistory = d.envHist.List()
 	cd := d.claudeDomainsView()
 	dg.ClaudeDomains.Count = cd.Count
 	if includeDomains {

@@ -148,6 +148,7 @@ func TestRegionPendingCorrupt(t *testing.T) {
 // 崩溃穷举加“写待还原文件”这个注入点：恢复时时区写入失败，在恢复的每一个改动事件之后崩溃，新进程 Recover；
 // 最终要么等于初始值，要么不相等的项都在待还原文件里，且重试后相等。
 func TestCrashWithPending(t *testing.T) {
+	t.Parallel() // 独立的测试台；耗时主要是等待（补齐四第 0 步）
 	probe := newBed(t)
 	mustOK(t, probe.m.Enable(bg))
 	probe.net.FailNext(sysnet.OpLocaleTZ, errBoom)

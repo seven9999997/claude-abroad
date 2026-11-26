@@ -127,6 +127,18 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags abroaddev -trimpath -ldflag
   完整性清单 `scripts/dev/out/integrity/integrity.json`，再把清单的摘要经 `-ldflags` 写进 abroadd 和 abroad-guard。
   只编译、不安装。开发安装（`scripts/m6/install/`）用它的输出。
 
+## 验收时的全量验证（补齐四，architect 2026-11-27）
+
+状态机包（`internal/state`）的崩溃与重启穷举里，“允许局域网”关的那两组默认只跑缩减集（每种操作至少崩溃一次、每一种改动事件
+各崩溃一次）；验收时的全量验证要打开全量、并给这个包加长时限：
+
+```sh
+ABROAD_FULL_EXHAUSTIVE=1 go test -timeout 30m ./internal/... ./cmd/... -count=1
+ABROAD_FULL_EXHAUSTIVE=1 go test -timeout 30m -race -tags abroaddev ./internal/... ./cmd/... -count=1
+```
+
+默认命令（CLAUDE.md 里的 `go test ./internal/...`）不带开关，状态机包要在默认的 10 分钟时限内跑完。以后再往这个包里加穷举，先量耗时。
+
 ## 手动运行虚拟机
 
 ```sh

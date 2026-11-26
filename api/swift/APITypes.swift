@@ -179,18 +179,33 @@ public struct DaemonAddSourceRequest: Codable, Sendable {
     }
 }
 
+public struct DaemonAppKindView: Codable, Sendable {
+    public var app: String
+    public var kind: String
+    public var shared: String?
+    enum CodingKeys: String, CodingKey {
+        case app = "app"
+        case kind = "kind"
+        case shared = "shared"
+    }
+}
+
 public struct DaemonAppView: Codable, Sendable {
     public var app: String
     public var name: String
     public var conns: Int64
     public var exits: [String]?
     public var reason: String
+    public var kind: String?
+    public var shared: String?
     enum CodingKeys: String, CodingKey {
         case app = "app"
         case name = "name"
         case conns = "conns"
         case exits = "exits"
         case reason = "reason"
+        case kind = "kind"
+        case shared = "shared"
     }
 }
 
@@ -198,10 +213,12 @@ public struct DaemonAppsView: Codable, Sendable {
     public var apps: [DaemonAppView]?
     public var truncated: Bool?
     public var fallbacks: [DaemonRuleFallback]?
+    public var ruleKinds: [DaemonAppKindView]?
     enum CodingKeys: String, CodingKey {
         case apps = "apps"
         case truncated = "truncated"
         case fallbacks = "fallbacks"
+        case ruleKinds = "rule_kinds"
     }
 }
 
@@ -326,6 +343,7 @@ public struct DaemonDiagnostics: Codable, Sendable {
     public var envcheck: EnvcheckReport?
     public var launchguard: DaemonLaunchGuardView
     public var claudeDomains: DaemonDiagnosticDomains
+    public var envcheckHistory: [EnvcheckRunEntry]?
     enum CodingKeys: String, CodingKey {
         case generatedAt = "generated_at"
         case version = "version"
@@ -333,6 +351,7 @@ public struct DaemonDiagnostics: Codable, Sendable {
         case envcheck = "envcheck"
         case launchguard = "launchguard"
         case claudeDomains = "claude_domains"
+        case envcheckHistory = "envcheck_history"
     }
 }
 
@@ -376,6 +395,13 @@ public struct DaemonEnginesView: Codable, Sendable {
         case bootChanged = "boot_changed"
         case engines = "engines"
         case vmManager = "vm_manager"
+    }
+}
+
+public struct DaemonEnvHistoryView: Codable, Sendable {
+    public var entries: [EnvcheckRunEntry]?
+    enum CodingKeys: String, CodingKey {
+        case entries = "entries"
     }
 }
 
@@ -915,6 +941,28 @@ public struct EnvcheckReport: Codable, Sendable {
         case at = "at"
         case items = "items"
         case hard = "hard"
+    }
+}
+
+public struct EnvcheckRunEntry: Codable, Sendable {
+    public var at: String
+    public var lastSeen: String
+    public var hard: String
+    public var items: [EnvcheckRunItem]?
+    enum CodingKeys: String, CodingKey {
+        case at = "at"
+        case lastSeen = "last_seen"
+        case hard = "hard"
+        case items = "items"
+    }
+}
+
+public struct EnvcheckRunItem: Codable, Sendable {
+    public var id: String
+    public var result: String
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case result = "result"
     }
 }
 

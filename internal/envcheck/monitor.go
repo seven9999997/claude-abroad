@@ -42,6 +42,8 @@ type Monitor struct {
 	Interval     time.Duration
 	Grace        time.Duration
 	OnEvent      func(kind, detail string)
+	// OnReport 在每一轮结束后收到这一轮的结果（补齐四：环境检测历史）；在锁外调用，可为 nil。
+	OnReport func(Report)
 
 	kickOnce sync.Once
 	kick     chan struct{}
@@ -100,6 +102,13 @@ func (m *Monitor) record(rep Report, passed bool) {
 	m.mu.Unlock()
 }
 
+// report 把这一轮交给 OnReport（闸门联动做完之后再调用：写历史有磁盘读写，不能拖慢关闸门）。
+func (m *Monitor) report(rep Report) {
+	if m.OnReport != nil {
+		m.OnReport(rep)
+	}
+}
+
 // ErrEnvCheck 是启用第 ⑦ 步没有通过。
 var ErrEnvCheck = errors.New("环境检测没有通过")
 
@@ -116,6 +125,7 @@ func (m *Monitor) AtEnable(ctx context.Context) error {
 	}
 	rep := m.Runner.RunWithRetry(ctx)
 	m.record(rep, rep.Hard == exitcheck.Pass)
+	defer m.report(rep)
 	switch rep.Hard {
 	case exitcheck.Pass:
 		m.event("envcheck_pass", "启用时环境检测通过")
@@ -192,5 +202,6 @@ func (m *Monitor) RunOnce(ctx context.Context) Report {
 		m.Gate.AddReason(gatesm.ReasonEnvCheck, "环境检测无法判断超过 10 分钟："+Summary(u))
 		m.event("envcheck_unknown", "环境检测无法判断超过 10 分钟："+Summary(u))
 	}
+	m.report(rep)
 	return rep
 }

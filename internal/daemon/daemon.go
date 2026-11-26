@@ -140,9 +140,10 @@ type Daemon struct {
 	// 主代理的存储（M5-4）；mainBoot 是上次下发主代理时虚拟机的启动标识（exitPushMu 保护）。
 	main      *MainStore
 	mainBoot  string
-	mainDirty bool        // 回退没有完成：下一轮无条件重新下发（exitPushMu 保护）
-	mudp      mainUDP     // 补齐二：主代理各节点的 UDP 是否可用
-	allowLAN  atomic.Bool // 补齐三：“允许局域网”
+	mainDirty bool                 // 回退没有完成：下一轮无条件重新下发（exitPushMu 保护）
+	mudp      mainUDP              // 补齐二：主代理各节点的 UDP 是否可用
+	allowLAN  atomic.Bool          // 补齐三：“允许局域网”
+	envHist   *envcheck.RunHistory // 补齐四：环境检测的历史（没有环境检测时为 nil）
 	// M5-5：冲突检查接口的缓存、手动检查出口的去重。
 	pf      preflightCache
 	exitChk exitCheckGuard

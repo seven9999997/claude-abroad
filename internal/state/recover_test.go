@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -220,16 +221,31 @@ func testCrashes(t *testing.T, reboot bool) { testCrashesRB(t, reboot, false) }
 
 func testCrashesRB(t *testing.T, reboot, rb bool) { testCrashesOpt(t, reboot, rb, false) }
 
+// FullExhaustiveEnv 打开时，“允许局域网”关的那两组也跑全量（验收时的全量验证带上；scripts/dev/README.md）。
+const FullExhaustiveEnv = "ABROAD_FULL_EXHAUSTIVE"
+
 func testCrashesOpt(t *testing.T, reboot, rb, noLAN bool) {
+	// 补齐三之后（architect 2026-11-27）：“允许局域网”只改 pf 规则里有没有局域网那几行，和崩溃恢复的逻辑正交。默认只跑缩减集：
+	// 每种操作至少崩溃一次，每一种改动事件（按事件名）在所有操作里各崩溃一次；全量由 FullExhaustiveEnv 打开。
+	reduced := noLAN && os.Getenv(FullExhaustiveEnv) != "1"
+	seen := map[string]bool{}
 	for _, op := range crashOps {
 		names := opEvents(t, op, rb)
 		if len(names) == 0 {
 			t.Fatalf("%s 没有改动事件", op.name)
 		}
+		var ks []int
+		for k := 1; k <= len(names); k++ {
+			if !reduced || k == 1 || !seen[names[k-1]] {
+				ks = append(ks, k)
+				seen[names[k-1]] = true
+			}
+		}
 		t.Run(op.name, func(t *testing.T) {
 			t.Parallel() // 每例一个独立的测试台（临时目录、假系统），没有共享的可变状态
-			for k := 1; k <= len(names); k++ {
+			for _, k := range ks {
 				t.Run(fmt.Sprintf("%02d %s", k, names[k-1]), func(t *testing.T) {
+					t.Parallel() // 每一例也是独立的测试台；耗时主要是等待，并行能明显缩短（补齐四第 0 步）
 					runCrashCaseOpt(t, op, k, names[k-1], reboot, rb, noLAN)
 				})
 			}

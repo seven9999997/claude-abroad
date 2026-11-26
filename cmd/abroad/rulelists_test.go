@@ -312,3 +312,39 @@ func TestCLINoFakeAndLAN(t *testing.T) {
 		t.Fatalf("%+v", x)
 	}
 }
+
+// 补齐四验收 e、h：check history 倒序、标出变了的项、空时说明；apps 把系统进程单列在后面、共用的带说明。
+func TestCLIHistoryAndKinds(t *testing.T) {
+	empty := false
+	p := stub(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/envcheck/history":
+			if empty || r.Method == "DELETE" {
+				fmt.Fprint(w, `{"entries":[]}`)
+				return
+			}
+			fmt.Fprint(w, `{"entries":[{"at":"T2","last_seen":"T3","hard":"fail","items":[{"id":"06","result":"fail"},{"id":"01","result":"pass"}]},`+
+				`{"at":"T1","last_seen":"T1","hard":"pass","items":[{"id":"06","result":"pass"},{"id":"01","result":"pass"}]}]}`)
+		case "/v1/apps":
+			fmt.Fprint(w, `{"apps":[{"app":"system:apsd","name":"apsd","conns":2,"kind":"system","shared":"推送服务：所有应用的推送通知都经它"},`+
+				`{"app":"com.example.a","name":"A","conns":1,"kind":"app"}]}`)
+		}
+	})
+	x := runSock(p, false, "check", "history")
+	lines := strings.Split(strings.TrimSpace(x.out), "\n")
+	if x.code != 0 || len(lines) != 2 || !strings.Contains(lines[0], "T2  硬性项：fail（一直到 T3）  变了：06 pass→fail") || strings.Contains(lines[1], "变了") {
+		t.Fatalf("check history：%+v", x)
+	}
+	if x := runSock(p, false, "check", "history", "clear"); x.code != 0 || !strings.Contains(x.out, "已清空") {
+		t.Fatalf("clear：%+v", x)
+	}
+	empty = true
+	if x := runSock(p, false, "check", "history"); !strings.Contains(x.out, "还没有环境检测的历史") {
+		t.Fatalf("空：%+v", x)
+	}
+	x = runSock(p, false, "apps")
+	ia, is := strings.Index(x.out, "A  应用"), strings.Index(x.out, "系统进程：")
+	if ia < 0 || is < ia || !strings.Contains(x.out, "apsd  系统进程  2 个连接") || !strings.Contains(x.out, "推送服务：所有应用的推送通知都经它（改它的规则会同时影响那些应用）") {
+		t.Fatalf("apps：%+v", x)
+	}
+}

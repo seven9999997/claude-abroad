@@ -248,6 +248,7 @@ var itoa = strconv.Itoa
 
 // e. 启用的每一步失败：来源 RESTORED。
 func TestEnableFailFromRestored(t *testing.T) {
+	t.Parallel() // 独立的测试台；耗时主要是等待（补齐四第 0 步）
 	for _, fault := range enableFaults(t, false) {
 		t.Run(fault.name, func(t *testing.T) {
 			b := newBed(t)
@@ -323,6 +324,7 @@ func TestEnablePreflightFail(t *testing.T) {
 
 // e. 启用的每一步失败：来源 DISABLED。
 func TestEnableFailFromDisabled(t *testing.T) {
+	t.Parallel() // 独立的测试台；耗时主要是等待（补齐四第 0 步）
 	for _, fault := range enableFaults(t, true) {
 		t.Run(fault.name, func(t *testing.T) {
 			b := newBed(t)
@@ -354,6 +356,7 @@ func TestEnableFailFromDisabled(t *testing.T) {
 
 // f. 启用失败、回滚中再失败：状态留在 ENABLING，pf 生效；之后 Restore 或 Enable 都能走完。
 func TestRollbackFailure(t *testing.T) {
+	t.Parallel() // 独立的测试台；耗时主要是等待（补齐四第 0 步）
 	rollbackFaults := []enableFault{
 		{"关虚拟机", func(b *bed) { b.vm.failStop = errInjected }},
 		{"删 DNS", func(b *bed) { b.net.FailNext(sysnet.OpDNSRemove, errInjected) }},
@@ -411,6 +414,7 @@ func restoreWrites(t *testing.T) int {
 // f. 恢复的每一步失败：状态 RESTORING（第一次写入失败时仍是 ENABLED，闸门已关），pf 生效（释放 token
 // 失败时锚点已清空）；再次 Restore 走完。
 func TestRestoreStepFailure(t *testing.T) {
+	t.Parallel() // 独立的测试台；耗时主要是等待（补齐四第 0 步）
 	faults := []enableFault{
 		{"关虚拟机", func(b *bed) { b.vm.failStop = errInjected }},
 		{"删 DNS", func(b *bed) { b.net.FailNext(sysnet.OpDNSRemove, errInjected) }},

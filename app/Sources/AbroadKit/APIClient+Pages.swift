@@ -121,6 +121,9 @@ extension APIClient {
         return await call(json("PUT", "/v1/settings/lan", B(allow_lan: on)))
     }
     public func runEnvcheck() async -> Outcome<EnvcheckReport> { await call(HTTPRequest(method: "POST", path: "/v1/envcheck/run")) }
+    /// 补齐四：环境检测的历史（最新的在前）。
+    public func envHistory() async -> Outcome<DaemonEnvHistoryView> { await get("/v1/envcheck/history") }
+    public func clearEnvHistory() async -> Outcome<DaemonEnvHistoryView> { await call(HTTPRequest(method: "DELETE", path: "/v1/envcheck/history")) }
     /// 设备体检（M6-6a）：字体等，只返回结果。
     public func deviceCheck() async -> Outcome<EnvcheckDeviceReport> { await call(HTTPRequest(method: "POST", path: "/v1/envcheck/device")) }
 

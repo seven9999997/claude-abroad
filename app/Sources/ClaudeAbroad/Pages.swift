@@ -109,22 +109,17 @@ struct AppsPage: View {
     var body: some View {
         LoadStateView(state: model.state, retry: { Task { await model.load() } }) {
             VStack(alignment: .leading, spacing: 8) {
-                List(model.rows) { r in
-                    HStack {
-                        AppIcon(app: r.app)
-                        VStack(alignment: .leading) {
-                            Text(r.name)
-                            Text(r.app).font(.caption).foregroundStyle(.secondary)
-                            if let f = r.fallback { Label(f, systemImage: "arrow.uturn.backward.circle").font(.caption).foregroundStyle(.orange) } // 补齐二
-                        }
-                        Spacer()
-                        if r.conns > 0 { Text("\(r.conns)").font(.caption.monospacedDigit()) }
-                        Menu(Self.title(r.action)) {
-                            ForEach(model.actions, id: \.self) { a in Button(Self.title(a)) { Task { await model.setRule(app: r.app, action: a) } } }
-                            if r.action != nil { Divider(); Button(L10n.delete) { Task { await model.removeRule(app: r.app) } } }
-                        }
-                        .fixedSize()
+                List {
+                    ForEach(model.appRows) { appRow($0) }
+                    if !model.systemRows.isEmpty { // 补齐四：系统进程单列在后面，默认折叠
+                        DisclosureGroup(L10n.appsSystemSection) { ForEach(model.systemRows) { appRow($0) } }
                     }
+                }
+                .alert(L10n.sharedRuleWarnTitle, isPresented: Binding(get: { model.sharedPrompt != nil }, set: { if !$0 { model.cancelShared() } })) {
+                    Button(L10n.sharedRuleConfirm) { Task { await model.confirmShared() } }
+                    Button(L10n.cancel, role: .cancel) { model.cancelShared() }
+                } message: {
+                    Text(model.sharedPrompt?.text ?? "")
                 }
                 .onDrop(of: [UTType.fileURL], isTargeted: nil) { providers in
                     for p in providers {
@@ -152,6 +147,25 @@ struct AppsPage: View {
         }
         .modifier(PageChrome(model: model))
         .task { await model.load() }
+    }
+
+    func appRow(_ r: AppRow) -> some View {
+        HStack {
+            AppIcon(app: r.app)
+            VStack(alignment: .leading) {
+                Text(r.name)
+                Text(r.app).font(.caption).foregroundStyle(.secondary)
+                if let s = r.shared { Text(s).font(.caption).foregroundStyle(.secondary) } // 补齐四：共用的系统进程
+                if let f = r.fallback { Label(f, systemImage: "arrow.uturn.backward.circle").font(.caption).foregroundStyle(.orange) } // 补齐二
+            }
+            Spacer()
+            if r.conns > 0 { Text("\(r.conns)").font(.caption.monospacedDigit()) }
+            Menu(Self.title(r.action)) {
+                ForEach(model.actions, id: \.self) { a in Button(Self.title(a)) { Task { await model.requestRule(app: r.app, action: a) } } }
+                if r.action != nil { Divider(); Button(L10n.delete) { Task { await model.requestRule(app: r.app, action: nil) } } }
+            }
+            .fixedSize()
+        }
     }
 
     static func title(_ action: String?) -> String {
@@ -225,6 +239,16 @@ struct EnvPage: View {
             List {
                 Section(L10n.envHard) { ForEach(model.hardRows) { row($0) } }
                 Section(L10n.envWarn) { ForEach(model.warnRows) { row($0) } }
+                Section(L10n.envHistoryTitle) { // 补齐四
+                    if let t = model.historyEmptyText { Text(t).foregroundStyle(.secondary) }
+                    ForEach(model.history) { h in
+                        VStack(alignment: .leading) {
+                            Text(h.text).font(.callout.monospaced())
+                            if let c = h.changed { Text(c).font(.caption).foregroundStyle(.orange) }
+                        }
+                    }
+                    if !model.history.isEmpty { Button(L10n.envHistoryClear) { Task { await model.clearHistory() } }.disabled(model.busy) }
+                }
                 Section(L10n.envDevice) {
                     Text(model.deviceCheckText).foregroundStyle(.secondary)
                     Button(L10n.deviceCheckRun) { Task { await model.runDevice() } }.disabled(model.busy)

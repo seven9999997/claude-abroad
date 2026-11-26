@@ -144,6 +144,18 @@ public enum L10n {
     public static let rulesNoFakeHelp = "名单里的域名经主代理的加密 DNS 解析出真实地址，之后的连接仍按规则走（默认走主代理）；适合投屏、设备发现一类需要真实地址的域名。内置的几项（时间同步、联网检测、.lan、.local）删不掉。添加是放松保护，需要本人授权；Claude 的域名和置顶域名加不进来。"
     public static let allowLANTitle = "允许局域网"
     public static let allowLANHelp = "关掉后，局域网里的打印机、NAS、投屏、别的电脑的共享都连不上（断网和启用时都一样）。关掉是收紧；从关到开是放松保护，需要本人授权。已回国时只记下，下次启用生效。"
+    // 补齐四：环境检测的历史、系统进程单列。
+    public static let envHistoryTitle = "历史"
+    public static let envHistoryEmpty = "还没有环境检测的历史（启用之后每一轮检测都会记下；结果和上一条相同时只更新时间）"
+    public static let envHistoryClear = "清空历史"
+    public static func envHistoryLine(_ at: String, _ hard: String, _ until: String?) -> String {
+        at + "  硬性项：" + hard + (until.map { "（一直到 " + $0 + "）" } ?? "")
+    }
+    public static func envHistoryChanged(_ items: [String]) -> String { "变了：" + items.joined(separator: "、") }
+    public static let appsSystemSection = "系统进程"
+    public static let sharedRuleWarnTitle = "这个进程替很多应用联网"
+    public static func sharedRuleWarn(_ note: String) -> String { note + "。改它的规则会同时影响那些应用，确定要改吗？" }
+    public static let sharedRuleConfirm = "仍然修改"
     public static let rulesOfflineTitle = "离线放行名单"
     public static let rulesOfflineHelp = "停用或闸门关着时仍可直连的应用（应用 ID）。添加是放松保护，需要本人授权；Claude 加不进来。"
     public static let rulesUDP443Title = "拦截 UDP 443"

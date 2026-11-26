@@ -135,3 +135,38 @@ func TestBypassExtraRules(t *testing.T) {
 		t.Fatal("删掉后恢复分配假地址")
 	}
 }
+
+// 补齐四验收 f：在联网的应用和只有规则的应用都带种类；共用的系统进程带说明；状态里仍然没有应用 ID（原有测试守着）。
+func TestAppKinds(t *testing.T) {
+	e := newM3Daemon(t, "rules:\n  - {app: system:apsd, action: block}\n  - {app: \"path:/usr/local/bin/x\", action: block}\n  - {app: com.example.only, action: block}\n")
+	plain := netip.AddrPortFrom(e.lookup(t, "plain.example.org"), 443)
+	held, err := e.dial(20001, plain) // com.app.a（m3 的假识别）；在途的才算在联网
+	if err != nil || echoConn(held) != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	_, b := call(t, e.d, "GET", "/v1/apps", nil)
+	var v AppsView
+	if json.Unmarshal(b, &v) != nil {
+		t.Fatalf("%s", b)
+	}
+	kinds := map[string]AppKindView{}
+	for _, a := range v.Apps {
+		kinds[a.App] = AppKindView{App: a.App, Kind: a.Kind, Shared: a.Shared}
+	}
+	for _, k := range v.RuleKinds {
+		kinds[k.App] = k
+	}
+	want := map[string]string{"system:apsd": "system", "path:/usr/local/bin/x": "path", "com.example.only": "app"}
+	for app, k := range want {
+		if kinds[app].Kind != k {
+			t.Errorf("%s 的种类：%+v，应为 %s", app, kinds[app], k)
+		}
+	}
+	if kinds["system:apsd"].Shared == "" || kinds["com.example.only"].Shared != "" {
+		t.Fatalf("共用的系统进程才有说明：%+v", kinds)
+	}
+	if len(v.Apps) == 0 || v.Apps[0].Kind == "" {
+		t.Fatalf("在联网的应用也要有种类：%s", b)
+	}
+}

@@ -264,6 +264,24 @@
         ],
         "type": "object"
       },
+      "DaemonAppKindView": {
+        "properties": {
+          "app": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "app",
+          "kind"
+        ],
+        "type": "object"
+      },
       "DaemonAppView": {
         "properties": {
           "app": {
@@ -279,10 +297,16 @@
             },
             "type": "array"
           },
+          "kind": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
           "reason": {
+            "type": "string"
+          },
+          "shared": {
             "type": "string"
           }
         },
@@ -305,6 +329,12 @@
           "fallbacks": {
             "items": {
               "$ref": "#/components/schemas/DaemonRuleFallback"
+            },
+            "type": "array"
+          },
+          "rule_kinds": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonAppKindView"
             },
             "type": "array"
           },
@@ -524,6 +554,12 @@
           "envcheck": {
             "$ref": "#/components/schemas/EnvcheckReport"
           },
+          "envcheck_history": {
+            "items": {
+              "$ref": "#/components/schemas/EnvcheckRunEntry"
+            },
+            "type": "array"
+          },
           "generated_at": {
             "format": "date-time",
             "type": "string"
@@ -621,6 +657,17 @@
           "boot_changed",
           "reachable"
         ],
+        "type": "object"
+      },
+      "DaemonEnvHistoryView": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/EnvcheckRunEntry"
+            },
+            "type": "array"
+          }
+        },
         "type": "object"
       },
       "DaemonEnvSettingsRequest": {
@@ -1586,6 +1633,48 @@
         ],
         "type": "object"
       },
+      "EnvcheckRunEntry": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "hard": {
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EnvcheckRunItem"
+            },
+            "type": "array"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "hard",
+          "last_seen"
+        ],
+        "type": "object"
+      },
+      "EnvcheckRunItem": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "result"
+        ],
+        "type": "object"
+      },
       "GatesmExitView": {
         "properties": {
           "agent_up": {
@@ -2327,6 +2416,62 @@
           }
         },
         "x-level": "normal"
+      }
+    },
+    "/v1/envcheck/history": {
+      "delete": {
+        "description": "清空环境检测的历史",
+        "operationId": "envcheck-history-clear",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonEnvHistoryView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "normal"
+      },
+      "get": {
+        "description": "环境检测的历史（补齐四；每条只有时间、总判定、各项的标识和结果）",
+        "operationId": "envcheck-history",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonEnvHistoryView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
       }
     },
     "/v1/envcheck/run": {

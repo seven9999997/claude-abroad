@@ -28,6 +28,8 @@ type command struct {
 var commands = []command{
 	{path: []string{"status"}, route: "status", run: cmdStatus},
 	{path: []string{"check"}, route: "envcheck-run", run: cmdCheck},
+	{path: []string{"check", "history"}, route: "envcheck-history", run: cmdCheckHistory},
+	{path: []string{"check", "history", "clear"}, route: "envcheck-history-clear", run: cmdCheckHistoryClear},
 	{path: []string{"up"}, route: "enable", run: cmdUp},
 	{path: []string{"down"}, route: "disable", run: cmdDown},
 	{path: []string{"restore"}, route: "restore", run: cmdRestore},
@@ -510,17 +512,33 @@ func cmdApps(a *app, args []string) int {
 	return a.out(resp, func() {
 		var v struct {
 			Apps []struct {
-				Name  string   `json:"name"`
-				Conns int      `json:"conns"`
-				Exits []string `json:"exits"`
+				Name   string   `json:"name"`
+				Conns  int      `json:"conns"`
+				Exits  []string `json:"exits"`
+				Kind   string   `json:"kind"`
+				Shared string   `json:"shared"`
 			} `json:"apps"`
 		}
 		_ = json.Unmarshal(resp.Body, &v)
 		if len(v.Apps) == 0 {
 			fmt.Fprintln(a.stdout, "现在没有在联网的应用")
 		}
-		for _, x := range v.Apps {
-			fmt.Fprintf(a.stdout, "%s  %d 个连接  %s\n", x.Name, x.Conns, strings.Join(x.Exits, "、"))
+		// 补齐四：系统进程排在后面单列，共用的带说明
+		for _, sys := range []bool{false, true} {
+			printed := false
+			for _, x := range v.Apps {
+				if (x.Kind == "system") != sys {
+					continue
+				}
+				if sys && !printed {
+					fmt.Fprintln(a.stdout, "系统进程：")
+				}
+				printed = true
+				fmt.Fprintf(a.stdout, "%s  %s  %d 个连接  %s\n", x.Name, kindText(x.Kind), x.Conns, strings.Join(x.Exits, "、"))
+				if x.Shared != "" {
+					fmt.Fprintf(a.stdout, "    %s（改它的规则会同时影响那些应用）\n", x.Shared)
+				}
+			}
 		}
 	})
 }
@@ -1306,4 +1324,78 @@ func udpText(s string) string {
 		return "UDP 不可用"
 	}
 	return "UDP 还不知道"
+}
+
+// kindText 是应用的种类（补齐四）。
+func kindText(k string) string {
+	switch k {
+	case "app":
+		return "应用"
+	case "system":
+		return "系统进程"
+	case "path":
+		return "按路径识别的程序"
+	case "unknown":
+		return "识别不出"
+	}
+	return ""
+}
+
+// ---- 补齐四：环境检测的历史 ----
+
+type envHistEntry struct {
+	At       string `json:"at"`
+	LastSeen string `json:"last_seen"`
+	Hard     string `json:"hard"`
+	Items    []struct {
+		ID     string `json:"id"`
+		Result string `json:"result"`
+	} `json:"items"`
+}
+
+func cmdCheckHistory(a *app, args []string) int {
+	resp, code := a.call("GET", "/v1/envcheck/history", nil)
+	if code != ExitOK {
+		return code
+	}
+	return a.out(resp, func() {
+		var v struct {
+			Entries []envHistEntry `json:"entries"`
+		}
+		_ = json.Unmarshal(resp.Body, &v)
+		if len(v.Entries) == 0 {
+			fmt.Fprintln(a.stdout, "还没有环境检测的历史")
+			return
+		}
+		for i, e := range v.Entries { // 最新的在前；每条标出和更早的那一条相比变了的项
+			line := fmt.Sprintf("%s  硬性项：%s", e.At, e.Hard)
+			if e.LastSeen != e.At {
+				line += "（一直到 " + e.LastSeen + "）"
+			}
+			if i+1 < len(v.Entries) {
+				prev := map[string]string{}
+				for _, it := range v.Entries[i+1].Items {
+					prev[it.ID] = it.Result
+				}
+				var ch []string
+				for _, it := range e.Items {
+					if p, ok := prev[it.ID]; !ok || p != it.Result {
+						ch = append(ch, it.ID+" "+p+"→"+it.Result)
+					}
+				}
+				if len(ch) > 0 {
+					line += "  变了：" + strings.Join(ch, "、")
+				}
+			}
+			fmt.Fprintln(a.stdout, line)
+		}
+	})
+}
+
+func cmdCheckHistoryClear(a *app, args []string) int {
+	resp, code := a.call("DELETE", "/v1/envcheck/history", nil)
+	if code != ExitOK {
+		return code
+	}
+	return a.out(resp, func() { fmt.Fprintln(a.stdout, "已清空环境检测的历史") })
 }

@@ -206,6 +206,7 @@ func (d *Daemon) setupEnv() {
 		return
 	}
 	d.envSettings = &envcheck.Settings{Path: filepath.Join(d.opts.StateDir, envcheck.SettingsFileName)}
+	d.envHist = &envcheck.RunHistory{Dir: d.opts.StateDir}
 	d.envItemsList = d.envItems(e)
 	d.env = &envcheck.Monitor{
 		BeforeEnable: d.measureRealIP, // 启用时测一次本机真实公网 IP（只在内存）
@@ -219,8 +220,37 @@ func (d *Daemon) setupEnv() {
 			d.events.Add("envcheck", kind, detail)
 			d.checkResolverLock() // 环境检测时顺带做解析锁自检（M6-3；只读）
 		},
+		OnReport: func(rep envcheck.Report) { // 补齐四：历史。写不下只记事件，检测结果和闸门不受影响
+			if err := d.envHist.Record(rep); err != nil {
+				d.events.Add("envcheck", "history_failed", "环境检测的历史没能写下")
+			}
+		},
 	}
 	d.m.D.Env = d.env
+}
+
+// EnvHistoryView 是 GET /v1/envcheck/history（补齐四）：最新的在前；每条只有时间、总判定、各项的标识和结果。
+type EnvHistoryView struct {
+	Entries []envcheck.RunEntry `json:"entries"`
+}
+
+func (d *Daemon) envHistoryView() EnvHistoryView {
+	return EnvHistoryView{Entries: d.envHist.List()}
+}
+
+func (d *Daemon) handleEnvHistory(w http.ResponseWriter, r *http.Request) {
+	_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 64<<10))
+	writeJSON(w, http.StatusOK, d.envHistoryView())
+}
+
+func (d *Daemon) handleEnvHistoryClear(w http.ResponseWriter, r *http.Request) {
+	_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 64<<10))
+	if err := d.envHist.Clear(); err != nil {
+		writeErr(w, http.StatusInternalServerError, api.ErrorBody{Error: "清空环境检测的历史失败：" + err.Error()})
+		return
+	}
+	d.events.Add("envcheck", "history_cleared", "")
+	writeJSON(w, http.StatusOK, d.envHistoryView())
 }
 
 func (d *Daemon) envNow() time.Time {
