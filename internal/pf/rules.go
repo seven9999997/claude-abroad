@@ -9,6 +9,7 @@ package pf
 
 import (
 	"bytes"
+	"claude-abroad/internal/rules"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -35,10 +36,8 @@ type Config struct {
 
 // AnthropicNets 是回国拦截的地址段（M6-11a）：ARIN 登记给 Anthropic, PBC 的两段（2026-11-26 经 rdap.arin.net 查询：
 // NET-160-79-104-0-1 160.79.104.0/21，网络名 AP-2440；NET6-2607-6BC0-1 2607:6bc0::/32，网络名 ANTHROPIC-V6）。只能追加。
-var AnthropicNets = []netip.Prefix{
-	netip.MustParsePrefix("160.79.104.0/21"),
-	netip.MustParsePrefix("2607:6bc0::/32"),
-}
+// 定义在 rules（置顶的补充匹配和这里共用一份，补齐二第 0 步），这里只引用。
+var AnthropicNets = rules.AnthropicNets()
 
 // 名字只收明确的形式，挡住 pf 的保留字（any、all、self、inet6、unknown、纯数字……），
 // 免得离线求值器把它们当普通名字、而真实 pf 另有语义。

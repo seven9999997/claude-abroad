@@ -122,7 +122,9 @@ struct MainProxyPage: View {
             VStack(alignment: .leading, spacing: 8) {
                 Picker(L10n.exitNode, selection: $model.selectedExit) {
                     Text(L10n.none).tag(String?.none)
-                    ForEach(model.nodes) { n in Text(L10n.nodeLine(n.name, n.type, n.source)).tag(String?.some(n.id)) }
+                    ForEach(model.nodes) { n in
+                        Text(L10n.nodeLine(n.name, n.type, n.source) + (n.udpLabel.map { L10n.listSeparator + $0 } ?? "")).tag(String?.some(n.id))
+                    }
                 }
                 Text(L10n.relays).font(.caption)
                 ForEach(Array(model.via.enumerated()), id: \.offset) { i, id in

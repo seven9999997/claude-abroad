@@ -347,8 +347,24 @@ public enum L10n {
         case .regionReady: return "地区已就绪"
         case .launchBlocked: return "已阻止 Claude 启动"
         case .integrityFailed: return "程序文件不完整"
+        case .udpUnavailable: return "主代理的 UDP 不可用"
+        case .exitFallback: return "分流出口不可用"
         }
     }
+    // 补齐二：UDP 不可用、分流出口回退到主代理（只用出口标签和应用 ID，不出现任何地址）。
+    public static let udpUnavailableTitle = "主代理的 UDP 不可用"
+    public static let udpUnavailableDetail = "语音、视频通话和部分游戏会不通；换一个支持 UDP 的节点可以恢复。"
+    public static func udpLabel(_ state: String?) -> String {
+        switch state {
+        case "available": return "UDP 可用"
+        case "unavailable": return "UDP 不可用"
+        default: return "UDP 还不知道"
+        }
+    }
+    public static func fallbackMark(_ exit: String) -> String { "分流出口 " + exit + " 现在不可用，流量改走主代理" }
+    public static func exitAffected(_ apps: [String]) -> String { "受影响的规则：" + apps.joined(separator: "、") + "（流量改走主代理）" }
+    public static let notifyUDPUnavailable = "主代理的 UDP 不可用：语音、视频通话和部分游戏会不通。换一个支持 UDP 的节点可以恢复。"
+    public static func notifyExitFallback(_ exit: String, _ n: Int) -> String { "分流出口 " + exit + " 不可用：" + String(n) + " 条规则的流量改走主代理。" }
     public static func notifyProtectionLost(_ reason: String, _ detail: String) -> String {
         "代理流量已关闭：" + reason + (detail.isEmpty ? "" : "（" + detail + "）")
     }

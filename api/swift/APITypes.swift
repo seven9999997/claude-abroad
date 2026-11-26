@@ -197,9 +197,11 @@ public struct DaemonAppView: Codable, Sendable {
 public struct DaemonAppsView: Codable, Sendable {
     public var apps: [DaemonAppView]?
     public var truncated: Bool?
+    public var fallbacks: [DaemonRuleFallback]?
     enum CodingKeys: String, CodingKey {
         case apps = "apps"
         case truncated = "truncated"
+        case fallbacks = "fallbacks"
     }
 }
 
@@ -423,10 +425,12 @@ public struct DaemonExitStatus: Codable, Sendable {
     public var tag: String
     public var kind: String?
     public var avail: GatesmExitView
+    public var affectedCount: Int64?
     enum CodingKeys: String, CodingKey {
         case tag = "tag"
         case kind = "kind"
         case avail = "avail"
+        case affectedCount = "affected_count"
     }
 }
 
@@ -522,10 +526,12 @@ public struct DaemonMainProxyNodeView: Codable, Sendable {
     public var id: String
     public var name: String
     public var type: String
+    public var udp: String?
     enum CodingKeys: String, CodingKey {
         case id = "id"
         case name = "name"
         case type = "type"
+        case udp = "udp"
     }
 }
 
@@ -696,6 +702,17 @@ public struct DaemonReturnBlockStatus: Codable, Sendable {
     }
 }
 
+public struct DaemonRuleFallback: Codable, Sendable {
+    public var app: String
+    public var exit: String
+    public var reason: String
+    enum CodingKeys: String, CodingKey {
+        case app = "app"
+        case exit = "exit"
+        case reason = "reason"
+    }
+}
+
 public struct DaemonRulesSummary: Codable, Sendable {
     public var `default`: String
     public var direct: Int64
@@ -768,6 +785,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var launchControl: Bool?
     public var prepare: DaemonPrepareStatus?
     public var returnBlock: DaemonReturnBlockStatus?
+    public var mainUdp: String?
     public var builtinPinned: [String]?
     public var exits: [DaemonExitStatus]?
     public var opens: [String: DaemonExitCounts]?
@@ -794,6 +812,7 @@ public struct DaemonStatus: Codable, Sendable {
         case launchControl = "launch_control"
         case prepare = "prepare"
         case returnBlock = "return_block"
+        case mainUdp = "main_udp"
         case builtinPinned = "builtin_pinned"
         case exits = "exits"
         case opens = "opens"

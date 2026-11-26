@@ -429,3 +429,35 @@ func TestNoSensitiveLeak(t *testing.T) {
 func TestNoDirectDial(t *testing.T) {
 	srccheck.NoDial(t, ".", map[string][]string{"transport.go": {"http.Transport", "http.Client"}})
 }
+
+// 补齐二验收 a：UDP 是否可用的推导——收到应答可用；应答不对不可用；回应帧显示成功但没有应答（silent）、而出口的 HTTPS
+// 通过时不可用；连不上 UDP 通道、没检查过时还不知道。探测和整轮判定不变（TestUDPProbe 照旧）。
+func TestUDPAvailability(t *testing.T) {
+	for mode, want := range map[string]string{"ok": UDPAvailable, "badid": UDPUnavailable, "silent": UDPUnavailable, "connect": UDPUnknown} {
+		w := newWorld(t)
+		w.set(func(w *world) { w.udpMode = mode })
+		var got Report
+		c := w.checker()
+		c.OnReport = func(r Report) { got = r }
+		rep := c.Check(context.Background(), "main", Options{Base: base(exitpolicy.RuleAny, "203.0.113.7")})
+		if rep.UDPAvailability() != want || got.UDPAvailability() != want {
+			t.Errorf("UDP %s：%s，期望 %s", mode, rep.UDPAvailability(), want)
+		}
+	}
+	// 出口本身不通（HTTPS 也超时）：UDP 超时说明不了什么
+	w := newWorld(t)
+	w.set(func(w *world) {
+		for _, h := range testHosts {
+			w.mode[h] = "timeout"
+		}
+		w.udpMode = "silent"
+	})
+	c := w.checker()
+	c.Total, c.HTTPS, c.UDP = 600*time.Millisecond, 300*time.Millisecond, 300*time.Millisecond
+	if a := c.Check(context.Background(), "main", Options{Base: base(exitpolicy.RuleAny, "203.0.113.7")}).UDPAvailability(); a != UDPUnknown {
+		t.Fatalf("出口不通时应是还不知道：%s", a)
+	}
+	if (Report{}).UDPAvailability() != UDPUnknown {
+		t.Fatal("没检查过应是还不知道")
+	}
+}

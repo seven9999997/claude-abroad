@@ -67,6 +67,9 @@ public struct ExitRow: Sendable, Equatable, Identifiable {
     public var items: [String: String]
     public var tcp: Int64
     public var udp: Int64
+    /// 补齐二：指向这个出口的规则；出口不可用时显示“受影响的规则”。
+    public var affected: [String] = []
+    public var affectedText: String? { !up && !affected.isEmpty ? L10n.exitAffected(affected) : nil }
 }
 
 @MainActor
@@ -91,7 +94,7 @@ public final class ExitsModel: PageModel {
         if case .ok(let st) = await client.status() { opens = st.opens ?? [:] }
         rows = xs.map { x in
             ExitRow(tag: x.tag, kind: x.kind ?? "", up: x.avail.up, reason: x.avail.reason ?? "", check: x.avail.check ?? "",
-                    items: x.avail.items ?? [:], tcp: opens[x.tag]?.tcp ?? 0, udp: opens[x.tag]?.udp ?? 0)
+                    items: x.avail.items ?? [:], tcp: opens[x.tag]?.tcp ?? 0, udp: opens[x.tag]?.udp ?? 0, affected: x.affected ?? [])
         }
     }
 
@@ -140,6 +143,8 @@ public struct AppRow: Sendable, Equatable, Identifiable {
     public var conns: Int
     public var exits: [String]
     public var action: String? // 已有规则时的动作；没有规则时走默认
+    /// 补齐二：这条规则正在回退到主代理时的说明（规则指向的分流出口现在不可用）；没有时为 nil。
+    public var fallback: String? = nil
 }
 
 @MainActor
@@ -266,13 +271,21 @@ public final class AppsModel: PageModel {
         rules = doc
         if case .ok(let st) = await client.status() { builtinPinned = st.builtinPinned ?? [] }
         var apps: [DaemonAppView] = []
-        if case .ok(let a) = await client.apps() { apps = a.apps ?? [] }
+        var fallbacks: [DaemonRuleFallback] = []
+        if case .ok(let a) = await client.apps() { apps = a.apps ?? []; fallbacks = a.fallbacks ?? [] }
         if case .ok(let xs) = await client.exits() { exitTags = xs.map(\.tag) } else { exitTags = [] }
-        rows = Self.merge(apps: apps, rules: doc)
+        rows = Self.merge(apps: apps, rules: doc, fallbacks: fallbacks)
     }
 
     /// 在联网的应用和已有规则合并：先列在联网的（带规则的动作），再列只有规则的。
-    static func merge(apps: [DaemonAppView], rules: RulesDoc) -> [AppRow] {
+    static func merge(apps: [DaemonAppView], rules: RulesDoc, fallbacks: [DaemonRuleFallback] = []) -> [AppRow] {
+        var out = mergeRows(apps: apps, rules: rules)
+        let fb = Dictionary(fallbacks.map { ($0.app, $0.exit) }, uniquingKeysWith: { a, _ in a })
+        for i in out.indices { if let ex = fb[out[i].app] { out[i].fallback = L10n.fallbackMark(ex) } }
+        return out
+    }
+
+    static func mergeRows(apps: [DaemonAppView], rules: RulesDoc) -> [AppRow] {
         var byApp: [String: String] = [:]
         for r in rules.rules { byApp[r.app] = r.action }
         var out = apps.map { AppRow(app: $0.app, name: $0.name, conns: Int($0.conns), exits: $0.exits ?? [], action: byApp[$0.app]) }

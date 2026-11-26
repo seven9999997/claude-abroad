@@ -31,6 +31,9 @@ public struct NodeRow: Sendable, Equatable, Identifiable {
     public var name: String
     public var type: String
     public var source: String
+    /// 补齐二：最近一次出口检查得到的 UDP 是否可用（available、unavailable、unknown；旧后台不给时为 nil）。
+    public var udp: String? = nil
+    public var udpLabel: String? { udp == nil ? nil : L10n.udpLabel(udp) }
 }
 
 /// 失败时回退的情况（取自后台“下一步”那一段的原话）。
@@ -123,7 +126,7 @@ public final class MainProxyModel: ObservableObject {
     public func refresh() async {
         if case .ok(let vs) = await client.sources() {
             sources = vs.map { SourceRow(id: $0.id, name: $0.name, kind: $0.kind, nodeCount: $0.nodes?.count ?? 0, updated: $0.updated, error: $0.error) }
-            nodes = vs.flatMap { s in (s.nodes ?? []).map { NodeRow(id: $0.id, name: $0.name, type: $0.type, source: s.name) } }
+            nodes = vs.flatMap { s in (s.nodes ?? []).map { NodeRow(id: $0.id, name: $0.name, type: $0.type, source: s.name, udp: $0.udp) } }
         }
         if case .ok(let v) = await client.mainProxy() {
             view = v

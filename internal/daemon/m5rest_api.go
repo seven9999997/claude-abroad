@@ -103,6 +103,8 @@ type AppView struct {
 type AppsView struct {
 	Apps      []AppView `json:"apps"`
 	Truncated bool      `json:"truncated,omitempty"`
+	// Fallbacks 是正在回退到主代理的规则（补齐二：规则指向的分流出口现在不可用）。
+	Fallbacks []RuleFallback `json:"fallbacks,omitempty"`
 }
 
 // sanitizeApp 把应用 ID 里的用户目录换成 ~（path:/Users/<名字>/… → path:~/…）。
@@ -140,6 +142,7 @@ func (d *Daemon) handleApps(w http.ResponseWriter, r *http.Request) {
 			v.Apps = append(v.Apps, AppView{App: id, Name: appName(id), Conns: a.Conns, Exits: a.Exits, Reason: a.Reason})
 		}
 	}
+	v.Fallbacks = d.ruleFallbacks()
 	writeJSON(w, http.StatusOK, v)
 }
 

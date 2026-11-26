@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -243,5 +244,30 @@ func TestCLIRulesPutsCarryIfMatch(t *testing.T) {
 	}
 	if puts != 10 || without != 0 {
 		t.Fatalf("每个规则提交都应带 If-Match：提交 %d 次，没带的 %d 次", puts, without)
+	}
+}
+
+// 补齐二验收 h：status 写出主代理的 UDP 和正在回退的规则；main nodes 每个节点带 UDP 标记。
+func TestCLIUDPAndFallbackOutput(t *testing.T) {
+	p := stub(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/status":
+			fmt.Fprint(w, `{"state":"ENABLED","gate_open":true,"gate":{"open":true},"main_udp":"unavailable",`+
+				`"exits":[{"tag":"hk","avail":{"up":false,"reason":"最近一次检查没有通过"},"affected_count":1},`+
+				`{"tag":"jp","avail":{"up":false,"reason":"x"}},{"tag":"us","avail":{"up":true},"affected_count":2}]}`)
+		case "/v1/main-proxy/sources":
+			fmt.Fprint(w, `[{"id":"s1","name":"本地","kind":"local","nodes":[{"id":"n1","name":"东京","type":"trojan","udp":"available"},`+
+				`{"id":"n2","name":"大阪","type":"ss","udp":"unavailable"},{"id":"n3","name":"首尔","type":"ss","udp":"unknown"}]}]`)
+		}
+	})
+	x := runSock(p, false, "status")
+	if x.code != 0 || !strings.Contains(x.out, "主代理的 UDP：不可用（语音、视频通话") ||
+		!strings.Contains(x.out, "分流出口 hk 现在不可用（最近一次检查没有通过）：1 条规则的流量改走主代理") ||
+		strings.Contains(x.out, "分流出口 jp") || strings.Contains(x.out, "分流出口 us") {
+		t.Fatalf("status：%+v", x)
+	}
+	x = runSock(p, false, "main", "nodes")
+	if !strings.Contains(x.out, "东京  trojan  UDP 可用") || !strings.Contains(x.out, "大阪  ss  UDP 不可用") || !strings.Contains(x.out, "首尔  ss  UDP 还不知道") {
+		t.Fatalf("main nodes：%+v", x)
 	}
 }

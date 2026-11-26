@@ -40,6 +40,8 @@ type MainProxyNodeView struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Type string `json:"type"`
+	// UDP 是这个节点最近一次出口检查得到的 UDP 是否可用（补齐二：available、unavailable、unknown）；只在来源列表里给。
+	UDP string `json:"udp,omitempty"`
 }
 
 // MainProxySourceView 是查询里的一个来源（不含订阅地址）。

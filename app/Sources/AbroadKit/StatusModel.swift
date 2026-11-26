@@ -219,6 +219,12 @@ public final class StatusModel: ObservableObject {
         return L10n.returnBlockHome
     }
 
+    /// 补齐二：已启用、主代理的 UDP 不可用时首页和菜单栏的说明（后果和办法）；其余情况为空。
+    public var udpNotice: String? {
+        guard reachable, let st = status, st.state == "ENABLED", st.mainUdp == "unavailable" else { return nil }
+        return L10n.udpUnavailableDetail
+    }
+
     /// 后台不可达时的说明。
     public var connectionText: String? {
         guard !reachable, let c = connection else { return nil }

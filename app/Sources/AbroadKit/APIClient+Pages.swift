@@ -7,6 +7,8 @@ public struct ExitItem: Decodable, Sendable, Equatable {
     public var tag: String
     public var kind: String?
     public var avail: Avail
+    /// 补齐二：指向这个出口的规则（应用 ID）。
+    public var affected: [String]?
 
     public struct Avail: Decodable, Sendable, Equatable {
         public var up: Bool

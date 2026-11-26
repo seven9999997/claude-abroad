@@ -26,10 +26,10 @@ func TestGuardReturnBlockSetDev(t *testing.T) {
 		write func(dir string)
 		nets  []any
 	}{
-		"测试": {func(d string) { _ = state.WriteReturnBlockSet(d, pf.SetTest) }, []any{pf.TestNets}},
-		"真实": {func(d string) { _ = state.WriteReturnBlockSet(d, pf.SetReal) }, []any{pf.AnthropicNets}},
-		"不在": {func(string) {}, nil},
-		"损坏": {func(d string) { _ = os.WriteFile(filepath.Join(d, state.ReturnBlockSetFile), []byte("all\n"), 0o600) }, nil},
+		"测试":   {func(d string) { _ = state.WriteReturnBlockSet(d, pf.SetTest) }, []any{pf.TestNets}},
+		"真实":   {func(d string) { _ = state.WriteReturnBlockSet(d, pf.SetReal) }, []any{pf.AnthropicNets}},
+		"不在":   {func(string) {}, nil},
+		"损坏":   {func(d string) { _ = os.WriteFile(filepath.Join(d, state.ReturnBlockSetFile), []byte("all\n"), 0o600) }, nil},
 		"权限过宽": {func(d string) { _ = os.WriteFile(filepath.Join(d, state.ReturnBlockSetFile), []byte("test\n"), 0o644) }, nil},
 	} {
 		t.Run(name, func(t *testing.T) {

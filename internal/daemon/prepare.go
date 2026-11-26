@@ -71,7 +71,7 @@ func (d *Daemon) tryPrepare() PrepareStatus {
 	if _, err := os.Stat(d.preparedMarker()); err == nil {
 		ps.Done = true
 		d.writeReturnBlockSet(false) // M6-11b 之前做的首次准备没有选择文件：补写
-		d.backfillLock(ps) // M6-12：新版本的内置名单比写入时多出来的，补写（冲突时不算完成）
+		d.backfillLock(ps)           // M6-12：新版本的内置名单比写入时多出来的，补写（冲突时不算完成）
 		return *ps
 	}
 	if d.uninstalled() {

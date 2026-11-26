@@ -2,10 +2,10 @@ package main
 
 import (
 	"bytes"
-	"net/http"
 	"context"
 	"encoding/json"
 	"net"
+	"net/http"
 	"net/netip"
 	"os"
 	"path/filepath"

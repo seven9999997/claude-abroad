@@ -6,8 +6,11 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"claude-abroad/internal/rules"
 )
 
 var update = flag.Bool("update", false, "重写 testdata/*.golden")
@@ -174,5 +177,20 @@ func TestRenderReturnBlock(t *testing.T) {
 		if err != nil || matched != c.matched || (matched && pass) {
 			t.Errorf("%s：命中 %v 放行 %v（应命中 %v、命中时拦截）%v", c.dst, matched, pass, c.matched, err)
 		}
+	}
+}
+
+// 补齐二第 0 步：回国拦截和置顶的补充匹配用同一组登记地址段（登记的 /32）；回国拦截的规则文本不变（golden 守着）。
+func TestAnthropicNetsSingleSource(t *testing.T) {
+	if !slices.Equal(AnthropicNets, rules.AnthropicNets()) {
+		t.Fatalf("两处应是同一组：%v %v", AnthropicNets, rules.AnthropicNets())
+	}
+	for _, a := range []string{"2607:6bc0::1", "2607:6bc0:ffff::1", "160.79.104.10"} {
+		if !rules.InAnthropicNet(netip.MustParseAddr(a)) {
+			t.Errorf("%s 应按置顶处理", a)
+		}
+	}
+	if rules.InAnthropicNet(netip.MustParseAddr("2607:6bc1::1")) {
+		t.Error("段外的地址不应命中")
 	}
 }

@@ -83,7 +83,13 @@ func (d *Daemon) handleSourcesList(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, errBody{mainErr("读主代理的来源", err, "请检查状态目录。").Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, sourceViews(s))
+	vs := sourceViews(s)
+	for i := range vs { // 补齐二：每个节点最近一次的 UDP 结果
+		for j := range vs[i].Nodes {
+			vs[i].Nodes[j].UDP = d.nodeUDP(vs[i].Nodes[j].ID)
+		}
+	}
+	writeJSON(w, http.StatusOK, vs)
 }
 
 // fetchSource 抓取订阅（v2.2 决定 5）：启用时经主代理（abroadd 的流量和本机其他流量一样进虚拟网卡）；未启用时必须由调用方
@@ -409,6 +415,7 @@ func (d *Daemon) switchMain(w http.ResponseWriter, r *http.Request, p mainPlan, 
 		fail(http.StatusBadGateway, "把新的主代理配置下发到虚拟机", err)
 		return
 	}
+	d.setPushedMain(p.store.Selected) // 补齐二：接下来的检查结果记在新节点名下
 	base, err := bs.Probe(ctx, req.Rule)
 	if err != nil {
 		// 第一跳域名解析到了局域网地址（网关不放行，v2.3 偏差的结论）：给出能照着做的提示。
@@ -497,8 +504,10 @@ func (d *Daemon) restoreMain(ctx context.Context, vm MainProxyVM, old *appliedRe
 		return false
 	}
 	if old == nil {
+		d.setPushedMain("")
 		d.events.Add("main_proxy", "rolled_back", "没有旧的主代理可以恢复：清空了第一跳名单")
 	} else {
+		d.setPushedMain(old.Store.Selected)
 		d.events.Add("main_proxy", "rolled_back", "已回到原来的主代理")
 	}
 	return true
@@ -551,6 +560,7 @@ func (d *Daemon) pushManagedLocked(ctx context.Context, vm MainProxyVM, why stri
 	if err := vm.PushMainProxy(ctx, p.yaml); err != nil {
 		return err
 	}
+	d.setPushedMain(p.store.Selected)
 	d.main.mu.Lock()
 	err = d.main.saveApplied(appliedRecord{Store: p.store, Digest: p.digest, Hops: p.hops})
 	_ = os.Remove(d.main.file("pending.json"))

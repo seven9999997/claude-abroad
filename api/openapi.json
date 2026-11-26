@@ -302,6 +302,12 @@
             },
             "type": "array"
           },
+          "fallbacks": {
+            "items": {
+              "$ref": "#/components/schemas/DaemonRuleFallback"
+            },
+            "type": "array"
+          },
           "truncated": {
             "type": "boolean"
           }
@@ -694,6 +700,10 @@
       },
       "DaemonExitStatus": {
         "properties": {
+          "affected_count": {
+            "format": "int64",
+            "type": "integer"
+          },
           "avail": {
             "$ref": "#/components/schemas/GatesmExitView"
           },
@@ -874,6 +884,9 @@
             "type": "string"
           },
           "type": {
+            "type": "string"
+          },
+          "udp": {
             "type": "string"
           }
         },
@@ -1173,6 +1186,25 @@
         ],
         "type": "object"
       },
+      "DaemonRuleFallback": {
+        "properties": {
+          "app": {
+            "type": "string"
+          },
+          "exit": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "app",
+          "exit",
+          "reason"
+        ],
+        "type": "object"
+      },
       "DaemonRulesSummary": {
         "properties": {
           "block": {
@@ -1329,6 +1361,9 @@
           },
           "launch_control": {
             "type": "boolean"
+          },
+          "main_udp": {
+            "type": "string"
           },
           "opens": {
             "additionalProperties": {

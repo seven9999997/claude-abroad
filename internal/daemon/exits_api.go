@@ -36,6 +36,8 @@ type exitPutReq struct {
 type ExitView struct {
 	ExitSummary
 	Avail gatesm.ExitView `json:"avail"`
+	// Affected 是指向这个出口的规则（应用 ID；补齐二）：出口不可用时这些规则的流量改走主代理。
+	Affected []string `json:"affected,omitempty"`
 }
 
 // errExitRefs 是删除还被规则引用的出口。
@@ -59,7 +61,7 @@ func (e errUnknownExit) Error() string { return e.err.Error() }
 func (e errUnknownExit) Unwrap() error { return e.err }
 
 func (d *Daemon) exitView(s ExitSummary) ExitView {
-	return ExitView{ExitSummary: s, Avail: d.exitAvail.View(s.Tag)}
+	return ExitView{ExitSummary: s, Avail: d.exitAvail.View(s.Tag), Affected: d.affectedRules(s.Tag)}
 }
 
 func (d *Daemon) handleExitsList(w http.ResponseWriter, r *http.Request) {
@@ -236,17 +238,20 @@ type ExitStatus struct {
 	Tag   string          `json:"tag"`
 	Kind  exitconf.Kind   `json:"kind,omitempty"` // 开发用的出口没有
 	Avail gatesm.ExitView `json:"avail"`
+	// AffectedCount 是指向这个出口的规则条数（补齐二）：出口不可用时这些规则的流量改走主代理。状态里只给条数，
+	// 不给应用 ID（状态和诊断包里不出现应用 ID）；清单在 /v1/exits 和 /v1/apps 里。
+	AffectedCount int `json:"affected_count,omitempty"`
 }
 
 // exitStatuses 返回正式的和开发用的分流出口（按标签排序）。
 func (d *Daemon) exitStatuses() []ExitStatus {
 	var out []ExitStatus
 	for _, s := range d.exits.Summaries() {
-		out = append(out, ExitStatus{Tag: s.Tag, Kind: s.Kind, Avail: d.exitAvail.View(s.Tag)})
+		out = append(out, ExitStatus{Tag: s.Tag, Kind: s.Kind, Avail: d.exitAvail.View(s.Tag), AffectedCount: len(d.affectedRules(s.Tag))})
 	}
 	for _, t := range d.opts.DevExits {
 		if !d.exits.Has(t) {
-			out = append(out, ExitStatus{Tag: t, Avail: d.exitAvail.View(t)})
+			out = append(out, ExitStatus{Tag: t, Avail: d.exitAvail.View(t), AffectedCount: len(d.affectedRules(t))})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Tag < out[j].Tag })

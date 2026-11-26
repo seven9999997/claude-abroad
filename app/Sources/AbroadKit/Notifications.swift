@@ -11,6 +11,10 @@ public enum NotificationKind: String, Sendable, Equatable, CaseIterable {
     case launchBlocked
     /// 程序完整性校验不通过（M6-7 补审返工；同一组问题只通知一次）。
     case integrityFailed
+    /// 主代理的 UDP 变成不可用（补齐二）。
+    case udpUnavailable
+    /// 有规则指向的分流出口变成不可用、流量改走主代理（补齐二）。
+    case exitFallback
 }
 
 public struct AppNotification: Sendable, Equatable {
@@ -101,6 +105,9 @@ public final class Notifier {
     private var regionWritten = false
     /// 已经通知过的完整性问题（同一组不重复）。
     private var integrityNotified: String?
+    /// 补齐二：主代理的 UDP 最近一次明确的结果（还不知道不算）；已经通知过“不可用”的出口。
+    private var lastUDP: String?
+    private var downExits: Set<String> = []
     /// 最近一次读到的状态（RESTORED、ENABLING……），拦下通知按它选文字。
     private var lastState: String?
     /// 最近一次发“拦下”通知的时刻：桌面版一次启动有好几个进程被拦，短时间内的合成一条。
@@ -136,6 +143,22 @@ public final class Notifier {
             }
         } else {
             integrityNotified = nil
+        }
+        // 补齐二：UDP 和分流出口。重连后的当前状态只建立基线；还不知道不算；恢复不通知。
+        let udp = st.mainUdp
+        let downNow = Set((st.exits ?? []).filter { !$0.avail.up && ($0.affectedCount ?? 0) > 0 }.map(\.tag))
+        if reconnect || gateOpen == nil {
+            if udp == "available" || udp == "unavailable" { lastUDP = udp }
+            downExits = downNow
+        } else {
+            if udp == "unavailable" && lastUDP != "unavailable" {
+                emit(.udpUnavailable, L10n.notifyUDPUnavailable)
+            }
+            if udp == "available" || udp == "unavailable" { lastUDP = udp }
+            for x in (st.exits ?? []) where downNow.contains(x.tag) && !downExits.contains(x.tag) {
+                emit(.exitFallback, L10n.notifyExitFallback(x.tag, Int(x.affectedCount ?? 0)))
+            }
+            downExits = downNow
         }
         if reconnect || gateOpen == nil {
             gateOpen = st.gateOpen

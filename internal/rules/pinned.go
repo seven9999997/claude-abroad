@@ -14,11 +14,16 @@ var builtinPinned = []pattern{
 	{Base: "claudemcpcontent.com"}, {Wild: true, Base: "claudemcpcontent.com"},
 }
 
-// anthropicNets 是 Anthropic 的地址段（design 5.2、R14）。只用来让连接更严格，不作为放行依据。
+// anthropicNets 是 Anthropic 登记的地址段（design 5.2、R14；ARIN：160.79.104.0/21 是 NET-160-79-104-0-1，组织 AP-2440
+// Anthropic, PBC；2607:6bc0::/32 是 NET6-2607-6BC0-1 ANTHROPIC-V6；2026-11-26 经 rdap.arin.net 查询）。置顶的补充匹配和
+// 回国拦截（pf.AnthropicNets）共用这一份：只能追加。补充匹配只用来让连接更严格，不作为放行依据。
 var anthropicNets = []netip.Prefix{
 	netip.MustParsePrefix("160.79.104.0/21"),
-	netip.MustParsePrefix("2607:6bc0::/48"),
+	netip.MustParsePrefix("2607:6bc0::/32"),
 }
+
+// AnthropicNets 返回登记地址段的副本（回国拦截引用它，两处不各写一份）。
+func AnthropicNets() []netip.Prefix { return append([]netip.Prefix(nil), anthropicNets...) }
 
 // BuiltinPinned 返回内置置顶域名的副本（"claude.ai"、"*.claude.ai" 这种写法）。
 func BuiltinPinned() []string {

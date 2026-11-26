@@ -230,6 +230,15 @@ func cmdStatus(a *app, args []string) int {
 				Done  bool     `json:"done"`
 				Notes []string `json:"notes"`
 			} `json:"prepare"`
+			MainUDP string `json:"main_udp"`
+			Exits   []struct {
+				Tag   string `json:"tag"`
+				Avail struct {
+					Up     bool   `json:"up"`
+					Reason string `json:"reason"`
+				} `json:"avail"`
+				AffectedCount int `json:"affected_count"`
+			} `json:"exits"`
 			ReturnBlock *struct {
 				On     bool     `json:"on"`
 				Active bool     `json:"active"`
@@ -269,6 +278,16 @@ func cmdStatus(a *app, args []string) int {
 			}
 			for _, n := range st.Prepare.Notes {
 				fmt.Fprintf(a.stdout, "首次准备：%s\n", n)
+			}
+		}
+		if st.MainUDP == "unavailable" { // 补齐二
+			fmt.Fprintln(a.stdout, "主代理的 UDP：不可用（语音、视频通话和部分游戏会不通；换一个支持 UDP 的节点可以恢复）")
+		} else if st.MainUDP != "" {
+			fmt.Fprintln(a.stdout, "主代理的 UDP："+udpText(st.MainUDP))
+		}
+		for _, x := range st.Exits {
+			if !x.Avail.Up && x.AffectedCount > 0 {
+				fmt.Fprintf(a.stdout, "分流出口 %s 现在不可用（%s）：%d 条规则的流量改走主代理（abroad app ls 看是哪几条）\n", x.Tag, x.Avail.Reason, x.AffectedCount)
 			}
 		}
 		if rb := st.ReturnBlock; rb != nil { // M6-11b：回国拦截
@@ -622,13 +641,13 @@ func cmdMainNodes(a *app, args []string) int {
 	return a.out(resp, func() {
 		var vs []struct {
 			ID, Name, Kind string
-			Nodes          []struct{ ID, Name, Type string } `json:"nodes"`
+			Nodes          []struct{ ID, Name, Type, UDP string } `json:"nodes"`
 		}
 		_ = json.Unmarshal(resp.Body, &vs)
 		for _, s := range vs {
 			fmt.Fprintf(a.stdout, "%s（%s，%d 个节点）  来源 ID %s\n", s.Name, s.Kind, len(s.Nodes), s.ID)
 			for _, n := range s.Nodes {
-				fmt.Fprintf(a.stdout, "  %s  %s  %s\n", n.ID, n.Name, n.Type)
+				fmt.Fprintf(a.stdout, "  %s  %s  %s  %s\n", n.ID, n.Name, n.Type, udpText(n.UDP))
 			}
 		}
 	})
@@ -1269,4 +1288,15 @@ func printDomains(a *app, body []byte) {
 	for _, d := range v.Domains {
 		fmt.Fprintf(a.stdout, "  %s  %d 次  最近 %s\n", d.Domain, d.Count, d.Last)
 	}
+}
+
+// udpText 是节点、主代理的 UDP 是否可用（补齐二）。
+func udpText(s string) string {
+	switch s {
+	case "available":
+		return "UDP 可用"
+	case "unavailable":
+		return "UDP 不可用"
+	}
+	return "UDP 还不知道"
 }

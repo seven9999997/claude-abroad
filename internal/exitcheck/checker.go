@@ -98,6 +98,9 @@ type Checker struct {
 	RootCAs    *x509.CertPool // 测试用；nil 用系统根证书
 	Now        func() time.Time
 	Logf       func(format string, a ...any) // 只收到摘要
+	// OnReport 在每一轮检查结束后收到完整的报告（补齐二：abroadd 记下主代理的 UDP 结果）；探测本身不变。可为 nil。
+	// 要在开始检查之前设好（检查过程中不改）。
+	OnReport func(Report)
 
 	// 时限（测试可调小）；0 用默认值。
 	Total, HTTPS, IP, Geo, UDP, DoH time.Duration
@@ -240,7 +243,39 @@ func (c *Checker) Check(ctx context.Context, exit string, o Options) Report {
 	if c.Logf != nil {
 		c.Logf("出口检查：%s", rep.String())
 	}
+	if c.OnReport != nil {
+		c.OnReport(rep)
+	}
 	return rep
+}
+
+// UDP 是否可用（补齐二，给状态和界面用；探测和判定不变）。
+const (
+	UDPAvailable   = "available"
+	UDPUnavailable = "unavailable"
+	UDPUnknown     = "unknown"
+)
+
+// UDPAvailability 从一轮报告得出出口的 UDP 是否可用：探测通过（收到合法的 DNS 应答）→ 可用；明确不通过（收到的不是
+// 预期的应答）→ 不可用；探测超时、而同一出口的 HTTPS 通过（出口本身是通的，只是 UDP 没有应答——回应帧显示成功但没有
+// 应答也落在这里，设计 4.2 的备注）→ 不可用；其余（没检查、出口本身不通、连不上）→ 还不知道。
+func (r Report) UDPAvailability() string {
+	it, ok := r.Item("udp")
+	if !ok {
+		return UDPUnknown
+	}
+	switch it.Result {
+	case Pass:
+		return UDPAvailable
+	case Fail:
+		return UDPUnavailable
+	}
+	if it.Cause == CauseTimeout {
+		if h, ok := r.Item("https"); ok && h.Result == Pass {
+			return UDPUnavailable
+		}
+	}
+	return UDPUnknown
 }
 
 func firstLine(err error) string {

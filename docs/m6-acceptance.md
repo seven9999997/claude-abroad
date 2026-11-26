@@ -148,8 +148,8 @@
 | 5.1：可选“继承父进程” | 识别器有这个字段，但 abroadd 没有打开 | 没有做 | — | 不能给“终端里启动的所有程序”统一设规则，只能按每个程序的路径设 |
 | 5.1：共享、系统进程在界面上单独显示并说明 | 应用分流页和普通应用列在一起 | 没有做 | — | 不容易看出改 `nsurlsessiond` 这类进程会影响很多应用 |
 | 4.2、5.2：拦截 UDP 443；`offline_allow`、`local_domains`、`pinned_extra` | **已补**（2026-11-27，M6 之后的补齐一）：命令行 `abroad rules local|pinned|offline ls|add|rm`、`rules udp443 show|on|off`，应用“应用分流”页的“域名与其他规则”；规则提交带条件头（读和写之间被别处改过时不覆盖）。测试 `go:cmd/abroad#TestCLIRuleLists`、`go:cmd/abroad#TestCLIRulesConflictRetry`、`go:internal/daemon#TestRulesConditionalWrite`、`swift:ruleListsLoadAddRemoveToggle`、`swift:ruleListsConflictReloadsNoRetry` | 已补 | — | — |
-| 4.2、7.2：首页和菜单栏的“UDP 不可用”、节点列表标出是否支持 UDP | 没有 | 没有做 | — | 主代理不支持 UDP 时，语音、视频、游戏不通，界面上看不出原因 |
-| 5.2、11.2：标出正在回退到主代理的规则；“分流出口回退”“UDP 不可用”的通知 | 没有；通知只有保护断开和恢复、更换主代理回滚、回国、地区就绪、拦下 Claude、完整性 | 没有做 | — | 分流出口坏了、流量改走主代理时界面上看不到 |
+| 4.2、7.2：首页和菜单栏的“UDP 不可用”、节点列表标出是否支持 UDP | **已补**（2026-11-27，补齐二）：状态 `main_udp`、节点的 `udp`，首页和菜单栏的说明，主代理页的节点标记，命令行 `status`、`main nodes`。测试 `go:internal/exitcheck#TestUDPAvailability`、`go:internal/daemon#TestMainUDPRecording`、`go:cmd/abroad#TestCLIUDPAndFallbackOutput`、`swift:udpNoticeOnlyWhenEnabledAndUnavailable`、`swift:nodeUDPLabels` | 已补 | — | — |
+| 5.2、11.2：标出正在回退到主代理的规则；“分流出口回退”“UDP 不可用”的通知 | **已补**（2026-11-27，补齐二）：`/v1/apps` 的 `fallbacks`、出口的 `affected`，分流页的回退标记、出口页的受影响规则、两种新通知。测试 `go:internal/daemon#TestRuleFallbackMarks`、`swift:fallbackMarksInPages`、`swift:udpAndExitNotifications`；回退仍走主代理 `go:internal/daemon#TestExitsAvailabilityAndFallback` | 已补 | — | — |
 | 6.1：pf 规则连续被清掉时通知并指出可能是哪个软件 | 有事件 `repeatedly_cleared`，应用不转成通知，也不指认软件 | 部分做了 | — | 只能在事件里看到 |
 | 7.1：控制面的调试接口（exec） | 明确禁止（不能注册调试、终端类接口） | 改了做法 | 敏感接口不提供（m5-plan） | 没有调试终端 |
 | 10.1：要结束的进程清单可在“设置”里增删 | 清单内置，设置页只能看 | 改了做法 | 同上 | 改不了清单 |

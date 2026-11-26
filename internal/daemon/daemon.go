@@ -140,7 +140,8 @@ type Daemon struct {
 	// 主代理的存储（M5-4）；mainBoot 是上次下发主代理时虚拟机的启动标识（exitPushMu 保护）。
 	main      *MainStore
 	mainBoot  string
-	mainDirty bool // 回退没有完成：下一轮无条件重新下发（exitPushMu 保护）
+	mainDirty bool    // 回退没有完成：下一轮无条件重新下发（exitPushMu 保护）
+	mudp      mainUDP // 补齐二：主代理各节点的 UDP 是否可用
 	// M5-5：冲突检查接口的缓存、手动检查出口的去重。
 	pf      preflightCache
 	exitChk exitCheckGuard
@@ -189,6 +190,12 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 		mp = filepath.Join(o.StateDir, "secrets", "main")
 	}
 	d.main = &MainStore{Profile: mp}
+	if a, _ := d.main.applied(); a != nil { // 补齐二：启动时下发着的就是“已下发”记录里的那个节点
+		d.mudp.pushed = a.Store.Selected
+	}
+	if fe, ok := o.Sys.Exit.(FullExitCheck); ok && fe.Checker != nil && fe.Checker.OnReport == nil {
+		fe.Checker.OnReport = d.recordMainReport // 主代理的每一轮检查（复查、应用主代理时的检查）都经这里
+	}
 	timeout, retry := o.LockTimeout, o.LockRetry
 	if timeout <= 0 {
 		timeout = DefaultLockTimeout
@@ -480,6 +487,8 @@ type Status struct {
 	Prepare *PrepareStatus `json:"prepare,omitempty"`
 	// M6-11a：回国拦截（回国后 pf 只拦 Anthropic 的地址段）。打开了首次准备时才有。
 	ReturnBlock *ReturnBlockStatus `json:"return_block,omitempty"`
+	// 补齐二：当前下发的主代理节点的 UDP 是否可用（available、unavailable、unknown）；abroadd 持有主代理配置时才有。
+	MainUDP string `json:"main_udp,omitempty"`
 	// 补齐一：内置的置顶域名（基础域名，和规则引擎、解析锁同一个来源 rules.BuiltinPinnedBases）。删不掉，命令行和应用据此
 	// 拦下“删除内置置顶域名”、只读显示。管控开不开都有。
 	BuiltinPinned []string `json:"builtin_pinned"`
@@ -514,6 +523,7 @@ func (d *Daemon) Status() Status {
 	}
 	st.LaunchControl = d.opts.Sys.LaunchControl
 	st.BuiltinPinned = rules.BuiltinPinnedBases()
+	st.MainUDP = d.mainUDPState()
 	st.BrowsersLeft = d.browsersLeft()
 	if p := d.prepareSt.Load(); p != nil {
 		ps := *p

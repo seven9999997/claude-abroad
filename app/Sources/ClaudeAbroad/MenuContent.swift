@@ -27,6 +27,9 @@ struct MenuContent: View {
         if model.securityNote != nil {
             Text(L10n.securityNoteTitle)
         }
+        if model.udpNotice != nil { // 补齐二
+            Text(L10n.udpUnavailableTitle)
+        }
         Divider()
         Button(L10n.enable) { Task { await model.enable(); showIfNeeded() } }
             .disabled(!model.menu.enable)

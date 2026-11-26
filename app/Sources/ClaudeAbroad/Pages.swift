@@ -63,6 +63,7 @@ struct ExitsPage: View {
                                         .foregroundStyle(r.up ? .green : .red)
                                 }
                                 if !r.reason.isEmpty { Text(r.reason).font(.caption) }
+                                if let a = r.affectedText { Text(a).font(.caption).foregroundStyle(.orange) } // 补齐二
                                 if !r.items.isEmpty {
                                     Text(r.items.sorted(by: { $0.key < $1.key }).map { $0.key + " " + EnvModel.resultTitle($0.value) }.joined(separator: " · ")).font(.caption)
                                 }
@@ -114,6 +115,7 @@ struct AppsPage: View {
                         VStack(alignment: .leading) {
                             Text(r.name)
                             Text(r.app).font(.caption).foregroundStyle(.secondary)
+                            if let f = r.fallback { Label(f, systemImage: "arrow.uturn.backward.circle").font(.caption).foregroundStyle(.orange) } // 补齐二
                         }
                         Spacer()
                         if r.conns > 0 { Text("\(r.conns)").font(.caption.monospacedDigit()) }

@@ -233,8 +233,8 @@ func st(gate: Bool, env: String? = nil, reasons: [String] = []) -> DaemonStatus 
     #expect(o.calls == 0, "没有点击时不打开 Claude")
     n.userTappedOpenClaude()
     #expect(o.calls == 1)
-    // 六种都发过（保护断开、恢复、两种更换失败、回国完成、地区就绪；拦下见 launchBlockedNotifications）
-    #expect(Set(s.got.map(\.kind)) == Set(NotificationKind.allCases).subtracting([.launchBlocked, .integrityFailed]))
+    // 六种都发过（保护断开、恢复、两种更换失败、回国完成、地区就绪；拦下见 launchBlockedNotifications；UDP、出口回退见 udpAndExitNotifications）
+    #expect(Set(s.got.map(\.kind)) == Set(NotificationKind.allCases).subtracting([.launchBlocked, .integrityFailed, .udpUnavailable, .exitFallback]))
     // 开关关掉后不发
     let count = s.got.count
     pref.enabled = false
