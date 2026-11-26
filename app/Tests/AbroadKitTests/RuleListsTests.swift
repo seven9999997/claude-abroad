@@ -149,3 +149,51 @@ private func appsModel(_ b: RulesBackend) async -> AppsModel {
     #expect(AppsModel.help(.local) == L10n.rulesLocalHelp && AppsModel.help(.pinned) == L10n.rulesPinnedHelp && AppsModel.help(.offline) == L10n.rulesOfflineHelp)
     #expect(L10n.rulesLocalHelp.contains("走本机网络") && L10n.rulesPinnedHelp.contains("永远走主代理") && L10n.rulesPinnedHelp.contains("不进 Claude 域名解析锁"))
 }
+
+/// 补齐三验收 j：不分配假地址的名单复用同一套名单代码；“允许局域网”开关（关直接提交，开要本人授权并给终端命令；
+/// 旧后台不给时不显示）。
+@MainActor
+@Test func noFakeListAndAllowLAN() async {
+    let b = RulesBackend()
+    let m = await appsModel(b)
+    #expect(m.items(.nofake).isEmpty && AppsModel.help(.nofake) == L10n.rulesNoFakeHelp)
+    await m.addItem(.nofake, "nas.home.example")
+    #expect(b.rulesDoc.bypassExtra == ["nas.home.example"] && b.puts.last?.ifMatch != nil)
+    await m.deleteListItem(.nofake, "nas.home.example")
+    #expect(b.rulesDoc.bypassExtra.isEmpty)
+    #expect(L10n.allowLANHelp.contains("打印机") && L10n.allowLANHelp.contains("需要本人授权"))
+
+    final class LANBackend: @unchecked Sendable {
+        let lock = NSLock()
+        var on = true
+        var puts: [String] = []
+        func handle(_ r: HTTPRequest) -> HTTPResponse {
+            lock.lock(); defer { lock.unlock() }
+            switch (r.method, r.path) {
+            case ("PUT", "/v1/settings/lan"):
+                let body = String(decoding: r.body ?? Data(), as: UTF8.self)
+                puts.append(body)
+                if body.contains("true") { return json(403, #"{"code":"needs_authorization","error":"需要本人授权（打开“允许局域网”是放松保护）"}"#) }
+                on = false
+                return json(200, #"{"allow_lan":false}"#)
+            case ("GET", "/v1/restore/preview"): return json(200, #"{"processes":[],"will_kill":true}"#)
+            default:
+                var s = statusJSON(state: "ENABLED", gate: true); s.removeLast()
+                return json(200, s + ",\"allow_lan\":\(on)}")
+            }
+        }
+    }
+    let lb = LANBackend()
+    let sm = SettingsModel(client: APIClient(transport: FakeTransport { lb.handle($0) }))
+    await sm.load()
+    #expect(sm.allowLAN == true)
+    await sm.setAllowLAN(false)
+    #expect(sm.allowLAN == false && sm.terminal == nil)
+    await sm.setAllowLAN(true)
+    #expect(sm.terminal?.commands == ["sudo abroad lan on"])
+    let old = SettingsModel(client: APIClient(transport: FakeTransport { r in
+        r.path == "/v1/restore/preview" ? json(200, #"{"processes":[],"will_kill":true}"#) : json(200, statusJSON(state: "ENABLED", gate: true))
+    }))
+    await old.load()
+    #expect(old.allowLAN == nil, "旧后台：不显示开关")
+}

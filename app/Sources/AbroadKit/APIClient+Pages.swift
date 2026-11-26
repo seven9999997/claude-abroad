@@ -29,6 +29,8 @@ public struct RulesDoc: Codable, Sendable, Equatable {
     public var localDomains: [String]
     public var pinnedExtra: [String]
     public var blockUDP443: Bool
+    /// 补齐三：用户追加的不分配假地址的域名。
+    public var bypassExtra: [String] = []
 
     public struct Rule: Codable, Sendable, Equatable {
         public var app: String
@@ -39,6 +41,7 @@ public struct RulesDoc: Codable, Sendable, Equatable {
     enum CodingKeys: String, CodingKey {
         case defaultAction = "default", rules
         case offlineAllow = "offline_allow", localDomains = "local_domains", pinnedExtra = "pinned_extra", blockUDP443 = "block_udp_443"
+        case bypassExtra = "bypass_extra"
     }
 
     public init(from d: Decoder) throws {
@@ -49,6 +52,7 @@ public struct RulesDoc: Codable, Sendable, Equatable {
         localDomains = try c.decodeIfPresent([String].self, forKey: .localDomains) ?? []
         pinnedExtra = try c.decodeIfPresent([String].self, forKey: .pinnedExtra) ?? []
         blockUDP443 = try c.decodeIfPresent(Bool.self, forKey: .blockUDP443) ?? false
+        bypassExtra = try c.decodeIfPresent([String].self, forKey: .bypassExtra) ?? []
     }
 }
 
@@ -110,6 +114,12 @@ extension APIClient {
     public func envcheck() async -> Outcome<EnvcheckReport> { await get("/v1/envcheck") }
     public func envSettings() async -> Outcome<EnvSettings> { await get("/v1/envcheck/settings") }
     public func putEnvSettings(_ s: EnvSettings) async -> Outcome<EnvSettings> { await call(json("PUT", "/v1/envcheck/settings", s)) }
+    /// 补齐三：“允许局域网”开关。
+    public func lanSetting() async -> Outcome<DaemonLANSetting> { await get("/v1/settings/lan") }
+    public func putLANSetting(_ on: Bool) async -> Outcome<DaemonLANSetting> {
+        struct B: Encodable { var allow_lan: Bool }
+        return await call(json("PUT", "/v1/settings/lan", B(allow_lan: on)))
+    }
     public func runEnvcheck() async -> Outcome<EnvcheckReport> { await call(HTTPRequest(method: "POST", path: "/v1/envcheck/run")) }
     /// 设备体检（M6-6a）：字体等，只返回结果。
     public func deviceCheck() async -> Outcome<EnvcheckDeviceReport> { await call(HTTPRequest(method: "POST", path: "/v1/envcheck/device")) }

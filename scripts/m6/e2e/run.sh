@@ -188,6 +188,21 @@ if [ "${PHASE}" = 1 ]; then
   m6e_log "现在以你自己的身份（不要 sudo）在另一个终端执行：open /Applications/ClaudeAbroad.app"
   checkpoint P1 "在安装引导里添加来源（本地配置文件选 M6E_NODES 那份）→ 选节点 → 应用主代理（按提示在终端执行 sudo abroad …）→ 完成" c_mainproxy "从引导里配好主代理"
   checkpoint P2 "点“启用”（地区会变时确认框等 3 秒再确认）。这一步会接管本机网络" c_enabled "启用"
+  # 补齐三：“允许局域网”开关（已启用时）。M6E_LAN_PROBE=<局域网里一台设备的 地址:端口>（如打印机 192.168.1.20:631）；没给时跳过。
+  step "允许局域网：关掉后连局域网设备失败，打开后恢复"
+  if [ -z "${M6E_LAN_PROBE:-}" ]; then res LAN1 跳过 "没有设 M6E_LAN_PROBE"; elif [ "$DRY_RUN" = 1 ]; then
+    printf 'CHANGE: /Library/Application Support/claude-abroad/bin/abroad lan off\n'
+    printf 'CHANGE: /Library/Application Support/claude-abroad/bin/abroad lan on\n'
+    res LAN1 跳过 "空跑"
+  else
+    lhost=${M6E_LAN_PROBE%:*}; lport=${M6E_LAN_PROBE##*:}
+    before=$(/usr/bin/nc -z -G 3 "$lhost" "$lport" >/dev/null 2>&1 && echo ok || echo fail)
+    m6e_do "/Library/Application Support/claude-abroad/bin/abroad" lan off
+    off=$(/usr/bin/nc -z -G 3 "$lhost" "$lport" >/dev/null 2>&1 && echo ok || echo fail)
+    m6e_do "/Library/Application Support/claude-abroad/bin/abroad" lan on
+    on=$(/usr/bin/nc -z -G 3 "$lhost" "$lport" >/dev/null 2>&1 && echo ok || echo fail)
+    if [ "$before:$off:$on" = "ok:fail:ok" ]; then res LAN1 通过 "关掉后连不上局域网设备，打开后恢复"; else res LAN1 不通过 "开着、关掉、打开后：${before}、${off}、${on}（应为 ok、fail、ok）"; fi
+  fi
   checkpoint P3 "点“一键回国”并确认（开发构建只预览、不结束 Claude）" c_restored "回国：网络恢复、解析锁仍在"
   check RB1 c_rb "回国后：回国拦截（测试段）" 15
   # 定向清理连接状态的写法（M6-11b，abroadd 的 --return-block-kill-states 默认关，等这一步的结论）：只对测试段做。

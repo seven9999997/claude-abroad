@@ -47,6 +47,7 @@ type bed struct {
 	env     *fakeEnv
 	m       *Machine
 	rb      bool // 回国后保留回国拦截（M6-11a 的开关）
+	noLAN   bool // “允许局域网”关（补齐三）
 
 	mu         sync.Mutex
 	timeline   []string
@@ -234,7 +235,7 @@ func (b *bed) newProcStore() (*Store, func()) {
 
 func (b *bed) newPF(st *Store) (*PatrolPF, *pfWrap) {
 	ctl := &pf.Controller{R: &recRunner{R: b.fpf, b: b}, Matcher: pf.PrintMatcher{User: "_abroad", UID: "250"}}
-	ppf := NewPatrolPF(ctl, st, sysnet.NetSource(b.net), "_abroad", nil, b.onEvent)
+	ppf := NewPatrolPF(ctl, st, sysnet.NetSource(b.net), "_abroad", func() bool { return !b.noLAN }, b.onEvent)
 	return ppf, &pfWrap{PF: ppf, b: b, fail: map[int]error{}}
 }
 

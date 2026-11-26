@@ -1,5 +1,6 @@
 200
 {
+  "allow_lan": true,
   "builtin_pinned": [
     "claude.ai",
     "claude.com",

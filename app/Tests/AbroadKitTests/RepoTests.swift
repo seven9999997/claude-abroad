@@ -46,6 +46,8 @@ func abroadUsage() throws -> String {
         (.ruleListRemove(kind: "pinned", item: "*.mine.example"), "sudo abroad rules pinned rm '*.mine.example'", "rules pinned ls | add <域名>… | rm <域名>…"),
         (.ruleListAdd(kind: "offline", item: "com.example.nas"), "sudo abroad rules offline add com.example.nas", "rules offline ls | add <应用>… | rm <应用>…"),
         (.udp443(on: false), "sudo abroad rules udp443 off", "rules udp443 show | on | off"),
+        (.ruleListAdd(kind: "nofake", item: "nas.home.example"), "sudo abroad rules nofake add nas.home.example", "rules nofake ls | add <域名>… | rm <域名>…"),
+        (.allowLAN(on: true), "sudo abroad lan on", "lan show | on | off"),
     ]
     for (op, cmd, inHelp) in table {
         #expect(op.terminalCommand == cmd)

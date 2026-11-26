@@ -50,6 +50,12 @@ var ruleLists = map[string]listKind{
 		set: func(c *rules.Config, xs []string) { c.PinnedExtra = xs },
 		key: domainKey,
 	},
+	"nofake": {
+		name: "nofake", title: "不分配假地址的名单（经主代理的 DoH 解析出真实地址，连接仍按规则走；内置的几项删不掉）", what: "域名或 *.域名",
+		get: func(c *rules.Config) []string { return c.BypassExtra },
+		set: func(c *rules.Config, xs []string) { c.BypassExtra = xs },
+		key: domainKey,
+	},
 	"offline": {
 		name: "offline", title: "离线放行名单（停用或闸门关着时仍可直连的应用）", what: "应用",
 		get: func(c *rules.Config) []string {
@@ -264,4 +270,40 @@ func udp443Text(on bool) string {
 		return "拦截 UDP 443：开（QUIC 被拦下，浏览器改用 TCP，域名识别更可靠）"
 	}
 	return "拦截 UDP 443：关"
+}
+
+// ---- 补齐三：“允许局域网” ----
+
+func lanText(on bool) string {
+	if on {
+		return "允许局域网：开（局域网里的打印机、NAS、投屏、别的电脑的共享照常可用）"
+	}
+	return "允许局域网：关（局域网里的打印机、NAS、投屏、别的电脑的共享都连不上）"
+}
+
+func cmdLANShow(a *app, args []string) int {
+	resp, code := a.call("GET", "/v1/settings/lan", nil)
+	if code != ExitOK {
+		return code
+	}
+	return a.out(resp, func() {
+		var v struct {
+			AllowLAN bool `json:"allow_lan"`
+		}
+		_ = json.Unmarshal(resp.Body, &v)
+		fmt.Fprintln(a.stdout, lanText(v.AllowLAN))
+	})
+}
+
+func cmdLANSet(on bool) func(a *app, args []string) int {
+	return func(a *app, args []string) int {
+		if len(args) != 0 {
+			return usageErr(a, "lan on|off 不带参数")
+		}
+		resp, code := a.call("PUT", "/v1/settings/lan", map[string]bool{"allow_lan": on})
+		if code != ExitOK {
+			return code
+		}
+		return a.out(resp, func() { fmt.Fprintln(a.stdout, lanText(on)) })
+	}
 }

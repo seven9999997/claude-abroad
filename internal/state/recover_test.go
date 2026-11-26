@@ -138,8 +138,13 @@ func runCrashCase(t *testing.T, op crashOp, k int, ev string, reboot bool) {
 
 // runCrashCaseRB 同 runCrashCase；rb 为真时回国保留回国拦截（M6-11a），回国后的终态按 assertRestoredRB 核对。
 func runCrashCaseRB(t *testing.T, op crashOp, k int, ev string, reboot, rb bool) {
+	runCrashCaseOpt(t, op, k, ev, reboot, rb, false)
+}
+
+// runCrashCaseOpt 同 runCrashCaseRB；noLAN 为真时“允许局域网”关（补齐三）。原有断言不改。
+func runCrashCaseOpt(t *testing.T, op crashOp, k int, ev string, reboot, rb, noLAN bool) {
 	b := newBed(t)
-	b.rb = rb
+	b.rb, b.noLAN = rb, noLAN
 	clean := func(leak int) {
 		t.Helper()
 		if rb {
@@ -213,7 +218,9 @@ func runCrashCaseRB(t *testing.T, op crashOp, k int, ev string, reboot, rb bool)
 
 func testCrashes(t *testing.T, reboot bool) { testCrashesRB(t, reboot, false) }
 
-func testCrashesRB(t *testing.T, reboot, rb bool) {
+func testCrashesRB(t *testing.T, reboot, rb bool) { testCrashesOpt(t, reboot, rb, false) }
+
+func testCrashesOpt(t *testing.T, reboot, rb, noLAN bool) {
 	for _, op := range crashOps {
 		names := opEvents(t, op, rb)
 		if len(names) == 0 {
@@ -223,7 +230,7 @@ func testCrashesRB(t *testing.T, reboot, rb bool) {
 			t.Parallel() // 每例一个独立的测试台（临时目录、假系统），没有共享的可变状态
 			for k := 1; k <= len(names); k++ {
 				t.Run(fmt.Sprintf("%02d %s", k, names[k-1]), func(t *testing.T) {
-					runCrashCaseRB(t, op, k, names[k-1], reboot, rb)
+					runCrashCaseOpt(t, op, k, names[k-1], reboot, rb, noLAN)
 				})
 			}
 		})
@@ -244,6 +251,23 @@ func TestCrashExhaustiveReturnBlock(t *testing.T) {
 	}
 	t.Parallel()
 	testCrashesRB(t, false, true)
+}
+
+// 补齐三验收 e：“允许局域网”关的配置下同样穷举崩溃和重启（模拟器后端里不再跑：只改 pf 的参数）。
+func TestCrashExhaustiveNoLAN(t *testing.T) {
+	if simBackend {
+		t.Skip("只改 pf 的参数，模拟器后端由默认配置的穷举覆盖")
+	}
+	t.Parallel()
+	testCrashesOpt(t, false, false, true)
+}
+
+func TestRebootExhaustiveNoLAN(t *testing.T) {
+	if simBackend {
+		t.Skip("只改 pf 的参数，模拟器后端由默认配置的穷举覆盖")
+	}
+	t.Parallel()
+	testCrashesOpt(t, true, false, true)
 }
 
 func TestRebootExhaustiveReturnBlock(t *testing.T) {

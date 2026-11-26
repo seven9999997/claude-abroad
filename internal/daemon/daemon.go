@@ -140,8 +140,9 @@ type Daemon struct {
 	// 主代理的存储（M5-4）；mainBoot 是上次下发主代理时虚拟机的启动标识（exitPushMu 保护）。
 	main      *MainStore
 	mainBoot  string
-	mainDirty bool    // 回退没有完成：下一轮无条件重新下发（exitPushMu 保护）
-	mudp      mainUDP // 补齐二：主代理各节点的 UDP 是否可用
+	mainDirty bool        // 回退没有完成：下一轮无条件重新下发（exitPushMu 保护）
+	mudp      mainUDP     // 补齐二：主代理各节点的 UDP 是否可用
+	allowLAN  atomic.Bool // 补齐三：“允许局域网”
 	// M5-5：冲突检查接口的缓存、手动检查出口的去重。
 	pf      preflightCache
 	exitChk exitCheckGuard
@@ -234,7 +235,8 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	s := o.Sys
 	d.tun = s.NewTun()
 	ctl := &pf.Controller{R: s.PFRunner, Matcher: pf.PrintMatcher{User: s.PFUser, UID: s.PFUID}}
-	d.ppf = state.NewPatrolPF(ctl, d.store, &netWatch{inner: sysnet.NetSource(s.Ifaces), d: d}, s.PFUser, nil, d.stateEvent("pf"))
+	d.allowLAN.Store(d.loadAllowLAN()) // 补齐三：“允许局域网”开关
+	d.ppf = state.NewPatrolPF(ctl, d.store, &netWatch{inner: sysnet.NetSource(s.Ifaces), d: d}, s.PFUser, d.allowLAN.Load, d.stateEvent("pf"))
 	d.ppf.P.OnEvent = func(e pf.Event) { d.events.Add("patrol", string(e.Kind), e.Detail) }
 	d.ppf.P.KillReturnBlockStates = o.ReturnBlockKillStates
 	d.ppf.P.ReturnBlockNets = func() []netip.Prefix { return d.rbChoice().Nets } // M6-11b：按选择文件
@@ -487,6 +489,8 @@ type Status struct {
 	Prepare *PrepareStatus `json:"prepare,omitempty"`
 	// M6-11a：回国拦截（回国后 pf 只拦 Anthropic 的地址段）。打开了首次准备时才有。
 	ReturnBlock *ReturnBlockStatus `json:"return_block,omitempty"`
+	// 补齐三：“允许局域网”开关（默认开）。
+	AllowLAN *bool `json:"allow_lan,omitempty"` // 总是给（指针只为生成的类型是可选的、旧客户端不受影响）
 	// 补齐二：当前下发的主代理节点的 UDP 是否可用（available、unavailable、unknown）；abroadd 持有主代理配置时才有。
 	MainUDP string `json:"main_udp,omitempty"`
 	// 补齐一：内置的置顶域名（基础域名，和规则引擎、解析锁同一个来源 rules.BuiltinPinnedBases）。删不掉，命令行和应用据此
@@ -524,6 +528,8 @@ func (d *Daemon) Status() Status {
 	st.LaunchControl = d.opts.Sys.LaunchControl
 	st.BuiltinPinned = rules.BuiltinPinnedBases()
 	st.MainUDP = d.mainUDPState()
+	al := d.allowLAN.Load()
+	st.AllowLAN = &al
 	st.BrowsersLeft = d.browsersLeft()
 	if p := d.prepareSt.Load(); p != nil {
 		ps := *p

@@ -23,6 +23,7 @@ public enum SensitiveOperation: Sendable, Equatable {
     case ruleListAdd(kind: String, item: String)
     case ruleListRemove(kind: String, item: String)
     case udp443(on: Bool)
+    case allowLAN(on: Bool)
 
     /// 在终端里执行的完整命令（不带 --yes：终端里照样打印预览、让用户确认）。
     public var terminalCommand: String {
@@ -46,6 +47,7 @@ public enum SensitiveOperation: Sendable, Equatable {
         case let .ruleListAdd(kind, item): return "sudo abroad rules \(kind) add \(Self.quote(item))"
         case let .ruleListRemove(kind, item): return "sudo abroad rules \(kind) rm \(Self.quote(item))"
         case let .udp443(on): return "sudo abroad rules udp443 " + (on ? "on" : "off")
+        case let .allowLAN(on): return "sudo abroad lan " + (on ? "on" : "off")
         }
     }
 

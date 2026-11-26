@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -193,5 +194,41 @@ func TestPackageDeps(t *testing.T) {
 				t.Errorf("%s 导入了内部包 %s", f, p)
 			}
 		}
+	}
+}
+
+// 补齐三验收 f、g：不分配假地址的用户名单——合法写法、不合法写法（只有顶级域的通配、空后缀、不像域名的）、Claude 域名及其
+// 子域名加不进、和追加的置顶域名的冲突判断。
+func TestBypassExtra(t *testing.T) {
+	c, err := Parse([]byte("bypass_extra: [nas.home.example, \"*.corp.example\"]\n"))
+	if err != nil || !slices.Equal(c.BypassExtra, []string{"nas.home.example", "*.corp.example"}) {
+		t.Fatalf("%v %v", c, err)
+	}
+	b, _ := c.Marshal()
+	if !strings.Contains(string(b), "bypass_extra") {
+		t.Fatalf("应写回：%s", b)
+	}
+	if b, _ := DefaultConfig().Marshal(); strings.Contains(string(b), "bypass_extra") {
+		t.Fatal("没有时不写（规则文件和标识保持原样）")
+	}
+	for name, doc := range map[string]string{
+		"只有顶级域的通配":   "bypass_extra: [\"*.com\"]\n",
+		"空后缀":        "bypass_extra: [\"*.\"]\n",
+		"不像域名":       "bypass_extra: [\"a b\"]\n",
+		"Claude 域名":  "bypass_extra: [claude.ai]\n",
+		"Claude 子域名": "bypass_extra: [api.anthropic.com]\n",
+		"盖住 Claude":  "bypass_extra: [\"*.ai\"]\n",
+		"重复":         "bypass_extra: [a.example, A.example]\n",
+	} {
+		if _, err := Parse([]byte(doc)); err == nil {
+			t.Errorf("%s 应被拒", name)
+		}
+	}
+	c, _ = Parse([]byte("pinned_extra: [\"*.mine.example\"]\nbypass_extra: [x.mine.example]\n")) // 文档本身不拒（顺序由后台判）
+	if q, bad := c.BypassPinnedConflict("x.mine.example"); !bad || q != "*.mine.example" {
+		t.Fatalf("和追加的置顶域名重叠：%q %v", q, bad)
+	}
+	if _, bad := c.BypassPinnedConflict("other.example"); bad {
+		t.Fatal("不重叠")
 	}
 }

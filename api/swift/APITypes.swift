@@ -469,6 +469,13 @@ public struct DaemonLANConfirmRequest: Codable, Sendable {
     }
 }
 
+public struct DaemonLANSetting: Codable, Sendable {
+    public var allowLan: Bool
+    enum CodingKeys: String, CodingKey {
+        case allowLan = "allow_lan"
+    }
+}
+
 public struct DaemonLaunchGuardLayer: Codable, Sendable {
     public var layer: Int64
     public var name: String
@@ -785,6 +792,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var launchControl: Bool?
     public var prepare: DaemonPrepareStatus?
     public var returnBlock: DaemonReturnBlockStatus?
+    public var allowLan: Bool?
     public var mainUdp: String?
     public var builtinPinned: [String]?
     public var exits: [DaemonExitStatus]?
@@ -812,6 +820,7 @@ public struct DaemonStatus: Codable, Sendable {
         case launchControl = "launch_control"
         case prepare = "prepare"
         case returnBlock = "return_block"
+        case allowLan = "allow_lan"
         case mainUdp = "main_udp"
         case builtinPinned = "builtin_pinned"
         case exits = "exits"
@@ -1013,6 +1022,7 @@ public struct RulesFile: Codable, Sendable {
     public var localDomains: [String]?
     public var pinnedExtra: [String]?
     public var blockUdp443: Bool
+    public var bypassExtra: [String]?
     enum CodingKeys: String, CodingKey {
         case `default` = "default"
         case rules = "rules"
@@ -1020,6 +1030,7 @@ public struct RulesFile: Codable, Sendable {
         case localDomains = "local_domains"
         case pinnedExtra = "pinned_extra"
         case blockUdp443 = "block_udp_443"
+        case bypassExtra = "bypass_extra"
     }
 }
 

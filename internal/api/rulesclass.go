@@ -97,6 +97,12 @@ func RulesLevel(old, next *rules.Config) (Level, []string) {
 			break
 		}
 	}
+	for _, p := range next.BypassExtra {
+		if !slices.Contains(old.BypassExtra, p) {
+			why = append(why, "不分配假地址的名单里加了域名")
+			break
+		}
+	}
 	if old.BlockUDP443 && !next.BlockUDP443 {
 		why = append(why, "关掉了拦截 UDP 443")
 	}

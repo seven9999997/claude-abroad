@@ -271,3 +271,44 @@ func TestCLIUDPAndFallbackOutput(t *testing.T) {
 		t.Fatalf("main nodes：%+v", x)
 	}
 }
+
+// 补齐三验收 j：不分配假地址的名单复用同一套名单代码（带条件头、放松要 sudo、后台拒绝原样显示）；“允许局域网”开关的级别。
+func TestCLINoFakeAndLAN(t *testing.T) {
+	r := newRig(t, rigOpt{})
+	r.asOwner()
+	var without int
+	r.trace = func(m, p string, h http.Header) {
+		if m == "PUT" && strings.HasPrefix(p, "/v1/rules") && h.Get("If-Match") == "" {
+			without++
+		}
+	}
+	if x := r.run("rules", "nofake", "add", "nas.home.example"); x.code != ExitOK || !slices.Contains(r.rules().BypassExtra, "nas.home.example") {
+		t.Fatalf("add：%+v", x)
+	}
+	if x := r.run("rules", "nofake", "add", "api.anthropic.com"); x.code == ExitOK || !strings.Contains(x.err, "置顶域名") {
+		t.Fatalf("Claude 域名应拒绝并原样显示原因：%+v", x)
+	}
+	r.asConsole()
+	if x := r.run("rules", "nofake", "add", "other.home.example"); x.code != ExitDenied || !strings.Contains(x.err, "这一次需要 sudo") {
+		t.Fatalf("追加是放松：%+v", x)
+	}
+	if x := r.run("rules", "nofake", "rm", "nas.home.example"); x.code != ExitOK || len(r.rules().BypassExtra) != 0 {
+		t.Fatalf("删除是收紧，不要 sudo：%+v", x)
+	}
+	if without != 0 {
+		t.Fatal("每个规则提交都应带 If-Match")
+	}
+	if x := r.run("lan", "off"); x.code != ExitOK || !strings.Contains(x.out, "允许局域网：关") {
+		t.Fatalf("关是收紧：%+v", x)
+	}
+	if x := r.run("lan", "on"); x.code != ExitDenied || !strings.Contains(x.err, "这一次需要 sudo") {
+		t.Fatalf("从关到开要 sudo：%+v", x)
+	}
+	r.asOwner()
+	if x := r.run("lan", "on"); x.code != ExitOK {
+		t.Fatalf("%+v", x)
+	}
+	if x := r.run("lan", "show"); !strings.Contains(x.out, "允许局域网：开") {
+		t.Fatalf("%+v", x)
+	}
+}

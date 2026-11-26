@@ -39,6 +39,38 @@ type Bypass struct {
 	mu     sync.RWMutex
 	exact  map[string]bool
 	suffix map[string]bool
+	// 用户追加的（补齐三：规则文档的 bypass_extra，换规则时整体替换）和用户追加的置顶域名（匹配时排除：已经在名单里、
+	// 之后被加进置顶的，按置顶处理，照常分配假地址）。
+	userExact, userSuffix map[string]bool
+	pinnedExtra           []string
+}
+
+// SetUser 整体替换用户追加的名单和用户追加的置顶域名（补齐三）。任何一项会覆盖 Claude 相关域名时拒绝、什么都不改。
+func (b *Bypass) SetUser(patterns, pinnedExtra []string) error {
+	ex, sf := map[string]bool{}, map[string]bool{}
+	for _, p := range patterns {
+		n, wild, err := parsePattern(p)
+		if err != nil {
+			return err
+		}
+		if isProtected(n) {
+			return ErrProtected
+		}
+		if wild {
+			for _, q := range protected {
+				if strings.HasSuffix(q, "."+n) {
+					return ErrProtected
+				}
+			}
+			sf[n] = true
+		} else {
+			ex[n] = true
+		}
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.userExact, b.userSuffix, b.pinnedExtra = ex, sf, append([]string(nil), pinnedExtra...)
+	return nil
 }
 
 // NewBypass 返回带内置名单的 Bypass。
@@ -111,7 +143,12 @@ func (b *Bypass) Match(name string) bool {
 	}
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	if b.exact[name] {
+	if len(b.pinnedExtra) > 0 { // 用户追加的置顶域名同样永远分配假地址（匹配时再判一次）
+		if pinned, ok := rules.IsPinned(name, b.pinnedExtra); !ok || pinned {
+			return false
+		}
+	}
+	if b.exact[name] || b.userExact[name] {
 		return true
 	}
 	for s := name; ; {
@@ -120,7 +157,7 @@ func (b *Bypass) Match(name string) bool {
 			return false
 		}
 		s = s[i+1:]
-		if b.suffix[s] {
+		if b.suffix[s] || b.userSuffix[s] {
 			return true
 		}
 	}

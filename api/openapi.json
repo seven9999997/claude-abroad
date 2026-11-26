@@ -781,6 +781,17 @@
         ],
         "type": "object"
       },
+      "DaemonLANSetting": {
+        "properties": {
+          "allow_lan": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "allow_lan"
+        ],
+        "type": "object"
+      },
       "DaemonLaunchGuardLayer": {
         "properties": {
           "effective": {
@@ -1308,6 +1319,9 @@
       },
       "DaemonStatus": {
         "properties": {
+          "allow_lan": {
+            "type": "boolean"
+          },
           "browsers_left": {
             "items": {
               "type": "string"
@@ -1756,6 +1770,12 @@
         "properties": {
           "block_udp_443": {
             "type": "boolean"
+          },
+          "bypass_extra": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "default": {
             "type": "string"
@@ -3118,6 +3138,71 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DaemonStatus"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "per_call"
+      }
+    },
+    "/v1/settings/lan": {
+      "get": {
+        "description": "“允许局域网”开关（补齐三）",
+        "operationId": "lan-get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonLANSetting"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      },
+      "put": {
+        "description": "改“允许局域网”：关是收紧；从关到开是放松（敏感）",
+        "operationId": "lan-put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonLANSetting"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonLANSetting"
                 }
               }
             },

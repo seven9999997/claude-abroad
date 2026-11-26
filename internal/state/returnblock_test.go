@@ -1,7 +1,9 @@
 package state
 
 import (
+	"net/netip"
 	"slices"
+	"strings"
 	"testing"
 
 	"claude-abroad/internal/pf"
@@ -96,5 +98,21 @@ func TestReturnBlockAfterReboot(t *testing.T) {
 	if b.fpf.Raw(pf.DefaultAnchor) != nil || b.ppf.P.RestoredMode() {
 		t.Fatal("开关关着时 Recover 不应加载回国拦截")
 	}
+	b.noViolations()
+}
+
+// 补齐三：“允许局域网”关时接管规则里没有局域网放行，开时有（同一个测试台，一次加载切换）。
+func TestNoLANRules(t *testing.T) {
+	b := newBed(t)
+	b.noLAN = true
+	mustOK(t, b.m.Enable(bg))
+	raw := string(b.fpf.Raw(pf.DefaultAnchor))
+	if strings.Contains(raw, "abroad_lan") || !strings.Contains(raw, "user _abroad") || !strings.Contains(raw, "port 67") {
+		t.Fatalf("关时不应有局域网表（DHCP、专用用户、虚拟机网桥照旧）：\n%s", raw)
+	}
+	if ok, _ := b.fpf.Eval(pf.DefaultAnchor, pf.Packet{If: "en0", User: "alice", Proto: "tcp", DstPort: 445, Dst: netip.MustParseAddr("192.168.1.20")}); ok {
+		t.Fatal("经物理网卡到局域网地址应被拦")
+	}
+	mustOK(t, b.m.Restore(bg))
 	b.noViolations()
 }

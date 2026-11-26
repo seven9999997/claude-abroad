@@ -289,6 +289,9 @@ func NewDataPlane(op StreamOpener, upstream fakedns.Upstream) *DataPlane {
 				return err // 还没改任何东西
 			}
 		}
+		if err := p.srv.Bypass.SetUser(c.BypassExtra, c.PinnedExtra); err != nil { // 补齐三：用户追加的不分配假地址名单
+			return err // 还没改任何东西
+		}
 		p.pool.SetLocalMatcher(c.IsLocal)
 		return nil
 	}

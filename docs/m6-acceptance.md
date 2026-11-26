@@ -143,8 +143,8 @@
 |---|---|---|---|---|
 | 5.3、R7：可选的“系统服务直连”预设 | 没有这个预设。系统进程识别成 `system:<文件名>`，可以自己一条条写规则（如 `abroad app set system:apsd direct`） | 没有做 | R7 还没有实测结论，先不定预设 | 启用后推送、iCloud 和 App Store 的后台下载、时间同步都和普通应用一样走主代理，对外是出口 IP；主代理不支持 UDP 时 NTP 被拦、时间同步失败；停用（断网）或闸门关着时这些服务全部断网（收不到推送、iCloud 不同步）。后果是按规则推出的，R7 实测后修正 |
 | 6.1、R16：认证页临时放行、“仅认证”模式 | 没有任何放行认证页的机制（`captive.apple.com` 只在不分配假地址的名单里） | 没有做 | R16 没有实测，没有安全的放行办法 | 已启用或已停用时，公共 Wi-Fi 的认证页打不开（认证前主代理连不上）。办法：先“一键回国”（两次确认、会结束 Claude），在本机网络下完成认证，再重新启用 |
-| 6.1：“允许局域网”开关（默认开） | 局域网一直放行，没有开关 | 没有做 | — | 关不掉局域网放行；局域网里的设备照常可达 |
-| 4.3：不分配假地址的名单“内置、可增删”，含投屏和局域网发现的域名 | 名单写死：`time*.apple.com`、`captive.apple.com`、`*.lan`、`*.local`；没有接口改 | 没有做 | — | 加不了自己的域名；投屏类域名照样分配假地址，个别投屏可能不通 |
+| 6.1：“允许局域网”开关（默认开） | **已补**（2026-11-27，补齐三）：后台持久化的设置 `GET/PUT /v1/settings/lan`，关是收紧、从关到开要本人授权；关掉后断网和接管规则里都没有局域网表，回环、DHCP、专用用户、虚拟机网桥、回国拦截不受影响；开机 guard 的参数随之变化。命令行 `abroad lan show|on|off`，应用设置页的开关。测试 `go:internal/daemon#TestAllowLANSwitch`、`go:internal/state#TestCrashExhaustiveNoLAN`、`go:internal/state#TestRebootExhaustiveNoLAN`、`go:cmd/abroad#TestCLINoFakeAndLAN`、`swift:noFakeListAndAllowLAN`。真机效果待端到端 `script:scripts/m6/e2e/run.sh#LAN1` | 已补 | — | — |
+| 4.3：不分配假地址的名单“内置、可增删”，含投屏和局域网发现的域名 | **已补**（2026-11-27，补齐三）：内置四类不动、删不掉；用户追加的进规则文档的 `bypass_extra`（条件写入、追加是放松）；Claude 的域名、置顶域名加不进，已在名单里、之后被加进置顶的按置顶处理；投屏类域名由用户自己追加。命令行 `abroad rules nofake …`，应用分流页一小节。测试 `go:internal/rules#TestBypassExtra`、`go:internal/fakedns#TestBypassUser`、`go:internal/daemon#TestBypassExtraRules`、`go:internal/api#TestRulesLevelBypassExtra` | 已补 | — | — |
 | 5.1：可选“继承父进程” | 识别器有这个字段，但 abroadd 没有打开 | 没有做 | — | 不能给“终端里启动的所有程序”统一设规则，只能按每个程序的路径设 |
 | 5.1：共享、系统进程在界面上单独显示并说明 | 应用分流页和普通应用列在一起 | 没有做 | — | 不容易看出改 `nsurlsessiond` 这类进程会影响很多应用 |
 | 4.2、5.2：拦截 UDP 443；`offline_allow`、`local_domains`、`pinned_extra` | **已补**（2026-11-27，M6 之后的补齐一）：命令行 `abroad rules local|pinned|offline ls|add|rm`、`rules udp443 show|on|off`，应用“应用分流”页的“域名与其他规则”；规则提交带条件头（读和写之间被别处改过时不覆盖）。测试 `go:cmd/abroad#TestCLIRuleLists`、`go:cmd/abroad#TestCLIRulesConflictRetry`、`go:internal/daemon#TestRulesConditionalWrite`、`swift:ruleListsLoadAddRemoveToggle`、`swift:ruleListsConflictReloadsNoRetry` | 已补 | — | — |
@@ -175,6 +175,7 @@
 |---|---|
 | 用发布构建验证管控的真实效果（第三道结束真实 Claude、第五道拦真实地址段） | 没有写脚本。发布构建装上的那一刻起，这台 Mac 直连 Anthropic 地址段的流量全部被拒，规则不分网卡，经 VPN 隧道出去、目的地仍是这些地址的包同样被拒，正在运行的 Claude Code 会话会断开，直到卸载；第三道会结束本机真实的 Claude 进程。要不要做、在哪台机器上做，由用户决定 |
 | 六种分享链接的字段映射核对 | 没有拿真实的链接核对过（单测只核对转换结果的形状）。不认识的参数和取值一律拒绝导入：映射有误时用户看到的是导入失败，不是连到配置不对的地方。用户导入自己的链接后，出口检查通过即算核对过（待真机） |
+| “允许局域网”关掉后的真机效果 | **待真机**（端到端 LAN1，要设 `M6E_LAN_PROBE`）：关掉后经物理网卡连局域网设备失败、打开后恢复；自动测试只证明了规则文本和求值 |
 | 回国拦截的定向清理连接状态默认打开 | macOS 上的写法和效果待端到端 K1；abroadd 的 `--return-block-kill-states` 默认关 |
 | Windows 版 | 暂停（用户 2026-11-25 决定） |
 

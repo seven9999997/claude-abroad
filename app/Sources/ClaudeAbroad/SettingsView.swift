@@ -11,6 +11,11 @@ struct SettingsView: View {
             Form {
                 LabeledContent(L10n.appName, value: "")
                 Toggle(L10n.notificationsToggle, isOn: $model.notificationsEnabled)
+                if let on = model.allowLAN { // 补齐三
+                    Toggle(L10n.allowLANTitle, isOn: Binding(get: { on }, set: { v in Task { await model.setAllowLAN(v) } }))
+                        .disabled(model.busy)
+                    Text(L10n.allowLANHelp).font(.caption).foregroundStyle(.secondary)
+                }
                 if let s = model.signatureText { Text(s).font(.caption) }
             }
             .tabItem { Text(L10n.settingsGeneral) }

@@ -62,6 +62,13 @@ var commands = []command{
 	{path: []string{"rules", "offline", "add"}, route: "rules-put", run: cmdRulesAdd("offline")},
 	{path: []string{"rules", "offline", "rm"}, route: "rules-put", run: cmdRulesRm("offline")},
 	{path: []string{"rules", "udp443"}, route: "rules-put", run: cmdRulesUDP443},
+	{path: []string{"rules", "nofake", "ls"}, route: "rules-get", run: cmdRulesList("nofake")},
+	{path: []string{"rules", "nofake", "add"}, route: "rules-put", run: cmdRulesAdd("nofake")},
+	{path: []string{"rules", "nofake", "rm"}, route: "rules-put", run: cmdRulesRm("nofake")},
+	// 补齐三：“允许局域网”开关
+	{path: []string{"lan", "show"}, route: "lan-get", run: cmdLANShow},
+	{path: []string{"lan", "on"}, route: "lan-put", run: cmdLANSet(true)},
+	{path: []string{"lan", "off"}, route: "lan-put", run: cmdLANSet(false)},
 	{path: []string{"region", "show"}, route: "region-get", run: cmdRegionShow},
 	{path: []string{"region", "set"}, route: "region-put", run: cmdRegionSet},
 	{path: []string{"region", "auto"}, route: "region-put", run: cmdRegionAuto},

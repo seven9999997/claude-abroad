@@ -99,6 +99,9 @@ type Config struct {
 	LocalDomains []string // 归一后的模式
 	PinnedExtra  []string // 用户追加的置顶域名（归一后的模式）；内置的永远在
 	BlockUDP443  bool
+	// BypassExtra 是用户追加的“不分配假地址”的域名（补齐三，设计 4.3；归一后的模式）。内置的几项在 fakedns 里、
+	// 永远在。这些域名的 A 查询交给上游（经主代理的 DoH）解析，之后的连接仍按规则判定。
+	BypassExtra []string
 
 	local  []pattern
 	pinned []pattern // 用户追加的置顶域名（已解析，Parse 时算好）
@@ -119,6 +122,7 @@ type file struct {
 	LocalDomains []string   `yaml:"local_domains" json:"local_domains"`
 	PinnedExtra  []string   `yaml:"pinned_extra" json:"pinned_extra"`
 	BlockUDP443  bool       `yaml:"block_udp_443" json:"block_udp_443"`
+	BypassExtra  []string   `yaml:"bypass_extra,omitempty" json:"bypass_extra,omitempty"`
 }
 
 // FileRule、File 是规则文件的形式（GET /v1/rules?format=json 用；字段与 YAML 一一对应，JSON 也能直接 PUT 回去）。
@@ -135,6 +139,7 @@ func (c *Config) ToFile() File {
 		LocalDomains: append([]string{}, c.LocalDomains...),
 		PinnedExtra:  append([]string{}, c.PinnedExtra...),
 		BlockUDP443:  c.BlockUDP443,
+		BypassExtra:  append([]string(nil), c.BypassExtra...),
 		Rules:        []fileRule{},
 	}
 	for _, r := range c.Rules {
@@ -340,7 +345,44 @@ func fromFile(f file) (*Config, error) {
 		c.local = append(c.local, p)
 		c.LocalDomains = append(c.LocalDomains, p.String())
 	}
+	seenBy := map[string]bool{}
+	for i, s := range f.BypassExtra {
+		item := fmt.Sprintf("bypass_extra 第 %d 项", i+1)
+		p, err := parsePattern(s)
+		if err != nil {
+			return nil, invalid(item, "不是合法的域名或 *.域名")
+		}
+		if p.Wild && !strings.Contains(p.Base, ".") {
+			return nil, invalid(item, "通配不能只写顶级域（如 *.com），要写到某个域名之下")
+		}
+		for _, q := range builtinPinned {
+			if overlap(p, q) {
+				return nil, invalid(item, "与置顶域名 "+q.String()+" 有重叠，Claude 相关的域名必须分配假地址、走主代理")
+			}
+		}
+		if seenBy[p.String()] {
+			return nil, invalid(item, "重复")
+		}
+		seenBy[p.String()] = true
+		c.BypassExtra = append(c.BypassExtra, p.String())
+	}
 	return c, nil
+}
+
+// BypassPinnedConflict 报告不分配假地址的一个模式是否和置顶域名（内置的或这份规则里追加的）重叠，返回重叠的那个置顶模式
+// （补齐三：新加进名单的模式和追加的置顶域名重叠时拒绝；已经在名单里、之后被加进置顶的，按置顶处理，fakedns 匹配时排除）。
+func (c *Config) BypassPinnedConflict(s string) (string, bool) {
+	p, err := parsePattern(s)
+	if err != nil {
+		return "", false
+	}
+	all := append(append([]pattern(nil), builtinPinned...), c.pinned...)
+	for _, q := range all {
+		if overlap(p, q) {
+			return q.String(), true
+		}
+	}
+	return "", false
 }
 
 func checkRuleApp(id AppID) error {

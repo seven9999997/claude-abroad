@@ -67,6 +67,13 @@ else
   ok "d. 端到端里没有真实的 Anthropic 地址段"
 fi
 
+# 补齐三：设了 M6E_LAN_PROBE 时第一段有“允许局域网”的关和开，命令核对通过
+M6E_LAN_PROBE=192.168.1.20:631 DRY_RUN=1 scripts/m6/e2e/run.sh >"${TMP}/e1lan" 2>/dev/null
+grep -q '^CHANGE: /Library/Application Support/claude-abroad/bin/abroad lan off$' "${TMP}/e1lan" &&
+  grep -q '^CHANGE: /Library/Application Support/claude-abroad/bin/abroad lan on$' "${TMP}/e1lan" &&
+  scripts/m6/e2e/check-commands.sh "${TMP}/e1lan" "${TMP}/e2" "${TMP}/e3" >/dev/null 2>&1 &&
+  ok "b. 允许局域网的一步（关、开）在命令清单里" || bad "b. 允许局域网的一步不对"
+
 # ---- f. 最终验收清单的引用（M6-10）----
 scripts/m6/check-acceptance.sh >"${TMP}/acc" 2>&1 && ok "f. $(tail -1 "${TMP}/acc")" || bad "f. 验收清单核对不通过：$(cat "${TMP}/acc")"
 accneg() { if M6_ACCEPT_DOC="$2" scripts/m6/check-acceptance.sh >/dev/null 2>&1; then bad "f. 反例没被拦下：$1"; else ok "f. 反例被拦下：$1"; fi; }

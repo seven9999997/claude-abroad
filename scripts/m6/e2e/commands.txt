@@ -13,6 +13,8 @@
 ^rm -f /Library/Application Support/claude-abroad/fake-claude/claude-fake$
 ^launchctl bootstrap system /Library/LaunchDaemons/com\.claude-abroad\.dev\.abroadd\.plist$
 ^/Library/Application Support/claude-abroad/bin/abroad-rescue$
+# 补齐三：“允许局域网”的关和开（只在设了 M6E_LAN_PROBE 时）
+^/Library/Application Support/claude-abroad/bin/abroad lan (off|on)$
 # M6-11b：只清目的地在测试段里的连接状态（经 pfcheck.sh；测试段是文档保留地址，没有真实连接）。
 ^pfctl -k 0\.0\.0\.0/0 -k 192\.0\.2\.0/24$
 ^pfctl -k ::/0 -k 2001:db8:abd::/48$

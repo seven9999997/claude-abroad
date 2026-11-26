@@ -167,7 +167,7 @@ public final class AppsModel: PageModel {
 
     /// 规则里的三个名单（补齐一）；rawValue 和命令行的子命令一致。
     public enum RuleList: String, Sendable, CaseIterable {
-        case local, pinned, offline
+        case local, pinned, nofake, offline
     }
 
     public func items(_ l: RuleList) -> [String] {
@@ -175,6 +175,7 @@ public final class AppsModel: PageModel {
         switch l {
         case .local: return r.localDomains
         case .pinned: return r.pinnedExtra
+        case .nofake: return r.bypassExtra
         case .offline: return r.offlineAllow
         }
     }
@@ -183,6 +184,7 @@ public final class AppsModel: PageModel {
         switch l {
         case .local: return L10n.rulesLocalTitle
         case .pinned: return L10n.rulesPinnedTitle
+        case .nofake: return L10n.rulesNoFakeTitle
         case .offline: return L10n.rulesOfflineTitle
         }
     }
@@ -191,6 +193,7 @@ public final class AppsModel: PageModel {
         switch l {
         case .local: return L10n.rulesLocalHelp
         case .pinned: return L10n.rulesPinnedHelp
+        case .nofake: return L10n.rulesNoFakeHelp
         case .offline: return L10n.rulesOfflineHelp
         }
     }
@@ -206,6 +209,7 @@ public final class AppsModel: PageModel {
         switch l {
         case .local: return doc.localDomains
         case .pinned: return doc.pinnedExtra
+        case .nofake: return doc.bypassExtra
         case .offline: return doc.offlineAllow
         }
     }
@@ -214,6 +218,7 @@ public final class AppsModel: PageModel {
         switch l {
         case .local: doc.localDomains = xs
         case .pinned: doc.pinnedExtra = xs
+        case .nofake: doc.bypassExtra = xs
         case .offline: doc.offlineAllow = xs
         }
     }
@@ -525,6 +530,18 @@ public final class SettingsModel: PageModel {
     @Published public private(set) var claudeDomains: DaemonClaudeDomainsView?
     /// 首次准备（M6-8a）；后台没打开时为 nil（不显示）。
     @Published public private(set) var prepare: DaemonPrepareStatus?
+    /// 补齐三：“允许局域网”（状态里的 allow_lan；旧后台不给时为 nil，不显示开关）。
+    @Published public private(set) var allowLAN: Bool?
+
+    /// 改“允许局域网”：关是收紧，直接提交；从关到开是放松，后台要求本人授权时给出终端命令。
+    public func setAllowLAN(_ on: Bool) async {
+        busy = true
+        defer { busy = false }
+        let o = await client.putLANSetting(on)
+        if case .ok(let v) = o { allowLAN = v.allowLan; notice = nil; return }
+        _ = await handle(o, op: .allowLAN(on: on))
+    }
+
     /// 回国拦截（M6-11b）；没打开启动管控时后台不给，为 nil（不显示）。
     @Published public private(set) var returnBlock: DaemonReturnBlockStatus?
     public let env: EnvModel
@@ -545,7 +562,7 @@ public final class SettingsModel: PageModel {
     override public func load() async {
         let o = await client.status()
         state = LoadState.from(o)
-        if case .ok(let st) = o { security = st.security; resolverLock = st.resolverLock; claudeCode = st.claudeCode; integrity = st.integrity; prepare = st.prepare; returnBlock = st.returnBlock; launchControlOn = st.launchControl ?? (st.resolverLock != nil || st.claudeCode != nil) }
+        if case .ok(let st) = o { security = st.security; resolverLock = st.resolverLock; claudeCode = st.claudeCode; integrity = st.integrity; prepare = st.prepare; returnBlock = st.returnBlock; allowLAN = st.allowLan; launchControlOn = st.launchControl ?? (st.resolverLock != nil || st.claudeCode != nil) }
         switch await client.restorePreview() {
         case .ok(let pv):
             processes = pv.processes ?? []

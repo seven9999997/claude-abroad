@@ -5,12 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 
 	"claude-abroad/internal/rules"
@@ -211,6 +214,19 @@ func (d *Daemon) handlePutRules(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, errBody{err.Error()})
 		return
+	}
+	// 补齐三：新加进“不分配假地址”名单的模式不能和置顶域名（内置的、这份规则里追加的）重叠。已经在名单里、之后被加进
+	// 置顶的不拒绝，按置顶处理（fakedns 匹配时排除）。
+	cur := d.currentRules()
+	for i, p := range next.BypassExtra {
+		if slices.Contains(cur.BypassExtra, p) {
+			continue
+		}
+		if q, bad := next.BypassPinnedConflict(p); bad {
+			writeErr(w, http.StatusUnprocessableEntity, api.ErrorBody{Field: fmt.Sprintf("bypass_extra[%d]", i),
+				Error: usererror.New("改规则", "bypass_extra 第 "+strconv.Itoa(i+1)+" 项与置顶域名 "+q+" 有重叠，置顶的域名必须分配假地址、走主代理", "请去掉这一项后重试。", nil).Error()})
+			return
+		}
 	}
 	// 按内容分级（m5-plan v2.1 决定 3）：放松保护的改动是敏感。
 	if lv, why := api.RulesLevel(d.currentRules(), next); lv == api.Sensitive && !requireSensitive(w, r, strings.Join(why, "；")) {
