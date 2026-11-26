@@ -148,6 +148,15 @@ m6i_snap_files() {
     printf '%s\t%s\t%s\n' "$p" "$kind" "$sum" >>"$out"
   done < <(m6i_snap_paths)
 }
+# m6i_sys_cmp <安装前> <卸载后>：系统快照的对照。pf 是否启用有一边无法判断时，这一项不参与对照，另记一条说明。
+m6i_sys_cmp() {
+  if grep -q '^pf\.enabled\.unknown' "$1" "$2"; then
+    m6i_log "pf 是否启用：无法判断（pfctl -s info 第一行认不出，原样：$(grep -h '^pf\.enabled' "$1" "$2" | tr '\t\n' '  ')），不参与对照"
+    diff <(grep -v '^pf\.enabled' "$1") <(grep -v '^pf\.enabled' "$2")
+  else
+    diff "$1" "$2"
+  fi
+}
 # 系统部分的快照（真实模式；自测、空跑跳过）：专用用户、两个 LaunchDaemon 是否已注册、pf 锚点里的规则数、pf 是否启用
 # （M6-11b：装上后回国拦截会启用 pf，卸载后要复原）、DNS 键、各网络服务的 IPv6。
 m6i_snap_system() {
@@ -158,7 +167,12 @@ m6i_snap_system() {
     printf 'launchd.d\t%s\n' "$(launchctl print "system/${M6I_LABEL_D}" >/dev/null 2>&1 && echo yes || echo no)"
     printf 'launchd.g\t%s\n' "$(launchctl print "system/${M6I_LABEL_G}" >/dev/null 2>&1 && echo yes || echo no)"
     printf 'pf.anchor\t%s\n' "$(pfctl -a "${M6I_ANCHOR}" -s rules 2>/dev/null | grep -c . || true)"
-    printf 'pf.enabled\t%s\n' "$(pfctl -s info 2>/dev/null | awk 'NR==1{print $2}')"
+    # 第一行的格式没在真机核对过：认不出 Enabled/Disabled 时记“无法判断”并原样保存那一行（对照时不当成不一致）
+    local pfl; pfl=$(pfctl -s info 2>/dev/null | awk 'NR==1')
+    case "$(printf '%s' "${pfl}" | awk '{print $2}')" in
+      Enabled | Disabled) printf 'pf.enabled\t%s\n' "$(printf '%s' "${pfl}" | awk '{print $2}')" ;;
+      *) printf 'pf.enabled.unknown\t%s\n' "${pfl}" ;;
+    esac
     printf 'dns.key\t%s\n' "$(printf 'show %s\nquit\n' "${M6I_DNS_KEY}" | scutil 2>/dev/null | grep -q 'No such key' && echo no || echo yes)"
     networksetup -listallnetworkservices 2>/dev/null | tail -n +2 | grep -v '^\*' | while IFS= read -r s; do
       printf 'ipv6\t%s\t%s\n' "$s" "$(networksetup -getinfo "$s" 2>/dev/null | awk -F': ' '/^IPv6: /{print $2}')"

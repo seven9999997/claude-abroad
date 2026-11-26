@@ -112,15 +112,24 @@ c_restored() {
 # 不带凭据地连测试段的一个地址应立即失败（被拒；没有拦截时这个地址不可达，会一直等到超时）。
 RB_RULES="block return out quick inet from any to 192.0.2.0/24
 block return out quick inet6 from any to 2001:db8:abd::/48"
+# probe_testnet：不带凭据地连测试段的一个地址，输出“fast <退出码> <秒>”（3 秒内失败）或“slow …”（成功或超时）。
+probe_testnet() {
+  local t0 t1 rc
+  t0=$(date +%s); curl -sS -m 8 --connect-timeout 8 -o /dev/null https://192.0.2.1/ 2>/dev/null; rc=$?; t1=$(date +%s)
+  if [ "$rc" != 0 ] && [ $((t1 - t0)) -le 3 ]; then echo "fast ${rc} $((t1 - t0))"; else echo "slow ${rc} $((t1 - t0))"; fi
+}
 c_rb() {
-  local st r t0 t1 rc
+  local st r p base
   st=$(get /v1/status)
   [ "$(jget "$st" return_block.active)" = true ] && [ "$(jget "$st" return_block.test)" = true ] || { echo "回国拦截应在生效且是测试段：$(jget "$st" return_block)"; return 1; }
   r=$(bash scripts/m6/e2e/pfcheck.sh rules 2>/dev/null)
   [ "$r" = "${RB_RULES}" ] || { echo "锚点里应恰好是测试段的两条：${r}"; return 1; }
-  t0=$(date +%s); curl -sS -m 8 --connect-timeout 8 -o /dev/null https://192.0.2.1/ 2>/dev/null; rc=$?; t1=$(date +%s)
-  [ "$rc" != 0 ] && [ $((t1 - t0)) -le 3 ] || { echo "连 192.0.2.1:443 应立即失败（退出码 ${rc}，用了 $((t1 - t0)) 秒）"; return 1; }
-  echo "回国拦截生效（测试段），锚点恰好两条，连测试段 $((t1 - t0)) 秒内被拒（curl 退出码 ${rc}）"
+  p=$(probe_testnet); base=$(m6e_state_get rb_base)
+  case "${base%% *}:${p%% *}" in
+    slow:fast) echo "回国拦截生效（测试段），锚点恰好两条；连测试段：基线 ${base}，现在 ${p}（被拒）" ;;
+    fast:*) echo "回国拦截生效（测试段），锚点恰好两条；连测试段无法区分（基线本来就立即失败：${base}），以锚点和状态为准" ;;
+    *) echo "连 192.0.2.1:443 应立即被拒：基线 ${base:-没量}，现在 ${p}"; return 1 ;;
+  esac
 }
 c_guard_rb() {
   [ -f "${M6E_GUARD_LOG}" ] || { echo "没有 guard 的日志"; return 1; }
@@ -168,6 +177,9 @@ if [ "${PHASE}" = 1 ]; then
   rg_snapshot "${M6E_STATE}/region" "${SUDO_USER}" "${SUID}" || m6e_die "地区有读不出来的项，没有原值就不能保证还原，不继续"
   m6e_state_set phase 1
 
+  # 基线（M6-11b 补审建议）：装之前连一次测试段，记下是超时还是本来就立即失败，回国拦截的那一项按它判断。
+  step "基线：开发安装之前不带凭据地连一次测试段地址"
+  if [ "$DRY_RUN" != 1 ]; then base=$(probe_testnet); m6e_state_set rb_base "${base}"; m6e_log "基线：${base}"; fi
   step "开发安装"
   if [ "$DRY_RUN" = 1 ]; then printf 'CHANGE: scripts/m6/install/install.sh\n'; else
     M6I_YES=1 bash scripts/m6/install/install.sh || m6e_die "开发安装失败（它已经自动卸载），见 scripts/m6/install/out/"

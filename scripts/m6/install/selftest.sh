@@ -199,6 +199,9 @@ fi
 grep -qF 'QUERY: curl --unix-socket /var/run/claude-abroad/api.sock http://abroadd/v1/status（return_block 应为 on、active、test，nets=192.0.2.0/24,2001:db8:abd::/48）' "${TMP}/i.dry" &&
   grep -qF 'QUERY: pfctl -a com.apple/250.abroad -s rules' "${TMP}/i.dry" && ok "M6-11b. 安装后只读核对回国拦截是测试段" || bad "M6-11b. 安装后没有核对回国拦截"
 grep -qF "pf.enabled" scripts/m6/install/lib.sh && ok "M6-11b. 快照里有 pf 的启用状态" || bad "M6-11b. 快照里没有 pf 的启用状态"
+printf 'user\tno\npf.enabled\tDisabled\n' >"${TMP}/sa"; printf 'user\tno\npf.enabled.unknown\tStatus: ???\n' >"${TMP}/sb"; printf 'user\tno\npf.enabled\tEnabled\n' >"${TMP}/sc"
+env -u M6I_TEST_SRC -u M6I_TEST_APP -u M6I_TEST_DIR bash -c ". scripts/m6/install/lib.sh; m6i_sys_cmp '${TMP}/sa' '${TMP}/sb'" >/dev/null 2>&1 && ok "M6-11b. pf 是否启用无法判断时不算不一致" || bad "M6-11b. pf 是否启用无法判断时被当成不一致"
+env -u M6I_TEST_SRC -u M6I_TEST_APP -u M6I_TEST_DIR bash -c ". scripts/m6/install/lib.sh; m6i_sys_cmp '${TMP}/sa' '${TMP}/sc'" >/dev/null 2>&1 && bad "M6-11b. pf 启用状态变了没被发现" || ok "M6-11b. pf 启用状态变了会被发现"
 
 echo
 [ $fails = 0 ] && echo "自测全部通过" || echo "自测：${fails} 处不通过"

@@ -8,6 +8,17 @@ abroadd 在已启用时按规则转发，其余时候一律 403。对应 [docs/f
 > 会用你的账号让 Claude Code 回几句很短的话。整个过程在**已启用**状态下做：即使 Claude Code 绕开了代理，
 > 也在接管下经主代理出去，不会暴露本机 IP。
 
+## 独立的流程（端到端最后会卸载，所以这份要单独装一次）
+
+1. 开发安装：`sudo scripts/m6/install/install.sh`（见 [scripts/m6/install](../install/README.md)）；
+2. 以你自己的身份打开应用，在安装引导里配好主代理，点“启用”；
+3. 本脚本：`sudo -E scripts/m6/layer4/run.sh`；
+4. 在应用里点“一键回国”；
+5. 卸载：`sudo scripts/m6/install/uninstall.sh`（和安装前的快照逐项对照）。
+
+在你选定的那台 Mac 上做。在这台日常用的 Mac 上做时，写入托管设置期间正在运行的 Claude Code 会话也经本机代理端口联网，
+T2a/b 会让它也连不上，直到脚本删掉分片。
+
 ## 前提
 
 1. 开发安装已经装好（`scripts/m6/install`），在应用里配好主代理并**启用**。回国拦截必须是测试段（开发安装默认；M6-11b）：

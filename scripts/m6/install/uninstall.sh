@@ -154,7 +154,7 @@ if [ "${M6I_MODE}" = dry ]; then
 fi
 m6i_snap_files "${SNAPD}/files.after"
 m6i_snap_system "${SNAPD}/system.after"
-diffs=$(diff "${SNAPD}/files.before" "${SNAPD}/files.after"; [ -f "${SNAPD}/system.before" ] && diff "${SNAPD}/system.before" "${SNAPD}/system.after")
+diffs=$(diff "${SNAPD}/files.before" "${SNAPD}/files.after"; [ -f "${SNAPD}/system.before" ] && m6i_sys_cmp "${SNAPD}/system.before" "${SNAPD}/system.after")
 if [ -n "${diffs}" ]; then
   m6i_log "和安装前的快照不一致（快照留在 ${M6I_SNAP}，可以重试卸载或按 docs/emergency.md 处理）："
   printf '%s\n' "${diffs}" >&2

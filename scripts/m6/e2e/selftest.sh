@@ -5,7 +5,8 @@
 #      应急程序早于停掉后台服务、没有应急演练）都被拦下；
 #   c. --check-only 在没有确认 M5 通过、没有主代理节点时拒绝，并说明原因；
 #   d. 源码检查：run.sh、restore.sh、lib.sh 里没有 pfctl、networksetup、route、ifconfig、pkill、killall、open 命令；
-#   e. 开发安装脚本的自测、命令核对也通过（端到端依赖它们）。
+#   e. 开发安装脚本的自测、命令核对也通过（端到端依赖它们）；
+#   f. 最终验收清单（docs/m6-acceptance.md）引用的测试、脚本步骤、文件都存在，反例被拦下（M6-10）。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "${ROOT}" || exit 1
@@ -65,6 +66,16 @@ if cat scripts/m6/e2e/run.sh scripts/m6/e2e/pfcheck.sh scripts/m6/e2e/commands.t
 else
   ok "d. 端到端里没有真实的 Anthropic 地址段"
 fi
+
+# ---- f. 最终验收清单的引用（M6-10）----
+scripts/m6/check-acceptance.sh >"${TMP}/acc" 2>&1 && ok "f. $(tail -1 "${TMP}/acc")" || bad "f. 验收清单核对不通过：$(cat "${TMP}/acc")"
+accneg() { if M6_ACCEPT_DOC="$2" scripts/m6/check-acceptance.sh >/dev/null 2>&1; then bad "f. 反例没被拦下：$1"; else ok "f. 反例被拦下：$1"; fi; }
+{ cat docs/m6-acceptance.md; echo '| x | `go:internal/state#TestNoSuchTest` |'; } >"${TMP}/acc1"; accneg "引用不存在的测试" "${TMP}/acc1"
+{ cat docs/m6-acceptance.md; echo '`script:scripts/m6/e2e/run.sh#ZZ9`'; } >"${TMP}/acc2"; accneg "引用不存在的脚本步骤" "${TMP}/acc2"
+grep -v '^| R17 |' docs/m6-acceptance.md >"${TMP}/acc3"; accneg "缺一条风险" "${TMP}/acc3"
+{ cat docs/m6-acceptance.md; echo '| 用发布构建验证管控的真实效果 | **达到** |'; } >"${TMP}/acc4"; accneg "发布构建验证写成达到" "${TMP}/acc4"
+{ cat docs/m6-acceptance.md; echo '待定'; } >"${TMP}/acc5"; accneg "还有待定" "${TMP}/acc5"
+{ cat docs/m6-acceptance.md; echo '`swift:noSuchSwiftTest`'; } >"${TMP}/acc6"; accneg "引用不存在的应用测试" "${TMP}/acc6"
 
 # ---- e. 开发安装脚本 ----
 scripts/m6/install/selftest.sh >"${TMP}/inst" 2>&1 && ok "e. 开发安装脚本的自测通过（$(grep -c '^✓' "${TMP}/inst") 项）" || bad "e. 开发安装脚本的自测不通过：$(grep '^✗' "${TMP}/inst" | head -3)"
