@@ -366,33 +366,46 @@ func cmdUninstall(a *app, args []string) int {
 	}
 	resp, code := a.confirmedWord("POST", "/v1/actions/uninstall", body, "uninstall")
 	if code != ExitOK {
+		printUninstallSteps(a, resp.Body, true) // 失败时也列出走到了哪一步（M6-5a 补审建议改）
 		return code
 	}
-	return a.out(resp, func() {
-		var v struct {
-			Steps []struct {
-				Name string
-				Done bool
-				Note string
-			} `json:"steps"`
-			Complete bool `json:"complete"`
+	return a.out(resp, func() { printUninstallSteps(a, resp.Body, false) })
+}
+
+// printUninstallSteps 列出卸载的步骤：✓ 完成；✗ 失败停在这一步；… 还没轮到（例如要由安装器完成的那一步）。
+func printUninstallSteps(a *app, body []byte, failed bool) {
+	var v struct {
+		Steps []struct {
+			Name string
+			Done bool
+			Note string
+		} `json:"steps"`
+		Complete bool `json:"complete"`
+	}
+	if json.Unmarshal(body, &v) != nil || len(v.Steps) == 0 {
+		return
+	}
+	for i, s := range v.Steps {
+		mark := "✓"
+		switch {
+		case s.Done:
+		case failed && i == len(v.Steps)-1:
+			mark = "✗"
+		default:
+			mark = "…"
 		}
-		_ = json.Unmarshal(resp.Body, &v)
-		for _, s := range v.Steps {
-			mark := "✓"
-			if !s.Done {
-				mark = "…"
-			}
-			note := ""
-			if s.Note != "" {
-				note = "（" + s.Note + "）"
-			}
-			fmt.Fprintf(a.stdout, "%s %s%s\n", mark, s.Name, note)
+		note := ""
+		if s.Note != "" {
+			note = "（" + s.Note + "）"
 		}
-		if !v.Complete {
-			fmt.Fprintln(a.stdout, "还有步骤要由安装器完成（见上）")
-		}
-	})
+		fmt.Fprintf(a.stdout, "%s %s%s\n", mark, s.Name, note)
+	}
+	switch {
+	case failed:
+		fmt.Fprintln(a.stdout, "卸载停在打 ✗ 的那一步；处理后重试 sudo abroad uninstall，已完成的步骤不会重复出问题")
+	case !v.Complete:
+		fmt.Fprintln(a.stdout, "还有步骤要由安装器完成（见上）")
+	}
 }
 
 func cmdRestore(a *app, args []string) int {

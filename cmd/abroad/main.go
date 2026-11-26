@@ -217,6 +217,9 @@ func (a *app) codeOf(resp apiclient.Response) int {
 	case api.CodeUnsupported:
 		fmt.Fprintf(a.stderr, "后台服务现在的模式不提供这项功能：%s\n", msg)
 		return ExitFail
+	case api.CodeUninstalled:
+		fmt.Fprintln(a.stderr, "Claude 出国已经一键卸载：要继续使用请重新安装。")
+		return ExitDenied
 	}
 	fmt.Fprintln(a.stderr, msg)
 	return ExitFail

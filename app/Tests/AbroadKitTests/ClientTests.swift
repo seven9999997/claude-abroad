@@ -33,6 +33,9 @@ import Testing
     guard case .failed(500, let f) = m(json(500, "{\"error\":\"内部错误\"}")) else { Issue.record("500"); return }
     #expect(f.raw == "内部错误")
     guard case .failed(200, _) = m(json(200, "not json")) else { Issue.record("读不懂的 200"); return }
+    // M6-5a 补审返工：已经卸载过（代码 uninstalled）按代码显示文字表里的话，不用后台的原文
+    guard case .invalid(let u2) = m(json(409, "{\"code\":\"uninstalled\",\"error\":\"后台的原文\"}")) else { Issue.record("409 已卸载"); return }
+    #expect(u2.code == .uninstalled && u2.raw == L10n.uninstalledError)
 }
 
 @Test func connectionErrorsBecomeUnreachable() async {

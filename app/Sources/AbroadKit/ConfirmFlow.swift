@@ -59,6 +59,10 @@ public final class ConfirmFlow: ObservableObject {
     private var submitter: ((ConfirmPrompt) async -> Bool)?
     /// 重新发起第一步，取新的预览（后台这次若不再要求确认，发起方照常处理结果，返回 nil）。
     private var refetcher: (() async -> RefetchResult)?
+    /// 带着改过的浏览器选项重新发起第一步（M6-5a 补审返工）。
+    private var reissuer: ((ConfirmPrompt, Bool) async -> RefetchResult)?
+    /// 当前确认框是按哪个浏览器选项取得的（确认码绑定它）。
+    private var promptKill = false
     /// 每次显示新的确认框加一；await 之后核对还是不是当初那一个。
     private var generation = 0
 
@@ -99,13 +103,20 @@ public final class ConfirmFlow: ObservableObject {
         guard prompt == nil else { p.discard(); return false } // 同一时间只有一个确认框
         let client = self.client
         submitter = { [weak self] p in
-            let extra: [String: Bool] = (self?.killBrowsers ?? false) ? ["kill_browsers": true] : [:]
-            let o = await client.confirm(p, as: T.self, extra: extra)
+            _ = self // 请求体里的浏览器选项和确认码绑定，提交时不再另加（见 confirm()）
+            let o = await client.confirm(p, as: T.self)
             if case .invalid(let t) = o, t.code == .confirmInvalid { return true }
             await onResult(o)
             return false
         }
         refetcher = refetch
+        reissuer = { p, kill in
+            let o = await client.reissue(p, killBrowsers: kill, as: T.self)
+            if case .needsConfirm(let np) = o { return .prompt(np) }
+            await onResult(o)
+            if case .ok = o { return .done }
+            return .failed
+        }
         show(p, refreshed: false)
         return true
     }
@@ -114,6 +125,7 @@ public final class ConfirmFlow: ObservableObject {
         generation += 1
         if !r { completedNote = nil; killBrowsers = false }
         prompt = p
+        promptKill = APIClient.requestedKillBrowsers(p)
         shownAt = clock.now()
         now = clock.now()
         expired = false
@@ -130,6 +142,23 @@ public final class ConfirmFlow: ObservableObject {
         let refetch = refetcher
         submitting = true
         defer { if generation == gen { submitting = false } }
+        // 勾选“同时强制退出浏览器”和确认框取得时不一样：带着新选项重新发起第一步，显示新的预览（文字不同），要用户再点一次。
+        if killBrowsers != promptKill, let re = reissuer {
+            p.discard()
+            let r = await re(p, killBrowsers)
+            guard generation == gen else { return }
+            switch r {
+            case .prompt(let np):
+                submitting = false
+                show(np, refreshed: true)
+            case .done:
+                finish()
+                completedNote = L10n.confirmNotNeededDone
+            case .failed:
+                finish()
+            }
+            return
+        }
         let invalid = await submit(p)
         guard generation == gen else { return }
         guard invalid else { finish(); return }
@@ -169,6 +198,7 @@ public final class ConfirmFlow: ObservableObject {
         shownAt = nil
         submitter = nil
         refetcher = nil
+        reissuer = nil
         expired = false
         refreshed = false
     }

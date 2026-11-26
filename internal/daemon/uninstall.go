@@ -75,6 +75,9 @@ func (d *Daemon) runUninstall(ctx context.Context) (UninstallResult, error) {
 	add("结束 Claude 并恢复本机网络", true, "")
 	// 2. 解除启动管控
 	var notes []string
+	if d.opts.Sys.ResolverLock == nil && d.opts.Sys.ClaudeSettings == nil && d.opts.Sys.LaunchGuard == nil {
+		notes = append(notes, "这次安装没有打开启动管控，不需要解除") // 不带 --launch-control（M6-4b-1 返工）
+	}
 	if lk := d.opts.Sys.ResolverLock; lk != nil {
 		rr, err := lk.Remove()
 		if err != nil {
@@ -100,6 +103,9 @@ func (d *Daemon) runUninstall(ctx context.Context) (UninstallResult, error) {
 		return res, usererror.Wrap("记下已卸载", err, "请重试卸载。")
 	}
 	d.stopLaunchGuard() // 第三层不再结束任何进程
+	if d.cproxy != nil { // 本机代理端口也不再需要（M6-5a 补审建议改）
+		d.cproxy.stop()
+	}
 	d.events.Add("uninstall", "launch_control_removed", "")
 	add("解除 Claude 启动管控", true, strings.Join(notes, "；"))
 	// 3. 安装器那一侧
@@ -146,9 +152,10 @@ func (d *Daemon) handleUninstall(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errBody{"请求不合法"})
 		return
 	}
-	digest := digestOf(OpUninstall)
+	digest := digestOf(OpUninstall, browserChoice(req.KillBrowsers)) // 绑定“同时强制退出浏览器”（M6-5a 补审返工）
 	if strings.TrimSpace(req.Confirm) == "" {
 		pv, err := d.uninstallPreview(r.Context())
+		pv.Preview = pv.Preview.WithBrowserChoice(req.KillBrowsers)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, errBody{usererror.Wrap("列出卸载会做的事", err, "请再试一次。").Error()})
 			return
@@ -172,7 +179,14 @@ func (d *Daemon) handleUninstall(w http.ResponseWriter, r *http.Request) {
 	if req.KillBrowsers {
 		ctx = claudeproc.WithKillBrowsers(ctx)
 	}
+	// 整段互斥：从开始到写完标记都占着（M6-5a 补审返工）。guard 里改动类请求看到它就回“忙”。
+	if !d.uninstalling.CompareAndSwap(false, true) {
+		d.confirms.giveBack(req.Confirm, held)
+		writeErr(w, http.StatusConflict, api.ErrorBody{Code: api.CodeBusy, Error: usererror.New("卸载", "已经在卸载", "等它完成。", nil).Error()})
+		return
+	}
 	res, err := d.runUninstall(ctx)
+	d.uninstalling.Store(false)
 	if err != nil {
 		if errors.Is(err, state.ErrBusy) {
 			d.confirms.giveBack(req.Confirm, held)

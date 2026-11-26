@@ -15,6 +15,7 @@ import (
 	"claude-abroad/internal/claudeproc"
 	"claude-abroad/internal/envcheck"
 	"claude-abroad/internal/rules"
+	"claude-abroad/internal/usererror"
 )
 
 // 路由表（m5-plan v2.1 决定 4）：每个接口的路径、方法、级别（或按本次调用决定）、是否任务化、请求和应答类型都在这里；
@@ -148,9 +149,27 @@ func (d *Daemon) guard(rt api.Route, fn http.HandlerFunc) http.HandlerFunc {
 			writeJSON(w, http.StatusForbidden, errBody{api.NeedAuthText})
 			return
 		}
+		// 一键卸载（M6-5a 补审返工）：卸载进行中，除查询外一律“忙”；卸载完成后，除回国、再次卸载和设备体检外，
+		// 会接管网络或改管控的操作一律拒绝（卸载后还能启用，回国后就没有任何管控了）。
+		if r.Method != http.MethodGet {
+			if d.uninstalling.Load() {
+				writeErr(w, http.StatusConflict, api.ErrorBody{Code: api.CodeBusy, Error: usererror.New("执行操作", "正在一键卸载", "等卸载完成。", nil).Error()})
+				return
+			}
+			if !AllowedAfterUninstall[rt.ID] && d.uninstalled() {
+				writeErr(w, http.StatusConflict, api.ErrorBody{Code: api.CodeUninstalled, Error: UninstalledText})
+				return
+			}
+		}
 		fn(w, r)
 	}
 }
+
+// AllowedAfterUninstall 是卸载完成后仍然允许的改动类接口（回国和再次卸载是幂等的；设备体检只读）。
+var AllowedAfterUninstall = map[string]bool{"restore": true, "restore-alias": true, "uninstall": true, "envcheck-device": true}
+
+// UninstalledText 是卸载后被拒时给用户的话。
+var UninstalledText = usererror.New("执行操作", "Claude 出国已经一键卸载", "要继续使用请重新安装。", nil).Error()
 
 // requireSensitive 用在“按本次调用决定”的接口算出敏感之后：不够格时写 403 并返回 false。
 func requireSensitive(w http.ResponseWriter, r *http.Request, why string) bool {

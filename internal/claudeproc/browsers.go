@@ -31,7 +31,18 @@ var browserApps = []browserApp{
 }
 
 // BrowserNote 是预览里浏览器那一段的说明。
-const BrowserNote = "浏览器里打开的 Claude 页面请自行关闭；选了“同时强制退出浏览器”时会结束下面确认过的浏览器，未保存的表单内容会丢失"
+const BrowserNote = "下面这些浏览器正在运行，其中的 Claude 页面请自行关闭（这次不会结束浏览器）"
+
+// BrowserKillNote 是选了“同时强制退出浏览器”时预览里的说明（M6-5a 补审返工：两种情况的文字不同，确认码绑定这个选项）。
+const BrowserKillNote = "确认后会结束下面这些确认过的浏览器，未保存的表单内容会丢失；签名确认不了的不会结束"
+
+// WithBrowserChoice 按“同时强制退出浏览器”这个选项改写预览里的说明。
+func (p Preview) WithBrowserChoice(kill bool) Preview {
+	if kill && len(p.Browsers) > 0 {
+		p.BrowserNote = BrowserKillNote
+	}
+	return p
+}
 
 const noteBrowserUnverified = "签名确认不了，不会结束"
 

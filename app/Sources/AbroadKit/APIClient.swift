@@ -145,6 +145,25 @@ public final class APIClient: Sendable {
         return await call(req)
     }
 
+    /// 带着改过的“同时强制退出浏览器”选项重新发起第一步（M6-5a 补审返工：后台的确认码绑定这个选项）。
+    /// kill 为真时请求体里放 kill_browsers: true，为假时去掉这一项。
+    public func reissue<T: Decodable & Sendable>(_ prompt: ConfirmPrompt, killBrowsers kill: Bool, as: T.Type = T.self) async -> Outcome<T> {
+        var req = prompt.request
+        var obj: [String: Any] = [:]
+        if let b = req.body, let o = try? JSONSerialization.jsonObject(with: b) as? [String: Any] { obj = o }
+        obj.removeValue(forKey: "confirm")
+        if kill { obj["kill_browsers"] = true } else { obj.removeValue(forKey: "kill_browsers") }
+        req.body = obj.isEmpty ? nil : try? JSONSerialization.data(withJSONObject: obj)
+        if !obj.isEmpty { req.contentType = "application/json" }
+        return await call(req)
+    }
+
+    /// 第一步请求里有没有选“同时强制退出浏览器”。
+    public static func requestedKillBrowsers(_ prompt: ConfirmPrompt) -> Bool {
+        guard let b = prompt.request.body, let o = try? JSONSerialization.jsonObject(with: b) as? [String: Any] else { return false }
+        return (o["kill_browsers"] as? Bool) ?? false
+    }
+
     // ---- 通用 ----
 
     public func get<T: Decodable & Sendable>(_ path: String) async -> Outcome<T> {
@@ -190,6 +209,8 @@ public final class APIClient: Sendable {
         case .busy, .inUse: return .busy(t)
         case .invalid, .viaHostRequired, .lanUnconfirmed, .noBaseline, .notFound, .confirmInvalid, .tooLarge, .notEnabled: return .invalid(t)
         case .unsupported: return .unsupported(t)
+        case .uninstalled: // 已经一键卸载过（M6-5a）：文字取自文字表，不用后台的原文
+            return .invalid(ErrorText(raw: L10n.uninstalledError, code: .uninstalled))
         default: return .failed(resp.status, t)
         }
     }

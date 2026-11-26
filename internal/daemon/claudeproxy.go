@@ -169,6 +169,7 @@ func (cp *claudeProxy) stop() {
 	cp.lmu.Lock()
 	if cp.ln != nil {
 		cp.ln.Close()
+		cp.ln, cp.port, cp.err = nil, 0, "已停止"
 	}
 	cp.lmu.Unlock()
 	cp.mu.Lock()

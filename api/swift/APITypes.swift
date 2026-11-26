@@ -43,6 +43,7 @@ public enum ApiErrorCode: String, Codable, Sendable, CaseIterable {
     case notEnabled = "not_enabled"
     case unavailable = "unavailable"
     case `internal` = "internal"
+    case uninstalled = "uninstalled"
 }
 
 public struct ApiErrorBody: Codable, Sendable {

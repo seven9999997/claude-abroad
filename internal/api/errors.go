@@ -24,13 +24,14 @@ const (
 	CodeNotEnabled               ErrorCode = "not_enabled"                // 409：只有在启用状态下才能做
 	CodeUnavailable              ErrorCode = "unavailable"                // 503：暂时不可用（状态文件损坏、订阅数到上限等）
 	CodeInternal                 ErrorCode = "internal"                   // 500 及其他
+	CodeUninstalled              ErrorCode = "uninstalled"                // 409：已经一键卸载过（M6-5a），要继续使用请重新安装
 )
 
 // ErrorCodes 是全部代码（生成 Swift 的枚举、测试核对用）。
 var ErrorCodes = []ErrorCode{
 	CodeNeedsAuthorization, CodeNeedsConfirm, CodeConfirmInvalid, CodeBusy, CodeInUse, CodeViaHostRequired, CodeLANUnconfirmed,
 	CodeSwitchRolledBack, CodeSwitchRollbackIncomplete, CodeNoBaseline, CodeUnsupported, CodeInvalid, CodeNotFound, CodeTooLarge,
-	CodeNotEnabled, CodeUnavailable, CodeInternal,
+	CodeNotEnabled, CodeUnavailable, CodeInternal, CodeUninstalled,
 }
 
 // ErrorBody 是所有出错应答的形式。error 是给人看的文字（“做什么失败了：原因。下一步”），code 是稳定的代码；

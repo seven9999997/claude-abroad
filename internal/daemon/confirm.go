@@ -162,9 +162,11 @@ func (d *Daemon) handleRestore(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, d.Status()) // 已经是回国状态：不需要确认，什么都不做
 		return
 	}
-	digest := digestOf(OpRestore)
+	// 确认码绑定“同时强制退出浏览器”这个选项（M6-5a 补审返工）：第一步不带、第二步带（或反过来）时确认码无效。
+	digest := digestOf(OpRestore, browserChoice(req.KillBrowsers))
 	if strings.TrimSpace(req.Confirm) == "" {
 		pv, err := d.preview(r.Context())
+		pv = pv.WithBrowserChoice(req.KillBrowsers)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, errBody{usererror.Wrap("列出要结束的 Claude 进程", err, "本机网络没有改动，请再试一次。").Error()})
 			return
@@ -190,6 +192,14 @@ func (d *Daemon) handleRestore(w http.ResponseWriter, r *http.Request) {
 	if err := d.exec(w, r, d.m.Restore, true); errors.Is(err, state.ErrBusy) {
 		d.confirms.giveBack(req.Confirm, held)
 	}
+}
+
+// browserChoice 是“同时强制退出浏览器”在确认码摘要里的写法。
+func browserChoice(kill bool) string {
+	if kill {
+		return "kill_browsers=1"
+	}
+	return "kill_browsers=0"
 }
 
 // handleRestorePreview 是 GET /v1/restore/preview（只读）：回国会结束的 Claude 进程和没能确认的项，内容和回国第一步的预览相同，

@@ -69,3 +69,17 @@ func TestUnderDir(t *testing.T) {
 		}
 	}
 }
+
+// M6-5a 补审返工：预览里浏览器的说明按“同时强制退出浏览器”这个选项区分；没有浏览器时不加说明。
+func TestPreviewBrowserChoice(t *testing.T) {
+	p := Preview{Browsers: []Target{{PID: 1, App: "Safari"}}, BrowserNote: BrowserNote}
+	if p.WithBrowserChoice(false).BrowserNote != BrowserNote || p.WithBrowserChoice(true).BrowserNote != BrowserKillNote {
+		t.Fatal("两种选项的说明应不同")
+	}
+	if BrowserNote == BrowserKillNote {
+		t.Fatal("文字应不同")
+	}
+	if (Preview{}).WithBrowserChoice(true).BrowserNote != "" {
+		t.Fatal("没有浏览器时不加说明")
+	}
+}

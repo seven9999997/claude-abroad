@@ -206,6 +206,7 @@ public enum L10n {
     public static func actionExit(_ tag: String) -> String { "分流出口 " + tag }
     public static let launchControl = "启动管控"
     // M6-3：第一层（Claude 域名解析锁）
+    public static let uninstalledError = "操作失败：Claude 出国已经一键卸载。要继续使用请重新安装。"
     public static let launchControlOff = "未启用：这次安装没有打开启动管控（开发用的运行方式）"
     public static let resolverLockTitle = "第一层：Claude 域名解析锁"
     public static let resolverLockUnknown = "后台没有报告解析锁的状态"

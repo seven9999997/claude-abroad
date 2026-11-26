@@ -96,7 +96,8 @@ type Daemon struct {
 	integrity    *integrity.Result
 	prepareSt    *PrepareStatus // 首次准备的结果（M6-8a；没打开时为 nil）
 	gs           *guardState
-	lgMu         sync.Mutex // 保护 lgStop、lgDone（卸载和退出都可能停第三层）
+	uninstalling atomic.Bool // 一键卸载进行中（M6-5a 补审返工：整段互斥，期间别的改动请求得到“忙”）
+	lgMu         sync.Mutex  // 保护 lgStop、lgDone（卸载和退出都可能停第三层）
 	lgStop       func()
 	lgDone       chan struct{}
 	resolverLast string // 上一次解析锁自检的摘要（变化时才记事件）

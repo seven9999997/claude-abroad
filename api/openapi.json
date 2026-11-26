@@ -40,7 +40,8 @@
           "too_large",
           "not_enabled",
           "unavailable",
-          "internal"
+          "internal",
+          "uninstalled"
         ],
         "type": "string"
       },
