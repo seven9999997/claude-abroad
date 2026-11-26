@@ -36,4 +36,18 @@ func TestIntegrityManifestCmd(t *testing.T) {
 	if code := integrityManifest([]string{"-base", dir, "-out", out, "bin/missing"}, &so, &se); code != 1 {
 		t.Errorf("缺文件：退出码 %d，应为 1", code)
 	}
+	// 自检（构建脚本末尾）：通过、内容被改（例如清单生成之后又签了名）、摘要不对、参数错
+	if code := integrityCheck([]string{"-manifest", out, "-base", dir, "-digest", digest}, &so, &se); code != 0 {
+		t.Fatalf("自检应通过：%d %s", code, se.String())
+	}
+	_ = os.WriteFile(filepath.Join(dir, "bin", "abroad"), []byte("cli 签名之后"), 0o755)
+	if code := integrityCheck([]string{"-manifest", out, "-base", dir, "-digest", digest}, &so, &se); code != 1 {
+		t.Errorf("清单生成之后内容又变了：退出码 %d，应为 1", code)
+	}
+	if code := integrityCheck([]string{"-manifest", out, "-base", dir, "-digest", "00"}, &so, &se); code != 1 {
+		t.Errorf("摘要不对：退出码 %d，应为 1", code)
+	}
+	if code := integrityCheck([]string{"-manifest", out}, &so, &se); code != 2 {
+		t.Errorf("参数不全：退出码 %d，应为 2", code)
+	}
 }

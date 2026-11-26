@@ -82,6 +82,8 @@ type Checker struct {
 	ClaudeProxyDown func() bool
 	// IntegrityProblem 返回程序完整性校验不通过的说明（M6-7）；nil 或返回空时跳过。
 	IntegrityProblem func() string
+	// PrepareProblem 返回首次准备没完成的说明（M6-8a 补审返工；调用时没完成会先再试一次）；nil 或返回空时跳过。
+	PrepareProblem func() string
 
 	mu   sync.Mutex
 	last Report
@@ -111,6 +113,12 @@ func (c *Checker) Run(ctx context.Context) Report {
 	r.Findings = append(r.Findings, c.checkSharing()...)
 	r.Findings = append(r.Findings, c.checkResolverLock()...)
 	r.Findings = append(r.Findings, c.checkClaudeCode()...)
+	if c.PrepareProblem != nil {
+		if p := c.PrepareProblem(); p != "" {
+			r.Findings = append(r.Findings, Finding{ID: "prepare", Severity: Block, Title: p,
+				Fix: "启动管控还没装好（回国后让 Claude 连不上的前提），先不能启用。处理掉说明里的那个文件后点“重新检测”。"})
+		}
+	}
 	if c.IntegrityProblem != nil {
 		if p := c.IntegrityProblem(); p != "" {
 			r.Findings = append(r.Findings, Finding{ID: "integrity", Severity: Block, Title: p,

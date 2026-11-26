@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -167,6 +168,9 @@ func (d *Daemon) guard(rt api.Route, fn http.HandlerFunc) http.HandlerFunc {
 
 // AllowedAfterUninstall 是卸载完成后仍然允许的改动类接口（回国和再次卸载是幂等的；设备体检只读）。
 var AllowedAfterUninstall = map[string]bool{"restore": true, "restore-alias": true, "uninstall": true, "envcheck-device": true}
+
+// ErrUninstalledOp 是正在卸载或已经卸载时，改动类操作在状态机里被拒（状态机的 Admit）。
+var ErrUninstalledOp = errors.New("Claude 出国正在卸载或已经卸载")
 
 // UninstalledText 是卸载后被拒时给用户的话。
 var UninstalledText = usererror.New("执行操作", "Claude 出国已经一键卸载", "要继续使用请重新安装。", nil).Error()

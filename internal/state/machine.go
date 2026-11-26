@@ -61,6 +61,10 @@ type Machine struct {
 	// Now 是时钟（第 ⑤ 步的通过时刻和复查用同一个时钟；nil 用 time.Now）。
 	Now func() time.Time
 
+	// Admit 在改动类操作（启用、停用、互斥执行、地区同步）拿到忙标记之后调用（可为 nil）：返回错误时放弃这次操作。
+	// abroadd 用它在“正在卸载或已卸载”时拒绝（M6-5a 补审返工：关上入口检查和拿到互斥之间的窗口）。回国、恢复不经过它。
+	Admit func() error
+
 	busy atomic.Bool
 }
 
@@ -93,9 +97,23 @@ func (m *Machine) lock() error {
 
 func (m *Machine) unlock() { m.busy.Store(false) }
 
+// lockChange 是改动类操作的加锁：拿到忙标记后再过一次 Admit。
+func (m *Machine) lockChange() error {
+	if err := m.lock(); err != nil {
+		return err
+	}
+	if m.Admit != nil {
+		if err := m.Admit(); err != nil {
+			m.unlock()
+			return err
+		}
+	}
+	return nil
+}
+
 // Exclusive 在状态机的忙标记下执行 fn（和启用、停用、恢复互斥）；忙时返回 ErrBusy（m3-plan v2.8 决定 3：改规则）。
 func (m *Machine) Exclusive(fn func() error) error {
-	if err := m.lock(); err != nil {
+	if err := m.lockChange(); err != nil {
 		return err
 	}
 	defer m.unlock()
@@ -104,7 +122,7 @@ func (m *Machine) Exclusive(fn func() error) error {
 
 // Enable 启用（设计 10 的启用，7b 决定 3、4）。调用方负责授权。
 func (m *Machine) Enable(ctx context.Context) error {
-	if err := m.lock(); err != nil {
+	if err := m.lockChange(); err != nil {
 		return err
 	}
 	defer m.unlock()
@@ -354,7 +372,7 @@ func (m *Machine) rollback(ctx context.Context, origin State) error {
 
 // Disable 停用（设计 10 的停用）：关闸门 → 断开走代理的连接 → 可选关虚拟机 → 写 DISABLED。调用方负责授权。
 func (m *Machine) Disable(ctx context.Context, stopVM bool) error {
-	if err := m.lock(); err != nil {
+	if err := m.lockChange(); err != nil {
 		return err
 	}
 	defer m.unlock()

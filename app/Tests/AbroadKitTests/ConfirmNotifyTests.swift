@@ -234,7 +234,7 @@ func st(gate: Bool, env: String? = nil, reasons: [String] = []) -> DaemonStatus 
     n.userTappedOpenClaude()
     #expect(o.calls == 1)
     // 六种都发过（保护断开、恢复、两种更换失败、回国完成、地区就绪；拦下见 launchBlockedNotifications）
-    #expect(Set(s.got.map(\.kind)) == Set(NotificationKind.allCases).subtracting([.launchBlocked]))
+    #expect(Set(s.got.map(\.kind)) == Set(NotificationKind.allCases).subtracting([.launchBlocked, .integrityFailed]))
     // 开关关掉后不发
     let count = s.got.count
     pref.enabled = false
@@ -499,4 +499,32 @@ let isFirstStep: @Sendable (HTTPRequest) -> Bool = { $0.path == "/v1/restore" &&
     n.observe(event: ev(8, "gate", "gate_closed", "state：停用"))
     n.observe(event: ev(9, "gate", "gate_opened"))
     #expect(s.got.count == 4 && s.got.last?.kind == .protectionRestored)
+}
+
+/// M6-7 补审返工：完整性校验不通过时通知一次（同一组问题不重复，问题变了再通知）；首页有醒目说明。
+@MainActor
+@Test func integrityFailedNotifyAndAlert() async {
+    let s = FakeSender()
+    let n = Notifier(sender: s)
+    func st(_ problems: String?) -> DaemonStatus {
+        var j = statusJSON(state: "ENABLED", gate: false, reasons: ["integrity"])
+        if let problems {
+            j.removeLast()
+            j += ",\"integrity\":{\"checked\":true,\"ok\":false,\"problems\":[\(problems)]}}"
+        }
+        return decodeStatus(j)
+    }
+    n.observe(status: st(#"{"file":"bin/abroad-vm","kind":"mismatch"}"#), reconnect: true)
+    n.observe(status: st(#"{"file":"bin/abroad-vm","kind":"mismatch"}"#), reconnect: false)
+    #expect(s.got.map(\.kind) == [.integrityFailed])
+    n.observe(status: st(#"{"file":"image/rootfs.img","kind":"missing"}"#), reconnect: false)
+    #expect(s.got.count == 2, "问题变了再通知一次")
+    #expect(s.got.allSatisfy { $0.body == L10n.notifyIntegrityFailed })
+    // 首页说明
+    let t = FakeTransport { req in
+        req.path == "/v1/status" ? json(200, statusJSON(state: "ENABLED", gate: false, reasons: ["integrity"]).dropLast() + ",\"integrity\":{\"checked\":true,\"ok\":false,\"problems\":[{\"file\":\"bin/abroad-vm\",\"kind\":\"mismatch\"}]}}") : json(200, "{\"available\":false}")
+    }
+    let m = StatusModel(client: APIClient(transport: t))
+    _ = await m.refresh()
+    #expect(m.integrityAlert == L10n.integrityAlert(["bin/abroad-vm 内容不对"]))
 }

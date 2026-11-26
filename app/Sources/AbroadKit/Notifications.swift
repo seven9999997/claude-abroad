@@ -9,6 +9,8 @@ public enum NotificationKind: String, Sendable, Equatable, CaseIterable {
     case protectionLost, protectionRestored, switchRolledBack, switchRollbackIncomplete, restoreDone, regionReady
     /// 启动管控的第三层结束了刚打开的 Claude（M6-4b-1 返工）。
     case launchBlocked
+    /// 程序完整性校验不通过（M6-7 补审返工；同一组问题只通知一次）。
+    case integrityFailed
 }
 
 public struct AppNotification: Sendable, Equatable {
@@ -97,6 +99,8 @@ public final class Notifier {
         return (String(detail[..<r.lowerBound]), String(detail[r.upperBound...]))
     }
     private var regionWritten = false
+    /// 已经通知过的完整性问题（同一组不重复）。
+    private var integrityNotified: String?
     /// 最近一次读到的状态（RESTORED、ENABLING……），拦下通知按它选文字。
     private var lastState: String?
     /// 最近一次发“拦下”通知的时刻：桌面版一次启动有好几个进程被拦，短时间内的合成一条。
@@ -123,6 +127,16 @@ public final class Notifier {
     /// 读到状态。reconnect 为真时（刚连上或重连后）只建立基线、不通知（补发的当前状态不当作新事件）。
     public func observe(status st: DaemonStatus, reconnect: Bool) {
         lastState = st.state
+        // 完整性校验不通过：同一组问题只通知一次（连上、重连时读到也通知：这是要用户处理的持续状态）
+        if let r = st.integrity, !r.ok {
+            let key = (r.problems ?? []).map { $0.file + ":" + $0.kind }.joined(separator: ",")
+            if key != integrityNotified {
+                integrityNotified = key
+                emit(.integrityFailed, L10n.notifyIntegrityFailed)
+            }
+        } else {
+            integrityNotified = nil
+        }
         if reconnect || gateOpen == nil {
             gateOpen = st.gateOpen
             lastClosedCode = st.gateOpen ? nil : st.gate.reasons?.first

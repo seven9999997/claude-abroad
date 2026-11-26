@@ -323,3 +323,35 @@ func TestUninstallStopsClaudeProxy(t *testing.T) {
 		t.Fatal("卸载后端口应停掉")
 	}
 }
+
+// M6-5a 补审返工（剩下的 1 处）：入口检查和拿到状态机互斥之间开始了卸载——状态机拿到互斥后再判一次，启用被拒。
+// 模拟“已经过了入口”：直接调用状态机（不经路由）。卸载进行中、卸载完成后各一次。
+func TestUninstallWindowClosedInStateMachine(t *testing.T) {
+	e := newUninstallEnv(t, true)
+	// 卸载进行中
+	e.d.uninstalling.Store(true)
+	if err := e.d.m.Enable(context.Background()); err == nil || !strings.Contains(err.Error(), "卸载") {
+		t.Fatalf("卸载进行中状态机应拒绝启用：%v", err)
+	}
+	e.d.uninstalling.Store(false)
+	if code, raw := uninstallWith(t, e.d); code != 200 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	// 卸载完成后：启用、停用、互斥执行都拒绝；回国仍可以
+	for name, op := range map[string]func() error{
+		"启用":   func() error { return e.d.m.Enable(context.Background()) },
+		"停用":   func() error { return e.d.m.Disable(context.Background(), false) },
+		"互斥执行": func() error { return e.d.m.Exclusive(func() error { return nil }) },
+	} {
+		if err := op(); err == nil {
+			t.Fatalf("卸载后状态机应拒绝%s", name)
+		}
+	}
+	if err := e.d.m.Restore(context.Background()); err != nil {
+		t.Fatalf("卸载后回国仍应可以：%v", err)
+	}
+	if f, _ := e.view.Load(); f.State != state.Restored || !e.d.uninstalled() {
+		t.Fatalf("状态应是已回国加已卸载：%s", f.State)
+	}
+	e.assertClean(t)
+}

@@ -37,6 +37,9 @@ DIGEST="$("${OUT}/abroad-dev" integrity-manifest -base "${OUT}" -out "${OUT}/int
 LDF="-X claude-abroad/internal/integrity.ManifestDigest=${DIGEST}"
 go build ${TAGS[@]+"${TAGS[@]}"} -trimpath -ldflags "${LDF}" -o "${OUT}/bin/abroadd" ./cmd/abroadd
 go build ${TAGS[@]+"${TAGS[@]}"} -trimpath -ldflags "${LDF}" -o "${OUT}/bin/abroad-guard" ./cmd/abroad-guard
+# 自检（M6-7 补审返工）：用和 abroadd 同一份校验逻辑检查产物；签名和生成清单的顺序弄反、或清单之后又改了文件，这里就失败。
+"${OUT}/abroad-dev" integrity-check -manifest "${OUT}/integrity.json" -base "${OUT}" -digest "${DIGEST}" ||
+  { echo "✗ 自检不通过：产物和完整性清单对不上（清单生成之后又改了文件？）" >&2; exit 1; }
 rm -f "${OUT}/abroad-dev"
 
 echo "完整性清单：${OUT}/integrity.json（${#FILES[@]} 个文件）"

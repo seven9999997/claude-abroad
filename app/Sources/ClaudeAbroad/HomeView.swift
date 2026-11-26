@@ -19,6 +19,9 @@ struct HomeView: View {
             if let s = model.stalledNote {
                 Banner(title: model.phase.title, detail: s, symbol: "pause.circle")
             }
+            if let a = model.integrityAlert {
+                Banner(title: L10n.integrityAlertTitle, detail: a, symbol: "exclamationmark.octagon")
+            }
             if let p = model.protectionNote {
                 Banner(title: L10n.phaseError, detail: p, symbol: "exclamationmark.shield")
             }

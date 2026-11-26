@@ -248,6 +248,11 @@ public enum L10n {
     public static let claudeCodeTitle = "第四层：Claude Code 的本机代理"
     // M6-7：程序完整性（没有付费开发者账号，用清单校验代替系统签名校验）
     public static let integrityTitle = "程序完整性"
+    public static let integrityAlertTitle = "程序文件不完整，不能启用"
+    public static func integrityAlert(_ items: [String]) -> String {
+        "Claude 出国的程序或虚拟机镜像被改过或损坏（" + items.joined(separator: "、") + "）。现在只保留断网规则、不接管网络，也不能启用。请重新安装 Claude 出国；需要先上网时点“一键回国”。"
+    }
+    public static let notifyIntegrityFailed = "程序或虚拟机镜像被改过或损坏：只保留断网规则，不能启用。请重新安装；需要先上网时点“一键回国”。"
     public static let integrityUnknown = "后台没有报告完整性校验"
     public static let integrityOK = "按清单校验通过（未使用系统签名校验）"
     public static func integrityNotChecked(_ why: String) -> String { "没有校验：" + why }
@@ -313,6 +318,7 @@ public enum L10n {
         case .restoreDone: return "已回国"
         case .regionReady: return "地区已就绪"
         case .launchBlocked: return "已阻止 Claude 启动"
+        case .integrityFailed: return "程序文件不完整"
         }
     }
     public static func notifyProtectionLost(_ reason: String, _ detail: String) -> String {
@@ -327,6 +333,7 @@ public enum L10n {
         case "state": return "没有启用"
         case "main_proxy_switch": return "正在更换主代理"
         case "vm": return "虚拟机没有运行或不健康"
+        case "integrity": return "程序文件不完整（要重新安装）"
         default: return code
         }
     }

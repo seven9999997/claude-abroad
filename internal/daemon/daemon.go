@@ -94,7 +94,8 @@ type Daemon struct {
 	// M6-4b：启动管控的第三层（Sys.LaunchGuard 非空时）。
 	// M6-7：启动时完整性校验的结果（接了校验时）。
 	integrity    *integrity.Result
-	prepareSt    *PrepareStatus // 首次准备的结果（M6-8a；没打开时为 nil）
+	prepareSt    atomic.Pointer[PrepareStatus] // 首次准备最近一次的结果（M6-8a；没打开时为 nil）
+	prepareMu    sync.Mutex                    // 首次准备同时只有一次尝试
 	gs           *guardState
 	uninstalling atomic.Bool // 一键卸载进行中（M6-5a 补审返工：整段互斥，期间别的改动请求得到“忙”）
 	lgMu         sync.Mutex  // 保护 lgStop、lgDone（卸载和退出都可能停第三层）
@@ -238,6 +239,13 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	if o.Clock != nil {
 		d.m.Now = o.Clock.Now
 	}
+	// 改动类操作拿到状态机的忙标记后再判一次（M6-5a 补审返工：入口检查和拿到互斥之间可能开始了卸载）。
+	d.m.Admit = func() error {
+		if d.uninstalling.Load() || d.uninstalled() {
+			return ErrUninstalledOp
+		}
+		return nil
+	}
 	d.setupEnv()      // 环境检测（M4-6a）：启用第 ⑦ 步和运行中的调度
 	if d.regionOn() { // 地区同步（M4-5）：Mac、虚拟机、目标都有才做
 		d.m.D.Locale, d.m.D.VMRegion, d.m.D.Targets = s.Locale, s.VMRegion, d.regions
@@ -267,8 +275,11 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	d.wireRules()         // 规则要在 Recover 之前接上：Recover 到 ENABLED 时会通知数据面启用（重新计算直连配置）
 	d.prepare()           // 首次准备（M6-8a）：要在解析锁自检之前
 	d.checkResolverLock() // 解析锁自检（只读；不在或被改了记事件，不自动重写）
+	d.checkIntegrity()    // 完整性校验（M6-7）：要在恢复状态和拉起虚拟机之前；不通过时闸门带 integrity 原因、不拉起虚拟机
 	d.wireGuard()         // 要在 Recover 之前：Recover 到 ENABLED、DISABLED 时会应用 pf
-	d.startVMManager()    // 要在 Recover 之前：Recover 里可能调用虚拟机的启停
+	if !d.integrityBad() {
+		d.startVMManager() // 要在 Recover 之前：Recover 里可能调用虚拟机的启停
+	}
 	if err := d.m.Recover(ctx); err != nil {
 		o.logf("恢复上次的状态：%v", err)
 		d.events.Add("daemon", "recover_failed", err.Error())
@@ -276,7 +287,6 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 			d.corrupt.Store(true)
 		}
 	}
-	d.checkIntegrity(ctx) // 完整性校验（M6-7）：不通过时只保留断网规则、不接管
 	if d.opts.RunDir != "" {
 		_ = d.ppf.AdoptExternal() // 开机时 guard 取得的 pf 启用引用：收养进状态文件，回国时一起释放
 	}
@@ -309,6 +319,9 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	d.startLaunchGuard() // 启动管控的第三层（M6-4b；没配置时什么都不做）
 	if chk := preflightChecker(s.Preflight); chk != nil && d.cproxy != nil {
 		chk.ClaudeProxyDown = d.claudeProxyDown // 端口被占用：冲突检查的“必须处理”项
+	}
+	if chk := preflightChecker(s.Preflight); chk != nil && s.FirstRun {
+		chk.PrepareProblem = d.prepareProblem // 首次准备没完成：阻止启用，并借这次检查再试一次（M6-8a 补审返工）
 	}
 	if chk := preflightChecker(s.Preflight); chk != nil && d.integrity != nil && !d.integrity.OK {
 		bad := d.integrity.Summary()
@@ -480,8 +493,8 @@ func (d *Daemon) Status() Status {
 		st.Integrity = &ir
 	}
 	st.LaunchControl = d.opts.Sys.LaunchControl
-	if d.prepareSt != nil {
-		ps := *d.prepareSt
+	if p := d.prepareSt.Load(); p != nil {
+		ps := *p
 		st.Prepare = &ps
 	}
 	if f, err := d.store.Load(); err != nil {
@@ -530,6 +543,8 @@ func opErrCode(err error, status int) api.ErrorCode {
 		return api.CodeBusy
 	case errors.Is(err, exitcheck.ErrNoBaseline):
 		return api.CodeNoBaseline
+	case errors.Is(err, ErrUninstalledOp):
+		return api.CodeUninstalled
 	}
 	return api.DefaultCode(status)
 }
@@ -541,6 +556,8 @@ func errCode(err error) int {
 		return http.StatusConflict
 	case errors.Is(err, preflight.ErrBlocked):
 		return http.StatusUnprocessableEntity
+	case errors.Is(err, ErrUninstalledOp):
+		return http.StatusConflict
 	}
 	return http.StatusInternalServerError
 }

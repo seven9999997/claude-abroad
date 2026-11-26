@@ -1,10 +1,12 @@
 package daemon
 
 import (
+	"claude-abroad/internal/preflight"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"claude-abroad/internal/claudecfg"
 	"claude-abroad/internal/resolverlock"
@@ -30,6 +32,7 @@ func (e *prepEnv) start(testOnly bool) *Daemon {
 	o := e.opts()
 	o.Sys.ResolverLock, o.Sys.ClaudeSettings = e.lock, e.cs
 	o.Sys.FirstRun, o.Sys.PrepareTestOnly = true, testOnly
+	o.Sys.Preflight = PreflightHints{C: &preflight.Checker{R: cleanRunner{e.t}}} // 首次准备没完成时阻止启用（M6-8a 补审返工）
 	return e.env.start(o)
 }
 
@@ -130,19 +133,87 @@ func TestPrepareRetriesAfterFailure(t *testing.T) {
 	}
 }
 
-// 有别人的同名文件：不覆盖，算完成，说明里写明。
-func TestPrepareConflictNotOverwritten(t *testing.T) {
+// M6-8a 补审返工：解析锁有别人的同名文件——不覆盖、不算完成（没有标记、done 为假、说明写明文件和下一步），启用被挡住；
+// 处理掉之后不重启，“重新检测”（冲突检查）时再试一次就完成，启用通过。
+func TestPrepareResolverConflictBlocksUntilFixed(t *testing.T) {
 	e := newPrepEnv(t)
 	_ = os.MkdirAll(e.lock.Dir, 0o755)
 	other := []byte("nameserver 9.9.9.9\n")
-	_ = os.WriteFile(filepath.Join(e.lock.Dir, "claude.ai"), other, 0o644)
+	conflict := filepath.Join(e.lock.Dir, "claude.ai")
+	_ = os.WriteFile(conflict, other, 0o644)
 	d := e.start(false)
 	st := status(t, d)
-	if !st.Prepare.Done || !strings.Contains(strings.Join(st.Prepare.Notes, ""), "claude.ai") {
-		t.Fatalf("%+v", st.Prepare)
+	notes := strings.Join(st.Prepare.Notes, "")
+	if st.Prepare.Done || !strings.Contains(notes, "claude.ai") || !strings.Contains(notes, "重新检测") {
+		t.Fatalf("冲突时不应算完成：%+v", st.Prepare)
 	}
-	if b, _ := os.ReadFile(filepath.Join(e.lock.Dir, "claude.ai")); string(b) != string(other) {
+	if _, err := os.Stat(filepath.Join(e.dir, PreparedFile)); err == nil {
+		t.Fatal("冲突时不应写完成标记")
+	}
+	if b, _ := os.ReadFile(conflict); string(b) != string(other) {
 		t.Fatal("别人的文件被覆盖了")
+	}
+	code, b := callOp(t, d, "/v1/enable")
+	if code != 422 || !strings.Contains(string(b), "首次准备没有完成") || !strings.Contains(string(b), "claude.ai") {
+		t.Fatalf("首次准备没完成时应挡住启用：%d %s", code, b)
+	}
+	// 处理掉冲突，不重启：点“重新检测”（冲突检查）
+	_ = os.Remove(conflict)
+	if code, raw := call(t, d, "GET", "/v1/preflight", nil); code != 200 || strings.Contains(string(raw), "首次准备没有完成") {
+		t.Fatalf("重新检测时应再试一次并完成：%d %s", code, raw)
+	}
+	if st := status(t, d); !st.Prepare.Done || !st.ResolverLock.Effective {
+		t.Fatalf("应已完成：%+v %+v", st.Prepare, st.ResolverLock)
+	}
+	post(t, d, "/v1/enable", 200)
+}
+
+// 托管设置有冲突（别的分片定义了代理变量）：同样不算完成、挡住启用；解析锁已写的留着，重试时不重复写。
+func TestPrepareSettingsConflictPartial(t *testing.T) {
+	e := newPrepEnv(t)
+	_ = os.MkdirAll(e.cs.Dir, 0o755)
+	foreign := filepath.Join(e.cs.Dir, "corp.json")
+	_ = os.WriteFile(foreign, []byte(`{"env":{"HTTPS_PROXY":"http://proxy.corp.example:8080"}}`), 0o644)
+	d := e.start(false)
+	st := status(t, d)
+	if st.Prepare.Done || !strings.Contains(strings.Join(st.Prepare.Notes, ""), "corp.json 的 HTTPS_PROXY") {
+		t.Fatalf("托管设置冲突时不应算完成：%+v", st.Prepare)
+	}
+	if !st.ResolverLock.Effective {
+		t.Fatal("解析锁已写的应留着")
+	}
+	lockFile := filepath.Join(e.lock.Dir, "claude.ai")
+	fi1, _ := os.Stat(lockFile)
+	if code, b := callOp(t, d, "/v1/enable"); code != 422 || !strings.Contains(string(b), "corp.json") {
+		t.Fatalf("应挡住启用：%d %s", code, b)
+	}
+	_ = os.Remove(foreign)
+	time.Sleep(20 * time.Millisecond)
+	post(t, d, "/v1/enable", 200) // 启用前的检查里再试一次，完成后放行
+	if st := status(t, d); !st.Prepare.Done || st.ClaudeCode == nil || st.ClaudeCode.Settings == nil || !st.ClaudeCode.Settings.Effective {
+		t.Fatalf("重试后应完成：%+v", st.Prepare)
+	}
+	if fi2, _ := os.Stat(lockFile); !fi2.ModTime().Equal(fi1.ModTime()) {
+		t.Fatal("已写的解析锁重试时不应重写")
+	}
+}
+
+// 完成之后才出现的冲突（别人后来写了文件）：完成标记不回退，行为和以前一样（自检报告）。
+func TestPrepareConflictAfterDone(t *testing.T) {
+	e := newPrepEnv(t)
+	d := e.start(false)
+	if !status(t, d).Prepare.Done {
+		t.Fatal("应先完成")
+	}
+	_ = os.WriteFile(filepath.Join(e.lock.Dir, "claude.ai"), []byte("nameserver 9.9.9.9\n"), 0o644)
+	if code, raw := call(t, d, "GET", "/v1/preflight", nil); code != 200 || strings.Contains(string(raw), "首次准备没有完成") {
+		t.Fatalf("完成之后不应再有首次准备这一项：%d %s", code, raw)
+	}
+	if st := status(t, d); !st.Prepare.Done {
+		t.Fatal("完成标记不应回退")
+	}
+	if _, err := os.Stat(filepath.Join(e.dir, PreparedFile)); err != nil {
+		t.Fatal("标记应还在")
 	}
 }
 

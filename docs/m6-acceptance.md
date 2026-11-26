@@ -47,7 +47,7 @@
 | R9.1 | 能否拿到 Endpoint Security 授权 | **推迟** | 要付费账号才能申请 |
 | R10 | 桌面版界面语言存在哪里 | **有调查结论**（2026-11-20，只读） | 见设计第 15 节 R10 行 |
 | R11 | 是否改用 Network Extension | **书面对比，维持现方案** | 没有授权，未实测 |
-| R12 | `/Applications` 里的程序被替换 | **达到替代程度**（M6-7） | 开发安装把程序放在 root 所有的 `/Library/Application Support/claude-abroad/`（备选方案）；abroadd、guard 启动时按 SHA-256 清单校验，不通过时只保留断网规则、不能启用。防不住连同 abroadd 一起换掉的人；有签名后改用 `SecStaticCodeCheckValidity`（P6） |
+| R12 | `/Applications` 里的程序被替换 | **达到替代程度**（M6-7；边界：abroadd、abroad-guard 自己不在清单里，换掉它们防不住；运行中被替换不会发现，下次启动时发现） | 开发安装把程序放在 root 所有的 `/Library/Application Support/claude-abroad/`（备选方案）；abroadd、guard 启动时按 SHA-256 清单校验，不通过时只保留断网规则、不能启用。防不住连同 abroadd 一起换掉的人；有签名后改用 `SecStaticCodeCheckValidity`（P6） |
 | R13 | 名称带“Claude”对公证、申请的影响 | **推迟** | 提交公证时观察 |
 | R14 | Anthropic 是否使用专用 IP 段 | **有结论**（M3-0，单一观测点） | 置顶规则仍以域名为主 |
 | R15 | Docker、OrbStack、Parallels、UTM 的流量 | **待真机** | 没有专门的脚本；启用后在各软件里访问外网，结果写进已知限制 |

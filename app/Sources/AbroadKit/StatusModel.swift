@@ -207,6 +207,12 @@ public final class StatusModel: ObservableObject {
         return detail.isEmpty ? L10n.protectionLost : L10n.protectionLost + "（" + detail + "）"
     }
 
+    /// 程序完整性校验不通过时首页的醒目说明（M6-7 补审返工）：哪些文件不对、下一步。没校验或通过时为空。
+    public var integrityAlert: String? {
+        guard reachable, let r = status?.integrity, !r.ok else { return nil }
+        return L10n.integrityAlert((r.problems ?? []).map { L10n.integrityItem($0.file, $0.kind) })
+    }
+
     /// 后台不可达时的说明。
     public var connectionText: String? {
         guard !reachable, let c = connection else { return nil }

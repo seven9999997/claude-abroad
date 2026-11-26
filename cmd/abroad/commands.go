@@ -239,7 +239,7 @@ func cmdStatus(a *app, args []string) int {
 				for _, p := range ig.Problems {
 					parts = append(parts, p.File+"（"+map[string]string{"missing": "不见了", "mismatch": "内容不对", "manifest": "清单被改过或读不出"}[p.Kind]+"）")
 				}
-				fmt.Fprintf(a.stdout, "完整性校验不通过：%s。只保留断网规则、不能启用，请重新安装。\n", strings.Join(parts, "、"))
+				fmt.Fprintf(a.stdout, "完整性校验不通过：%s。只保留断网规则、不能启用，请重新安装；需要先上网时执行 sudo abroad restore。\n", strings.Join(parts, "、"))
 			}
 		}
 		if st.Prepare != nil {

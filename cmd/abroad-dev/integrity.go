@@ -50,3 +50,30 @@ func integrityManifest(args []string, stdout, stderr io.Writer) int {
 func hasBase(p, name string) bool {
 	return len(p) > len(name) && p[len(p)-len(name)-1] == '/' && p[len(p)-len(name):] == name
 }
+
+// integrityCheck 是 abroad-dev integrity-check：用和 abroadd 同一份校验逻辑检查产物（M6-7 补审返工：构建脚本末尾的
+// 自检，签名和生成清单的顺序弄反时这里会立刻报出来）。
+//
+//	abroad-dev integrity-check -manifest <清单> -base <根目录> -digest <摘要>
+//
+// 退出码：0 通过；1 不通过；2 参数错。
+func integrityCheck(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("integrity-check", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	manifest := fs.String("manifest", "", "清单（必填）")
+	base := fs.String("base", "", "清单里相对路径的根（必填）")
+	digest := fs.String("digest", "", "清单应有的摘要（必填，就是写进 abroadd 的那个）")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *manifest == "" || *base == "" || *digest == "" || fs.NArg() != 0 {
+		fmt.Fprintln(stderr, "用法：abroad-dev integrity-check -manifest <清单> -base <根目录> -digest <摘要>")
+		return 2
+	}
+	r := (&integrity.Checker{Manifest: *manifest, Base: *base, Digest: *digest}).Check()
+	fmt.Fprintln(stdout, r.Summary())
+	if !r.Checked || !r.OK {
+		return 1
+	}
+	return 0
+}

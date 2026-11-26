@@ -279,7 +279,7 @@ func (m *Machine) SyncRegion(ctx context.Context, t region.Target) error {
 	if !m.regionOn() {
 		return errors.New("没有地区同步的依赖")
 	}
-	if err := m.lock(); err != nil {
+	if err := m.lockChange(); err != nil {
 		return err
 	}
 	defer m.unlock()
@@ -354,7 +354,7 @@ func (m *Machine) ReapplyRegion(ctx context.Context) error {
 	if !m.regionOn() {
 		return nil
 	}
-	if err := m.lock(); err != nil {
+	if err := m.lockChange(); err != nil {
 		return err
 	}
 	defer m.unlock()

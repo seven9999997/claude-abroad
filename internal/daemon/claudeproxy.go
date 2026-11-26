@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"claude-abroad/internal/claudecfg"
+	"claude-abroad/internal/gatesm"
 	"claude-abroad/internal/preflight"
 	"claude-abroad/internal/rules"
 	"claude-abroad/internal/stack"
@@ -449,8 +450,10 @@ func preflightChecker(p state.Preflight) *preflight.Checker {
 	return nil
 }
 
-// checkIntegrity 启动时做一次完整性校验（M6-7）：不通过时记事件；状态是已启用的，转成停用（只保留断网规则、不接管）。
-func (d *Daemon) checkIntegrity(ctx context.Context) {
+// checkIntegrity 启动时做一次完整性校验（M6-7；补审返工：在恢复状态和启动虚拟机管理器之前）。不通过时：记事件，
+// 闸门加专门的原因 integrity（一直在，不靠停用成功保证），之后不拉起虚拟机（见 Start）；断网规则照常由恢复流程或 guard
+// 保证；回国、卸载照常可用。运行中被替换不会发现，下次启动时发现。
+func (d *Daemon) checkIntegrity() {
 	c := d.opts.Sys.Integrity
 	if c == nil {
 		return
@@ -461,9 +464,8 @@ func (d *Daemon) checkIntegrity(ctx context.Context) {
 		return
 	}
 	d.events.Add("integrity", "failed", r.Summary())
-	if f, err := d.store.Load(); err == nil && f.State == state.Enabled {
-		if err := d.m.Disable(ctx, false); err != nil {
-			d.events.Add("integrity", "disable_failed", "完整性校验不通过，转成停用失败（闸门保持关闭）")
-		}
-	}
+	d.gate.AddReason(gatesm.ReasonIntegrity, r.Summary())
 }
+
+// integrityBad 报告完整性校验做了且不通过。
+func (d *Daemon) integrityBad() bool { return d.integrity != nil && !d.integrity.OK }

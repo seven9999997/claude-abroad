@@ -3,6 +3,7 @@ package guard
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"claude-abroad/internal/integrity"
 	"claude-abroad/internal/pf"
 	"claude-abroad/internal/state"
 )
@@ -36,7 +38,7 @@ func newRig(t *testing.T) *rig {
 
 func (r *rig) deps() Deps {
 	return Deps{StateDir: r.stateDir, RunDir: r.runDir, PF: r.ctl, BootID: func() (string, error) { return testBoot, nil },
-		Logf: func(f string, a ...any) { r.logs = append(r.logs, f) }}
+		Logf: func(f string, a ...any) { r.logs = append(r.logs, fmt.Sprintf(f, a...)) }}
 }
 
 func (r *rig) setState(t *testing.T, s state.State) {
@@ -343,5 +345,37 @@ func TestRunDirOnlyWhenLoading(t *testing.T) {
 	}
 	if toks, err := TakeTokens(r.runDir); err != nil || len(toks) != 1 {
 		t.Fatalf("要加载时应建目录并写引用：%v %v", toks, err)
+	}
+}
+
+// M6-7 补审返工：完整性校验不通过时 guard 只记日志，行为（加载什么、pf 调用、启用引用）和通过时逐项相同。
+func TestIntegrityOnlyLogged(t *testing.T) {
+	base := t.TempDir()
+	_ = os.WriteFile(filepath.Join(base, "abroad-vm"), []byte("ok"), 0o755)
+	b, _ := integrity.Generate(base, []string{"abroad-vm"})
+	mf := filepath.Join(base, "manifest.json")
+	_ = os.WriteFile(mf, b, 0o644)
+	good := &integrity.Checker{Manifest: mf, Base: base, Digest: integrity.Digest(b)}
+	bad := &integrity.Checker{Manifest: mf, Base: base, Digest: integrity.Digest([]byte("别的清单"))}
+	for _, s := range []state.State{state.Enabled, state.Restored} {
+		var calls [2]string
+		var outs [2]Outcome
+		var anchors [2][]byte
+		for i, c := range []*integrity.Checker{good, bad} {
+			r := newRig(t)
+			r.setState(t, s)
+			r.setParams(t, abroadCfg)
+			d := r.deps()
+			d.Integrity = c
+			o, _ := Run(context.Background(), d)
+			outs[i], calls[i], anchors[i] = o, strings.Join(r.fake.Calls(), ","), r.anchor()
+			want := map[int]string{0: "完整性校验通过", 1: "完整性校验不通过"}[i]
+			if !strings.Contains(strings.Join(r.logs, "\n"), want) {
+				t.Fatalf("%s：日志里应有“%s”：%v", s, want, r.logs)
+			}
+		}
+		if outs[0] != outs[1] || calls[0] != calls[1] || !bytes.Equal(anchors[0], anchors[1]) {
+			t.Fatalf("%s：校验通过和不通过时 guard 的行为应相同：%v/%v %q/%q", s, outs[0], outs[1], calls[0], calls[1])
+		}
 	}
 }

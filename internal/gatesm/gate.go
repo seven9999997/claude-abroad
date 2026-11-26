@@ -29,6 +29,9 @@ const (
 	// ReasonVM 是虚拟机不在或不健康（M6-2a，由 abroadd 管理虚拟机时）：拉起中、健康检查连续不通过、意外退出、
 	// 连续失败停止重启、卡住。重新健康时清掉，之后由复查决定是否放行。
 	ReasonVM Reason = "vm"
+	// ReasonIntegrity 是程序完整性校验不通过（M6-7 补审返工）：abroadd 启动时校验，不通过时一直在（不清），
+	// 不靠“停用成功”保证闸门关着；回国、卸载不受影响。启动管控按口径 A 处理（不算“不允许启动”）。
+	ReasonIntegrity Reason = "integrity"
 )
 
 // 事件种类。
@@ -117,7 +120,7 @@ func (g *Gate) AddReason(r Reason, detail string) {
 	_, had := g.reasons[r]
 	g.reasons[r] = detail
 	g.epoch++
-	if r == ReasonTakeover || r == ReasonExitCheck || r == ReasonVM {
+	if r == ReasonTakeover || r == ReasonExitCheck || r == ReasonVM || r == ReasonIntegrity {
 		g.probeUntil = time.Time{} // 接管故障、出口检查不通过：探测窗口立即失效
 	}
 	g.leaseUntil = time.Time{}

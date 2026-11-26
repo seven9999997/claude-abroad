@@ -102,7 +102,7 @@ func (d *Daemon) runUninstall(ctx context.Context) (UninstallResult, error) {
 		add("解除 Claude 启动管控", false, "")
 		return res, usererror.Wrap("记下已卸载", err, "请重试卸载。")
 	}
-	d.stopLaunchGuard() // 第三层不再结束任何进程
+	d.stopLaunchGuard()  // 第三层不再结束任何进程
 	if d.cproxy != nil { // 本机代理端口也不再需要（M6-5a 补审建议改）
 		d.cproxy.stop()
 	}
