@@ -406,7 +406,6 @@ public struct EnvRow: Sendable, Equatable, Identifiable {
     public var enabled: Bool // 警告项的开关（硬性项总是开着）
 }
 
-@MainActor
 /// 环境检测历史的一行（补齐四）：时间、总判定、和更早一条相比变了的项。
 public struct EnvHistoryRow: Sendable, Equatable, Identifiable {
     public var id: String { at }
@@ -777,5 +776,4 @@ public final class SettingsModel: PageModel {
         return processes.isEmpty && unverified.isEmpty ? L10n.processListNone : nil
     }
     public var uninstallText: String { L10n.uninstallInInstaller }
-    public var diagnosticsText: String { L10n.diagnosticsNone }
 }

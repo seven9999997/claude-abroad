@@ -19,6 +19,7 @@ struct ClaudeAbroadApp: App {
     @StateObject private var region = RegionModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow)
     @StateObject private var engines = EnginesModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow)
     @StateObject private var settings = SettingsModel(client: ClaudeAbroadApp.client, preference: ClaudeAbroadApp.notifier.preference)
+    @StateObject private var diagnostics = DiagnosticsExportModel(client: ClaudeAbroadApp.client, saver: SavePanelDiagnosticsSaver())
 
     var body: some Scene {
         MenuBarExtra {
@@ -34,7 +35,7 @@ struct ClaudeAbroadApp: App {
                 .task { model.start() }
         }
         Settings {
-            SettingsView(model: settings, env: settings.env)
+            SettingsView(model: settings, env: settings.env, diagnostics: diagnostics)
         }
     }
 }

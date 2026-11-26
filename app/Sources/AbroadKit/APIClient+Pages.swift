@@ -142,6 +142,21 @@ extension APIClient {
     /// 启动管控（M6-4b）：现在是否允许启动 Claude、四层、覆盖范围、最近的拦截。
     public func launchGuard() async -> Outcome<DaemonLaunchGuardView> { await get("/v1/launchguard") }
     /// Claude 访问过的、不在内置 Claude 域名之下的域名（M6-12，只观察）。
+    /// 诊断包的原始内容（补齐五）：后台给什么就是什么，不解码、不加工。includeDomains 为真才带 include_domains=1。
+    public func diagnosticsRaw(includeDomains: Bool) async -> Outcome<Data> {
+        let req = HTTPRequest(method: "GET", path: "/v1/diagnostics" + (includeDomains ? "?include_domains=1" : ""))
+        let resp: HTTPResponse
+        do {
+            resp = try await transport.send(req)
+        } catch let e as ConnectionError {
+            return .unreachable(e)
+        } catch {
+            return .unreachable(.protocolError("连接出错"))
+        }
+        if (200..<300).contains(resp.status) { return .ok(resp.body) }
+        let o: Outcome<Empty> = Self.map(resp, request: req)
+        return o.mapError()
+    }
     public func claudeDomains() async -> Outcome<DaemonClaudeDomainsView> { await get("/v1/claude-domains") }
     public func clearClaudeDomains() async -> Outcome<DaemonClaudeDomainsView> {
         await call(HTTPRequest(method: "DELETE", path: "/v1/claude-domains"))

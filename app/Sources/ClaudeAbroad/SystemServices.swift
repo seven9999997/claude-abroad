@@ -1,9 +1,11 @@
 // 系统服务的实现（m5-plan v2.9 决定 3）：系统通知和“打开 Claude”。会话和测试里不用它们（测试用 AbroadKit 里的空实现和假实现）。
 // - 系统通知只有进程是打包的应用时才用（没有应用包的进程调用通知中心会直接崩溃）；
 // - 打开 Claude 只在用户点了按钮时调用：通知上的按钮，或首页、菜单的“打开 Claude”（M6-4b；条件由状态给出）。
-//   这里是打开应用的系统调用的唯一位置（源码检查固定）。
+//   这里是打开应用的系统调用的唯一位置（源码检查固定）；
+// - 诊断包的保存面板（补齐五）：只在用户点了“导出诊断包”时弹出，只写用户选的那一个文件。
 import AbroadKit
 import AppKit
+import UniformTypeIdentifiers
 import UserNotifications
 
 enum SystemServices {
@@ -61,5 +63,24 @@ final class UserNotificationSender: NSObject, NotificationSender, UNUserNotifica
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {
         if response.actionIdentifier == Self.openAction { opener.openClaude() }
         done()
+    }
+}
+
+/// 诊断包的系统保存面板（补齐五）。全应用唯一调用保存面板、唯一写用户文件的地方（源码检查固定）：只在用户点了
+/// “导出诊断包”并在面板里选了位置之后，只写用户选的那一个文件；用户取消时什么都不写。
+@MainActor
+final class SavePanelDiagnosticsSaver: DiagnosticsSaver {
+    func save(_ data: Data, suggestedName: String) async -> DiagnosticsSaveResult {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = suggestedName
+        panel.allowedContentTypes = [.json]
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return .cancelled }
+        do {
+            try data.write(to: url, options: .atomic)
+            return .saved(fileName: url.lastPathComponent)
+        } catch {
+            return .failed(reason: error.localizedDescription)
+        }
     }
 }

@@ -5,6 +5,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var model: SettingsModel
     @ObservedObject var env: EnvModel
+    @ObservedObject var diagnostics: DiagnosticsExportModel
 
     var body: some View {
         TabView {
@@ -71,7 +72,17 @@ struct SettingsView: View {
                     }
                 }
                 if let s = model.signatureText { Text(s) }
-                LabeledContent(L10n.diagnostics) { Text(model.diagnosticsText) }
+                LabeledContent(L10n.diagnostics) { // 补齐五：应用里导出（只写用户在保存面板里选的那个文件）
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle(L10n.diagnosticsIncludeDomains, isOn: $diagnostics.includeDomains)
+                        Button(L10n.diagnosticsExport) { Task { await diagnostics.export() } }
+                            .disabled(diagnostics.busy)
+                        if let m = diagnostics.message {
+                            Text(m).font(.caption).foregroundStyle(diagnostics.isError ? .red : .secondary)
+                        }
+                        Text(diagnostics.help).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 LabeledContent(L10n.uninstall) { Text(model.uninstallText) }
             }
             .tabItem { Text(L10n.settingsAdvanced) }

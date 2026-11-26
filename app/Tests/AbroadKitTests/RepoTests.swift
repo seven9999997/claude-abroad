@@ -71,9 +71,12 @@ func appSources() throws -> [(String, String)] {
     return out
 }
 
-/// 验收 g：没有第三方包；没有需要宏插件的写法；没有读写状态目录、没有写磁盘缓存；没有日志输出。允许的文件访问只有两处：
-/// Transport.swift 里看 socket 文件在不在（分辨“后台服务没有运行”）；InputFiles.swift 里终端退路的临时文件和用户选的配置文件
-/// （m5-plan v2.6 决定 3：全应用唯一允许写文件的地方）。
+/// 验收 g：没有第三方包；没有需要宏插件的写法；没有读写状态目录、没有写磁盘缓存；没有日志输出。“不写磁盘”的例外只有三处：
+/// 1. InputFiles.swift：终端退路的临时文件和读用户选的配置文件（m5-plan v2.6 决定 3）；
+/// 2. Notifications.swift：通知开关这一个布尔（UserDefaults）；
+/// 3. SystemServices.swift：诊断包（补齐五）——只在用户在保存面板里选了位置之后，只写用户选的那一个文件（write(to 只出现一次，
+///    保存面板也只在这个文件里）。
+/// 另外 Transport.swift 里看 socket 文件在不在（分辨“后台服务没有运行”），只读。
 @Test func sourceRules() throws {
     let files = try appSources()
     #expect(files.count >= 8)
@@ -93,7 +96,8 @@ func appSources() throws -> [(String, String)] {
             #expect(allowedImports.contains(m), "\(name) 引入了 \(m)")
         }
         let code = src.split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }.joined(separator: "\n")
-        for f in forbidden where !(name == "InputFiles.swift" && inputOnly.contains(f)) && !(name == "Notifications.swift" && f == "UserDefaults") {
+        for f in forbidden where !(name == "InputFiles.swift" && inputOnly.contains(f)) && !(name == "Notifications.swift" && f == "UserDefaults")
+            && !(name == "SystemServices.swift" && f == "write(to") {
             #expect((code.contains(f)) == false, "\(name) 里出现了 \(f)")
         }
         if name == "InputFiles.swift" { continue }
@@ -102,6 +106,18 @@ func appSources() throws -> [(String, String)] {
         let ok = code.components(separatedBy: "FileManager.default.fileExists(atPath:").count - 1
         #expect(fm == ok, "\(name)：FileManager 只允许 fileExists")
         if fm > 0 { #expect(name == "Transport.swift", "\(name) 不该访问文件") }
+    }
+    // 第三处例外的范围（补齐五）：保存面板只在 SystemServices.swift；那里只有一处写文件，且写的是面板给的地址。
+    for (name, src) in files {
+        let code = src.split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }.joined(separator: "\n")
+        let panels = code.components(separatedBy: "NSSavePanel").count - 1
+        let writes = code.components(separatedBy: "write(to").count - 1
+        if name == "SystemServices.swift" {
+            #expect(panels == 1 && writes == 1, "SystemServices.swift：保存面板和写文件各只允许一处")
+            #expect(code.contains("guard panel.runModal() == .OK, let url = panel.url else { return .cancelled }") && code.contains("try data.write(to: url,"))
+        } else {
+            #expect(panels == 0, "\(name) 里出现了保存面板（只允许在 SystemServices.swift）")
+        }
     }
     // 不按错误文字分支（m5-plan v2.7 决定 0）：只看 ErrorText.code。
     for (name, src) in files {

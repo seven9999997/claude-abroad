@@ -163,6 +163,22 @@ struct IntegrationTests {
         #expect(exits.state == .loaded && exits.emptyText == L10n.noExits)
     }
 
+    /// 补齐五：经视图模型导出诊断包（假保存实现，不碰磁盘）：拿到的是后台的 JSON 原文；不勾时没有域名清单字段。
+    @MainActor
+    @Test func diagnosticsExport() async throws {
+        let saver = FakeSaver(.saved(fileName: "a.json"))
+        let m = DiagnosticsExportModel(client: client, saver: saver)
+        #expect(await m.export() == .saved)
+        guard let data = saver.got.first?.0, let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            Issue.record("诊断包不是 JSON"); return
+        }
+        #expect(obj["generated_at"] != nil && obj["status"] != nil)
+        let cd = obj["claude_domains"] as? [String: Any]
+        #expect(cd?["count"] != nil && cd?["domains"] == nil, "默认不带域名清单")
+        guard case .ok(let direct) = await client.diagnosticsRaw(includeDomains: true) else { Issue.record("取诊断包失败"); return }
+        #expect((try? JSONSerialization.jsonObject(with: direct)) != nil)
+    }
+
     @Test func unreachableKinds() async throws {
         let c = APIClient(transport: UnixTransport(path: integrationSocket + ".nope", timeout: 5))
         guard case .unreachable(.notRunning) = await c.status() else { Issue.record("不存在的 socket 应是 notRunning"); return }

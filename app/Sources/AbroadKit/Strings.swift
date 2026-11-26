@@ -335,7 +335,15 @@ public enum L10n {
     public static let uninstall = "卸载"
     public static let uninstallInInstaller = "在正式安装包里提供"
     public static let diagnostics = "诊断包"
-    public static let diagnosticsNone = "在终端里执行 abroad diagnostics > 诊断包.json，生成脱敏后的诊断包（不含出口 IP、订阅地址和密码）"
+    // 补齐五：应用里导出诊断包。
+    public static let diagnosticsExport = "导出诊断包…"
+    public static let diagnosticsIncludeDomains = "包含 Claude 访问过的域名清单"
+    public static let diagnosticsHelp = "诊断包是后台整理好的脱敏材料：版本、状态、最近一次环境检测和检测历史、启动管控。不含出口 IP、订阅地址、节点地址和密码；默认不含 Claude 访问过的域名（勾选上面一项才带）。应用打不开时，也可以在终端里执行 abroad diagnostics > 诊断包.json（加 --include-domains 带域名清单）。"
+    public static func diagnosticsFileName(_ stamp: String) -> String { "诊断包-" + stamp + ".json" }
+    public static func diagnosticsSaved(_ name: String) -> String { "已保存：" + name }
+    public static let diagnosticsBackendDown = "导出诊断包失败：后台服务没有运行。请确认后台服务在运行后再试；也可以在终端里执行 abroad diagnostics。"
+    public static func diagnosticsBackendError(_ why: String) -> String { "导出诊断包失败：后台没有给出诊断包（" + why + "）。请稍后再试；也可以在终端里执行 abroad diagnostics。" }
+    public static func diagnosticsWriteFailed(_ why: String) -> String { "导出诊断包失败：文件没有写成（" + why + "）。请换一个位置再试。" }
     public static let deviceCheckHint = "按需运行：扫描随中文办公软件安装的字体（只提示，不影响放行）"
     public static let deviceCheckRun = "运行设备体检"
     public static let deviceCheckClean = "没有发现随中文办公软件安装的字体"
