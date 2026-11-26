@@ -88,22 +88,25 @@ type Proxy struct {
 	MaxDNSTCP int            // DNS TCP 连接上限，默认 64
 
 	// M3（m3-plan M3-5）
-	Rules     func() *rules.Config   // 当前规则（原子读取）；nil 时用 rules.DefaultConfig（全部走主代理）
-	State     func() rules.State     // nil 时是 Enabled
-	ExitUp    func(exit string) bool // 分流出口是否可用；nil 时分流出口一律按不可用（回退主代理）
+	Rules  func() *rules.Config   // 当前规则（原子读取）；nil 时用 rules.DefaultConfig（全部走主代理）
+	State  func() rules.State     // nil 时是 Enabled
+	ExitUp func(exit string) bool // 分流出口是否可用；nil 时分流出口一律按不可用（回退主代理）
 	// ExitUDP 报告分流出口的 UDP 能不能走它（M4-8：最近一次 UDP 探测明确通过）；nil 时只看负缓存。
 	// 返回 false 时只有 UDP 回退主代理，TCP 照走它。
-	ExitUDP func(exit string) bool
-	Ident     AppIdentifier          // nil 时应用一律识别不到
-	Direct    DirectDialer           // nil 时直连一律失败
-	Reverse   *fakedns.Reverse       // 反查表（只能让结果更严格）
-	UDPNegTTL time.Duration          // 默认 60 秒
+	ExitUDP   func(exit string) bool
+	Ident     AppIdentifier    // nil 时应用一律识别不到
+	Direct    DirectDialer     // nil 时直连一律失败
+	Reverse   *fakedns.Reverse // 反查表（只能让结果更严格）
+	UDPNegTTL time.Duration    // 默认 60 秒
 	// SyncRules 在 SetRules 换规则之前调用，同步和规则绑定的其他名单（fake-IP DNS 的本地域名名单等，
 	// m3-plan v2.7 决定 4）。返回错误时规则保持旧的；它自己要保证失败时不留下一半的改动。
 	SyncRules func(c *rules.Config) error
 	// M4-6a：探测窗口和自己进程的识别。两个都非 nil 才有放行路径。
 	Probe ProbeGate
 	Self  SelfIdentifier
+
+	// M6-12：Claude 访问的、不在内置置顶后缀之下的域名交给它记录（只观察，不影响判定）。运行中可换，所以用原子指针。
+	claudeDomains atomic.Pointer[func(name string)]
 
 	st     proxyStats
 	dnsTCP atomic.Int64

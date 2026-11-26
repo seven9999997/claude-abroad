@@ -190,7 +190,8 @@ func (p *Proxy) newRoute(ctx context.Context, f Flow, network string) (*route, b
 		}
 	}
 	r.who = rules.Who{App: rules.Unknown}
-	if r.cfg.NeedApp() && p.Ident != nil { // 配置用不到应用时不识别（m3-plan v2.6 补充 4）
+	// 配置用不到应用时不识别（m3-plan v2.6 补充 4）；记 Claude 访问的域名时（M6-12）也要识别
+	if (r.cfg.NeedApp() || p.claudeDomains.Load() != nil) && p.Ident != nil {
 		app, claude := p.Ident.Identify(ctx, network, f.Src, f.Dst)
 		r.who = rules.Who{App: app, Claude: claude}
 	}
@@ -205,12 +206,43 @@ func (p *Proxy) newRoute(ctx context.Context, f Flow, network string) (*route, b
 	return r, true
 }
 
+// SetClaudeDomainObserver 设置记录 Claude 访问域名的回调（nil 表示不记；M6-12）。
+func (p *Proxy) SetClaudeDomainObserver(f func(name string)) {
+	if f == nil {
+		p.claudeDomains.Store(nil)
+		return
+	}
+	p.claudeDomains.Store(&f)
+}
+
+// observeClaude 把 Claude 进程访问的、不在内置置顶后缀之下的域名交给观察者（只观察）。
+func (p *Proxy) observeClaude(r *route) {
+	f := p.claudeDomains.Load()
+	if f == nil || !r.who.Claude {
+		return
+	}
+	name := r.dest.FakeDomain
+	if name == "" {
+		name = r.dest.SniffName
+	}
+	if name == "" {
+		return
+	}
+	if pinned, ok := rules.IsPinned(name, nil); !ok || pinned {
+		return
+	}
+	(*f)(name)
+}
+
 // decide 是判定入口（每条流恰好一次；唯一的另一处 Decide 调用是 dispatch 里带 Refused 的重判）。
 func (p *Proxy) decide(r *route) rules.Decision { return r.cfg.Decide(r.who, r.dest, r.env) }
 
 // dispatch 是唯一能开代理流、发起直连拨号的地方（m3-plan v2.6 补充 1）。返回上游连接（拦截或失败时为 nil）
 // 和最终生效的判定。直连回 pinned 时带着 Refused 再判一次（唯一允许的第二次判定），结果不可能是直连。
 func (p *Proxy) dispatch(ctx context.Context, e *flowEntry, r *route, dec rules.Decision, refused bool) (net.Conn, rules.Decision) {
+	if !refused {
+		p.observeClaude(r) // M6-12：只观察，不影响判定（带 Refused 的重判是同一条流，不重复记）
+	}
 	dec = p.commit(e, r, dec)
 	p.countReason(dec.Reason)
 	switch dec.Action.Kind {
