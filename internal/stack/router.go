@@ -190,8 +190,10 @@ func (p *Proxy) newRoute(ctx context.Context, f Flow, network string) (*route, b
 		}
 	}
 	r.who = rules.Who{App: rules.Unknown}
-	// 配置用不到应用时不识别（m3-plan v2.6 补充 4）；记 Claude 访问的域名时（M6-12）也要识别
-	if (r.cfg.NeedApp() || p.claudeDomains.Load() != nil) && p.Ident != nil {
+	// 配置用不到应用时不识别（m3-plan v2.6 补充 4）；记 Claude 访问的域名时（M6-12）也要识别——但已经知道是内置后缀下的
+	// 域名时不会记，省掉这次识别（M6-12 建议改：热路径上 Claude 的大部分连接都是内置域名）。
+	observe := p.claudeDomains.Load() != nil && !builtinPinned(r.dest.FakeDomain)
+	if (r.cfg.NeedApp() || observe) && p.Ident != nil {
 		app, claude := p.Ident.Identify(ctx, network, f.Src, f.Dst)
 		r.who = rules.Who{App: app, Claude: claude}
 	}
@@ -213,6 +215,15 @@ func (p *Proxy) SetClaudeDomainObserver(f func(name string)) {
 		return
 	}
 	p.claudeDomains.Store(&f)
+}
+
+// builtinPinned 报告 name 是否非空且在内置置顶后缀之下（这样的域名不记）。
+func builtinPinned(name string) bool {
+	if name == "" {
+		return false
+	}
+	pinned, ok := rules.IsPinned(name, nil)
+	return ok && pinned
 }
 
 // observeClaude 把 Claude 进程访问的、不在内置置顶后缀之下的域名交给观察者（只观察）。

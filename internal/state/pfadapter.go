@@ -23,6 +23,7 @@ type PatrolPF struct {
 	ExternalTokens func() ([]string, error)
 
 	mu        sync.Mutex
+	restored  bool // 处于回国拦截模式（M6-11a）：新 token 取代全部旧 token
 	utun      string
 	unsaved   []string
 	unsaveErr error // 最近一次 token 追加失败的原因（Apply 用来判断本次是否有 token 没存下来）
@@ -66,7 +67,15 @@ func (a *PatrolPF) beforeEnable() error {
 
 // onToken 在 Patrol 持锁时被调用（不能再调用 Patrol 的方法）。
 func (a *PatrolPF) onToken(tok string) {
-	if err := a.Store.AddToken(tok); err != nil {
+	a.mu.Lock()
+	restored := a.restored
+	a.mu.Unlock()
+	add := a.Store.AddToken
+	if restored {
+		// 回国拦截模式下拿到新 token 说明 pf 被关过：旧 token 都已失效，换成这一个。
+		add = a.Store.ReplaceTokens
+	}
+	if err := add(tok); err != nil {
 		a.mu.Lock()
 		a.unsaved = append(a.unsaved, tok)
 		a.unsaveErr = err
@@ -79,10 +88,24 @@ func (a *PatrolPF) onToken(tok string) {
 // 状态文件损坏时例外：保护优先，照样返回 Patrol 的结果。
 func (a *PatrolPF) Apply(ctx context.Context, utun string) error {
 	a.mu.Lock()
-	a.utun = utun
+	a.utun, a.restored = utun, false
+	a.mu.Unlock()
+	return a.apply(func() error { return a.P.Apply(ctx) })
+}
+
+// ApplyRestored 实现 PF（M6-11a）。
+func (a *PatrolPF) ApplyRestored(ctx context.Context) error {
+	a.mu.Lock()
+	a.utun, a.restored = "", true
+	a.mu.Unlock()
+	return a.apply(func() error { return a.P.ApplyRestored(ctx) })
+}
+
+func (a *PatrolPF) apply(run func() error) error {
+	a.mu.Lock()
 	before := len(a.unsaved)
 	a.mu.Unlock()
-	err := a.P.Apply(ctx)
+	err := run()
 	a.mu.Lock()
 	grew, uerr := len(a.unsaved) > before, a.unsaveErr
 	a.mu.Unlock()
@@ -95,7 +118,7 @@ func (a *PatrolPF) Apply(ctx context.Context, utun string) error {
 // Flush 实现 PF。
 func (a *PatrolPF) Flush(ctx context.Context) error {
 	a.mu.Lock()
-	a.utun = ""
+	a.utun, a.restored = "", false
 	a.mu.Unlock()
 	return a.P.Flush(ctx)
 }

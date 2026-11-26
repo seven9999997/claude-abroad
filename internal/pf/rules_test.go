@@ -34,6 +34,8 @@ func TestRenderGolden(t *testing.T) {
 		"boot":   {LAN: fullCfg.LAN, VMIfs: fullCfg.VMIfs, User: "_abroad"},
 		"nolan":  {UtunName: "utun5", VMIfs: fullCfg.VMIfs, User: "_abroad"},
 		"novmif": {UtunName: "utun5", LAN: fullCfg.LAN, User: "_abroad"},
+		// M6-11a：回国拦截那一组
+		"returnblock": ReturnBlockConfig(),
 	}
 	for name, c := range cases {
 		got, err := Render(c)

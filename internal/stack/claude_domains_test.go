@@ -41,3 +41,28 @@ func TestClaudeDomainObserver(t *testing.T) {
 		t.Fatalf("去掉观察者后不应再记：%v", got)
 	}
 }
+
+// M6-12 建议改：配置用不到应用、只为记域名才识别时，已知是内置后缀下的域名不识别（不会记，省掉热路径上的识别）；
+// 普通域名照常识别。
+func TestClaudeDomainObserverSkipsIdentForPinned(t *testing.T) {
+	e := newM3Env(t, "")
+	e.p.SetClaudeDomainObserver(func(string) {})
+	dial := func(port uint16, name string) {
+		t.Helper()
+		conn, err := e.cl.dialFrom(port, ap(e.lookupA(t, name), 443), ioWait)
+		if err != nil {
+			t.Fatalf("%s：%v", name, err)
+		}
+		_ = echoOnce(conn, []byte("x"))
+		conn.Close()
+	}
+	dial(portClaude+1, "claude.ai")
+	dial(portClaude+2, "api.anthropic.com")
+	if n := e.ident.calls.Load(); n != 0 {
+		t.Fatalf("内置域名不应为记录去识别：%d", n)
+	}
+	dial(portClaude+3, "plain.example.org")
+	if e.ident.calls.Load() == 0 {
+		t.Fatal("普通域名应识别")
+	}
+}

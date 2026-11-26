@@ -130,6 +130,10 @@ func (s *Supervisor) Tick(ctx context.Context) error {
 	}
 	switch f.State {
 	case Restored:
+		// 回国拦截模式（M6-11a）：核对锚点还是那一组、pf 启用着，被清掉就重新加载。不在这一模式时什么都不做。
+		if rp, ok := s.Patrol.(interface{ RestoredMode() bool }); ok && rp.RestoredMode() {
+			return s.Patrol.Step(ctx)
+		}
 		return nil
 	case Enabling, Restoring:
 		// 上次操作没做完：只保证 pf 在（巡检已暂停时 Step 什么都不做）。

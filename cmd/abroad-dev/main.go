@@ -524,6 +524,7 @@ func pfRender(args []string, stdout, stderr io.Writer) int {
 	user := fs.String("user", "nobody", "放行去公网的用户（本机没有 _abroad，语法检查用 nobody）")
 	utun := fs.String("utun", "", "我们的 utun（为空表示开机时还没有 utun）")
 	lockdown := fs.Bool("lockdown", false, "最严的一组（M6-2b：开机时 guard 读不出参数时用；不放行任何用户、局域网、网桥）")
+	returnBlock := fs.Bool("return-block", false, "回国拦截那一组（M6-11a：回国后只拦 Anthropic 的地址段）")
 	var lans, vmifs listFlag
 	fs.Var(&lans, "lan", "直连网段，可重复")
 	fs.Var(&vmifs, "vmif", "虚拟机网桥接口，可重复")
@@ -545,6 +546,13 @@ func pfRender(args []string, stdout, stderr io.Writer) int {
 	}
 	if len(direct) > 0 && !*lockdown {
 		c.LAN = pf.LANPrefixes(direct)
+	}
+	if *returnBlock {
+		if *lockdown || len(direct) > 0 || len(vmifs) > 0 || *utun != "" {
+			fmt.Fprintln(stderr, "abroad-dev pf-render: --return-block 不能和别的参数一起用")
+			return 2
+		}
+		c = pf.ReturnBlockConfig()
 	}
 	out, err := pf.Render(c)
 	if err != nil {

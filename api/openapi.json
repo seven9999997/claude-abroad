@@ -1141,6 +1141,31 @@
         },
         "type": "object"
       },
+      "DaemonReturnBlockStatus": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "nets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "note": {
+            "type": "string"
+          },
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "active",
+          "note",
+          "on"
+        ],
+        "type": "object"
+      },
       "DaemonRulesSummary": {
         "properties": {
           "block": {
@@ -1309,6 +1334,9 @@
           },
           "resolver_lock": {
             "$ref": "#/components/schemas/ResolverlockStatus"
+          },
+          "return_block": {
+            "$ref": "#/components/schemas/DaemonReturnBlockStatus"
           },
           "rules": {
             "$ref": "#/components/schemas/DaemonRulesSummary"

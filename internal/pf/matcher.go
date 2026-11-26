@@ -12,7 +12,7 @@ import (
 //   - 去掉行尾的 " flags S/SA keep state" 或 " keep state"；
 //   - "port = N" → "port N"；
 //   - "user = <UID 或用户名>" → "user <User>"（UID 不对的保持原样，于是判不同）；
-//   - "inet from any to X" → "inet to X"（没有源端口条件时 pf 会补上 from any）。
+//   - "inet from any to X" → "inet to X"（没有源端口条件时 pf 会补上 from any；inet6 同样，M6-11a 回国拦截那一组）。
 //
 // 还原后仍不相等的一律判不同（包括 __automatic 表、多行、少行、顺序不同），不做任何容错。
 // 表内容另行比对：-t abroad_lan -T show 的结果与期望的网段集合相同。
@@ -39,7 +39,8 @@ func (m PrintMatcher) normalize(line string) string {
 		}
 		return s
 	})
-	return strings.Replace(l, " inet from any to ", " inet to ", 1)
+	l = strings.Replace(l, " inet from any to ", " inet to ", 1)
+	return strings.Replace(l, " inet6 from any to ", " inet6 to ", 1)
 }
 
 // ruleLines 取出规则行（去掉空行和 table 行）。

@@ -103,11 +103,14 @@ var crashOps = []crashOp{
 	{"恢复", func(b *bed) { mustOK(b.t, b.m.Enable(bg)) }, func(b *bed) { _ = b.m.Restore(bg) }},
 	// M4-5：ENABLED 下的地区同步（应用主代理、切换地区）。
 	{"运行中切换地区", func(b *bed) { mustOK(b.t, b.m.Enable(bg)) }, func(b *bed) { _ = b.m.SyncRegion(bg, otherTarget) }},
+	// M6-11a：回国过一次之后再启用（开关打开时锚点从回国拦截那一组换回接管规则）。
+	{"回国后再启用", func(b *bed) { mustOK(b.t, b.m.Enable(bg)); mustOK(b.t, b.m.Restore(bg)) }, func(b *bed) { _ = b.m.Enable(bg) }},
 }
 
 // opEvents 空跑一遍，数出改动事件。
-func opEvents(t *testing.T, op crashOp) []string {
+func opEvents(t *testing.T, op crashOp, rb bool) []string {
 	b := newBed(t)
+	b.rb = rb
 	op.setup(b)
 	_, names := b.countChanges(func() { op.op(b) })
 	b.noViolations()
@@ -130,7 +133,21 @@ func (b *bed) blocked() bool {
 
 // runCrashCase：第 k 个改动事件之后崩溃（reboot 为 true 时改为重启，先 Boot），新进程 Recover，核对终态，再 Restore。
 func runCrashCase(t *testing.T, op crashOp, k int, ev string, reboot bool) {
+	runCrashCaseRB(t, op, k, ev, reboot, false)
+}
+
+// runCrashCaseRB 同 runCrashCase；rb 为真时回国保留回国拦截（M6-11a），回国后的终态按 assertRestoredRB 核对。
+func runCrashCaseRB(t *testing.T, op crashOp, k int, ev string, reboot, rb bool) {
 	b := newBed(t)
+	b.rb = rb
+	clean := func(leak int) {
+		t.Helper()
+		if rb {
+			b.assertRestoredRB(b.init, leak)
+		} else {
+			b.assertCleanTokens(b.init, leak)
+		}
+	}
 	op.setup(b)
 	if !b.runToCrash(k, func() { op.op(b) }) {
 		t.Fatalf("第 %d 个事件没有触发崩溃", k)
@@ -172,14 +189,14 @@ func runCrashCase(t *testing.T, op crashOp, k int, ev string, reboot bool) {
 	}
 	switch {
 	case atCrash.State == Enabling && atCrash.Origin != Disabled, atCrash.State == Restoring, atCrash.State == Restored:
-		b.assertCleanTokens(b.init, leak)
+		clean(leak)
 	case atCrash.State == Enabling, atCrash.State == Disabled:
 		b.assertDisabled()
 	case atCrash.State == Enabled:
 		b.assertEnabled()
 	}
 	mustOK(t, b.m.Restore(bg))
-	b.assertCleanTokens(b.init, leak)
+	clean(leak)
 	if leak > 1 {
 		t.Fatalf("未释放的 token %d 个", leak)
 	}
@@ -194,16 +211,19 @@ func runCrashCase(t *testing.T, op crashOp, k int, ev string, reboot bool) {
 	b.noViolations()
 }
 
-func testCrashes(t *testing.T, reboot bool) {
+func testCrashes(t *testing.T, reboot bool) { testCrashesRB(t, reboot, false) }
+
+func testCrashesRB(t *testing.T, reboot, rb bool) {
 	for _, op := range crashOps {
-		names := opEvents(t, op)
+		names := opEvents(t, op, rb)
 		if len(names) == 0 {
 			t.Fatalf("%s 没有改动事件", op.name)
 		}
 		t.Run(op.name, func(t *testing.T) {
+			t.Parallel() // 每例一个独立的测试台（临时目录、假系统），没有共享的可变状态
 			for k := 1; k <= len(names); k++ {
 				t.Run(fmt.Sprintf("%02d %s", k, names[k-1]), func(t *testing.T) {
-					runCrashCase(t, op, k, names[k-1], reboot)
+					runCrashCaseRB(t, op, k, names[k-1], reboot, rb)
 				})
 			}
 		})
@@ -211,15 +231,33 @@ func testCrashes(t *testing.T, reboot bool) {
 }
 
 // d. 崩溃注入，穷举。
-func TestCrashExhaustive(t *testing.T) { testCrashes(t, false) }
+func TestCrashExhaustive(t *testing.T) { t.Parallel(); testCrashes(t, false) }
 
 // e. 重启注入，穷举。
-func TestRebootExhaustive(t *testing.T) { testCrashes(t, true) }
+func TestRebootExhaustive(t *testing.T) { t.Parallel(); testCrashes(t, true) }
+
+// M6-11a：开关打开时同样穷举崩溃和重启。“已回国”的不变量换成：锚点恰好是回国拦截那一组、留一个有效的 token。
+// 模拟器后端（TestSimBackendSuite）里不再跑：回国拦截只改 pf，模拟器覆盖的是路由、DNS、IPv6 的命令层，开关关时的穷举已经覆盖。
+func TestCrashExhaustiveReturnBlock(t *testing.T) {
+	if simBackend {
+		t.Skip("回国拦截只改 pf，模拟器后端由开关关时的穷举覆盖")
+	}
+	t.Parallel()
+	testCrashesRB(t, false, true)
+}
+
+func TestRebootExhaustiveReturnBlock(t *testing.T) {
+	if simBackend {
+		t.Skip("回国拦截只改 pf，模拟器后端由开关关时的穷举覆盖")
+	}
+	t.Parallel()
+	testCrashesRB(t, true, true)
+}
 
 // d. 单独点名的两例：第一个网络服务关掉 IPv6 之后崩溃；标记落盘之后、token 落盘之前崩溃。
 func TestCrashNamedCases(t *testing.T) {
 	op := crashOps[0]
-	names := opEvents(t, op)
+	names := opEvents(t, op, false)
 	firstOff := slices.Index(names, "net "+sysnet.OpIPv6Off) + 1
 	enable := slices.Index(names, "pf -E") + 1
 	if firstOff == 0 || enable < 2 || !strings.Contains(names[enable-2], "pending=true") {

@@ -678,6 +678,19 @@ public struct DaemonRegionStatus: Codable, Sendable {
     }
 }
 
+public struct DaemonReturnBlockStatus: Codable, Sendable {
+    public var on: Bool
+    public var active: Bool
+    public var nets: [String]?
+    public var note: String
+    enum CodingKeys: String, CodingKey {
+        case on = "on"
+        case active = "active"
+        case nets = "nets"
+        case note = "note"
+    }
+}
+
 public struct DaemonRulesSummary: Codable, Sendable {
     public var `default`: String
     public var direct: Int64
@@ -749,6 +762,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var browsersLeft: [String]?
     public var launchControl: Bool?
     public var prepare: DaemonPrepareStatus?
+    public var returnBlock: DaemonReturnBlockStatus?
     public var exits: [DaemonExitStatus]?
     public var opens: [String: DaemonExitCounts]?
     public var region: DaemonRegionStatus?
@@ -773,6 +787,7 @@ public struct DaemonStatus: Codable, Sendable {
         case browsersLeft = "browsers_left"
         case launchControl = "launch_control"
         case prepare = "prepare"
+        case returnBlock = "return_block"
         case exits = "exits"
         case opens = "opens"
         case region = "region"

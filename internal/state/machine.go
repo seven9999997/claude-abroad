@@ -517,13 +517,22 @@ func (m *Machine) undoTakeover(ctx context.Context) error {
 	return m.restoreRegion(ctx)
 }
 
+// returnBlock 报告这次回国是否保留“回国拦截”（M6-11a）。
+func (m *Machine) returnBlock() bool { return m.D.ReturnBlock != nil && m.D.ReturnBlock() }
+
 // clearPF 是恢复的 ⑥⑦。
 func (m *Machine) clearPF(ctx context.Context) error {
 	// ⑥ 清空锚点，释放全部 token（每释放一个就从文件里去掉，重入时不重复释放）。
+	// 保留回国拦截时（M6-11a）：锚点经一次加载换成那一组（没有空窗），留下最新的一个 token，其余释放。
 	if err := m.setStep(StepPFClear); err != nil {
 		return err
 	}
-	if err := m.D.PF.Flush(ctx); err != nil {
+	rb := m.returnBlock()
+	if rb {
+		if err := m.D.PF.ApplyRestored(ctx); err != nil {
+			return err
+		}
+	} else if err := m.D.PF.Flush(ctx); err != nil {
 		return err
 	}
 	// 开机时 guard 取得的启用引用（M6-2b）：先收养进状态文件，下面一起释放（回国干净）。
@@ -537,11 +546,22 @@ func (m *Machine) clearPF(ctx context.Context) error {
 	}
 	if f.PFEnablePending {
 		// 可能漏了一个启用引用：不执行 pfctl -d（会关掉别的软件依赖的 pf）。
-		m.emit(EvTokenUnknown, "可能漏了一个 pf 启用引用；pf 可能保持启用但我们的锚点为空，无害，重启后消失")
+		if rb {
+			m.emit(EvTokenUnknown, "可能漏了一个 pf 启用引用；回国拦截本来就要 pf 保持启用，无害，重启后消失")
+		} else {
+			m.emit(EvTokenUnknown, "可能漏了一个 pf 启用引用；pf 可能保持启用但我们的锚点为空，无害，重启后消失")
+		}
 	}
-	// 锚点已清空：释放是尽力而为（设计 6.2）。失败只记事件、从文件里去掉，不能卡在 RESTORING
+	toks := f.PFTokens
+	var keep []string
+	if rb && len(toks) > 0 {
+		// 留最新的一个：pf 关过之后，之前的 token 都已失效，之后重新启用拿到的 token 追加在最后（开机时 guard 的也是），
+		// 所以只要还有有效的，最后一个就是。
+		keep, toks = toks[len(toks)-1:], toks[:len(toks)-1:len(toks)-1]
+	}
+	// 锚点已清空（或只剩回国拦截）：释放是尽力而为（设计 6.2）。失败只记事件、从文件里去掉，不能卡在 RESTORING
 	// （否则每次开机都按“非 RESTORED”加载 pf）。
-	for _, tok := range f.PFTokens {
+	for _, tok := range toks {
 		if err := m.D.PF.Release(ctx, tok); err != nil {
 			if errors.Is(err, pf.ErrTokenInvalid) {
 				m.emit(EvTokenReleaseFailed, "启用引用已失效（可能别的软件关过 pf）")
@@ -557,6 +577,9 @@ func (m *Machine) clearPF(ctx context.Context) error {
 		}
 	}
 	// ⑦ 写 RESTORED（清掉快照，下一个周期可以重拍）。
+	if rb {
+		return m.Store.MarkRestoredKeep(keep)
+	}
 	return m.Store.MarkRestored()
 }
 

@@ -61,6 +61,7 @@ check full --utun utun9 --lan 192.168.1.0/24 --vmif bridge100 --vmif vmenet0
 check boot --lan 192.168.1.0/24 --vmif bridge100
 check nolan --utun utun9 --vmif bridge100
 check lockdown --lockdown # M6-2b：开机时 guard 读不出参数时加载的最严的一组
+check returnblock --return-block # M6-11a：回国后只拦 Anthropic 地址段的那一组
 # 反例：故意写错的规则必须解析失败，证明非 root 下 pfctl -n 确实做了语法检查（不是什么都不查就返回 0）。
 BAD="${OUT}/pf-bad-${TS}.conf"
 printf 'pass out quick on lo0 all\npass out quick bogus-keyword all\n' >"${BAD}"

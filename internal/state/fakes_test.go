@@ -2,11 +2,13 @@ package state
 
 import (
 	"claude-abroad/internal/gatesm"
+	"bytes"
 	"context"
 	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -44,6 +46,7 @@ type bed struct {
 	tgts    *fakeTargets
 	env     *fakeEnv
 	m       *Machine
+	rb      bool // 回国后保留回国拦截（M6-11a 的开关）
 
 	mu         sync.Mutex
 	timeline   []string
@@ -265,6 +268,7 @@ func (b *bed) spawn() {
 		PF: b.pfw, Tun: b.tun, Routes: routes, DNS: dns, IPv6: v6,
 		VM: b.vm, Check: b.exit, Gate: b.gate, Recheck: b.re, Teardown: b.td, Killer: b.kill, Preflight: b.pre, DataState: b.ds,
 		Locale: loc, VMRegion: b.vmr, Targets: b.tgts, Env: b.env,
+		ReturnBlock: func() bool { return b.rb },
 	}, OnEvent: b.onEvent}
 }
 
@@ -443,7 +447,8 @@ func (b *bed) checkWith(where string, leak bool) {
 		b.violate(where, "读状态文件："+err.Error())
 		return
 	}
-	active := b.fpf.Active(pf.DefaultAnchor)
+	// 生效的是接管规则（回国拦截那一组不算断网保护，M6-11a）。
+	active := b.fpf.Active(pf.DefaultAnchor) && !b.isReturnBlock()
 	if b.gate.IsOpen() && (f.State != Enabled || !active) {
 		b.violate(where, fmt.Sprintf("I1：闸门开，但状态 %s、pf 生效=%v", f.State, active))
 	}
@@ -456,15 +461,55 @@ func (b *bed) checkWith(where string, leak bool) {
 	}
 	if leak && (f.State != Restored || len(tr) > 0) {
 		for _, proto := range []string{"tcp", "udp"} {
-			ok, err := b.fpf.Eval(pf.DefaultAnchor, pf.Packet{If: "en0", User: "alice", Proto: proto, DstPort: 443, Dst: netip.MustParseAddr("160.79.104.10")})
-			if err != nil || ok {
-				b.violate(where, fmt.Sprintf("泄漏：状态 %s、痕迹 %v，en0 上普通用户的 %s 被放行（err=%v）", f.State, tr, proto, err))
+			for _, dst := range []string{"160.79.104.10", "1.1.1.1"} { // 后者不在回国拦截的地址段里
+				ok, err := b.fpf.Eval(pf.DefaultAnchor, pf.Packet{If: "en0", User: "alice", Proto: proto, DstPort: 443, Dst: netip.MustParseAddr(dst)})
+				if err != nil || ok {
+					b.violate(where, fmt.Sprintf("泄漏：状态 %s、痕迹 %v，en0 上普通用户到 %s 的 %s 被放行（err=%v）", f.State, tr, dst, proto, err))
+				}
 			}
 		}
 	}
 }
 
 func (b *bed) check(where string) { b.checkWith(where, true) }
+
+// isReturnBlock 报告锚点里是不是恰好是回国拦截那一组。
+func (b *bed) isReturnBlock() bool {
+	want, _ := pf.Render(pf.ReturnBlockConfig())
+	return bytes.Equal(b.fpf.Raw(pf.DefaultAnchor), want)
+}
+
+// assertRestoredRB：开关打开时回国后的终态（M6-11a）——状态文件 RESTORED、恰好留一个 token 且它在 pf 里有效，锚点恰好
+// 是回国拦截那一组且生效（Anthropic 地址段被拒、别处放行），假系统与初始值相等，闸门关，utun 关。leak 是允许多出来的
+// 未落盘 token 个数。
+func (b *bed) assertRestoredRB(want sysnet.FakeState, leak int) {
+	b.t.Helper()
+	f := b.state()
+	// 恰好留一个；只有 -E 之后、token 落盘之前崩溃（漏了一个，有“token 未知”事件）时文件里可以一个都没有，
+	// 这时 pf 由漏掉的那个保持启用。
+	if f.State != Restored || len(f.PFTokens) > 1 || (len(f.PFTokens) == 0 && leak == 0) || f.PFEnablePending || f.IPv6SnapshotTaken || f.Utun != "" {
+		b.t.Fatalf("状态文件：%+v（漏 %d 个）", f, leak)
+	}
+	live := b.fpf.Tokens()
+	if (len(f.PFTokens) == 1 && !slices.Contains(live, f.PFTokens[0])) || len(live) != len(f.PFTokens)+leak {
+		b.t.Fatalf("留下的 token %v，pf 里有效的 %v（允许多 %d 个）", f.PFTokens, live, leak)
+	}
+	if got := b.net.Snapshot(); !got.Equal(want) {
+		b.t.Fatalf("假系统与初始值不等：\n%+v\n%+v", got, want)
+	}
+	if !b.isReturnBlock() || !b.fpf.Active(pf.DefaultAnchor) {
+		b.t.Fatalf("锚点应恰好是回国拦截那一组且生效：\n%s", b.fpf.Raw(pf.DefaultAnchor))
+	}
+	for dst, wantPass := range map[string]bool{"160.79.104.10": false, "2607:6bc0::1": false, "1.1.1.1": true} {
+		ok, err := b.fpf.Eval(pf.DefaultAnchor, pf.Packet{If: "en0", User: "alice", Proto: "tcp", DstPort: 443, Dst: netip.MustParseAddr(dst)})
+		if err != nil || ok != wantPass {
+			b.t.Fatalf("回国后到 %s：放行=%v（err=%v）", dst, ok, err)
+		}
+	}
+	if b.gate.IsOpen() || b.tun.Name() != "" {
+		b.t.Fatal("闸门没关或 utun 没关")
+	}
+}
 
 // checkCleared 是 Flush、Release 之后的正面断言（I2、I3 的例外窗口）：状态是 RESTORING 或回滚中的
 // ENABLING，步骤序号 6，没有任何接管痕迹，闸门关着。
@@ -606,6 +651,22 @@ func (p *pfWrap) Flush(ctx context.Context) error {
 		return err
 	}
 	p.b.checkCleared("pf flush")
+	return nil
+}
+
+// ApplyRestored：换成回国拦截之后，回国途中按“清锚点窗口”核对，RESTORED 里（恢复时）按普通不变量核对。
+func (p *pfWrap) ApplyRestored(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := p.PF.ApplyRestored(ctx); err != nil {
+		return err
+	}
+	if f, err := p.b.view.Load(); err == nil && f.State == Restored {
+		p.b.check("pf apply restored")
+	} else {
+		p.b.checkCleared("pf apply restored")
+	}
 	return nil
 }
 

@@ -103,7 +103,7 @@ func (f *FakePF) Active(anchor string) bool {
 // Kills 返回 KillStates 被调用的次数。
 func (f *FakePF) Kills() int { f.mu.Lock(); defer f.mu.Unlock(); return f.kills }
 
-// Eval 用当前生效的规则对一个包求值：pf 没启用、主规则集不引用锚点、锚点为空时都等于“不拦”。
+// Eval 用当前生效的规则对一个包求值：pf 没启用、主规则集不引用锚点、锚点为空、没有规则命中时都等于“不拦”。
 func (f *FakePF) Eval(anchor string, pkt Packet) (bool, error) {
 	f.mu.Lock()
 	a := f.anchors[anchor]
@@ -116,7 +116,10 @@ func (f *FakePF) Eval(anchor string, pkt Packet) (bool, error) {
 	if !active {
 		return true, nil
 	}
-	return Eval(raw, pkt)
+	// 锚点里没有规则命中：由系统的主规则集决定，默认放行（M6-11a 回国拦截那一组只有拦截规则；接管的规则以
+	// “全部拦截”结尾，总有一条命中）。
+	matched, pass, err := EvalMatch(raw, pkt)
+	return !matched || pass, err
 }
 
 func (f *FakePF) op(name string) error {
@@ -266,6 +269,7 @@ func (f *FakePF) print(a *fakeAnchor) []byte {
 		}
 		p := strings.ReplaceAll(l, " port ", " port = ")
 		p = strings.Replace(p, " inet to ", " inet from any to ", 1)
+		p = strings.Replace(p, " inet6 to ", " inet6 from any to ", 1)
 		if i := strings.Index(p, " user "); i >= 0 {
 			u := p[i+len(" user "):]
 			if uid := f.UIDs[u]; uid != "" {

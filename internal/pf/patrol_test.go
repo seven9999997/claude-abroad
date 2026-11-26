@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/netip"
 	"runtime"
 	"slices"
 	"sync"
@@ -399,5 +400,81 @@ func TestPatrolRepairFailureImmediate(t *testing.T) {
 	e.f.FailNext("info", errors.New("boom"))
 	if err := e.p.Step(context.Background()); !errors.Is(err, ErrStatusUnavailable) || !e.p.Protected() {
 		t.Fatalf("读不到状态一轮仍算有效：%v", err)
+	}
+}
+
+// M6-11a：回国拦截模式。从接管规则一次加载换过来（中间没有 Flush、不清状态），只拦那几段；被清掉、pf 被关时巡检
+// 重新加载和启用；Protected 一直为假，不调用 OnApplied；Apply 回到接管规则，Flush 退出这一模式。
+func TestPatrolRestoredMode(t *testing.T) {
+	e := newPatrolEnv(t)
+	applied := 0
+	e.p.OnApplied = func(Config) { applied++ }
+	ctx := context.Background()
+	if err := e.p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	kills, appliedBefore := e.f.Kills(), applied
+	e.f.ResetCalls()
+	if err := e.p.ApplyRestored(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(e.f.Calls(), "flush") || e.f.Kills() != kills {
+		t.Fatalf("换组不应先清空锚点、不应清状态：%v", e.f.Calls())
+	}
+	want, _ := Render(ReturnBlockConfig())
+	if !bytes.Equal(e.f.Raw(DefaultAnchor), want) {
+		t.Fatalf("锚点应恰好是回国拦截那一组：\n%s", e.f.Raw(DefaultAnchor))
+	}
+	if !e.p.RestoredMode() || !e.p.ReturnBlockActive() || e.p.Protected() || applied != appliedBefore {
+		t.Fatalf("模式 %v 生效 %v 保护 %v OnApplied %d→%d", e.p.RestoredMode(), e.p.ReturnBlockActive(), e.p.Protected(), appliedBefore, applied)
+	}
+	blocked := func(dst string) bool {
+		ok, err := e.f.Eval(DefaultAnchor, Packet{If: "en0", User: "alice", Proto: "tcp", DstPort: 443, Dst: netip.MustParseAddr(dst)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return !ok
+	}
+	if !blocked("160.79.104.10") || !blocked("2607:6bc0::1") || blocked("1.1.1.1") || blocked("2001:db8::1") {
+		t.Fatal("应只拦 Anthropic 的地址段")
+	}
+	// 被清掉、pf 被关：巡检重新加载并启用（新 token 交出去），仍不清状态
+	e.f.ClearAnchor()
+	e.f.Disable()
+	ntok := len(e.tokens)
+	if err := e.p.Step(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(e.f.Raw(DefaultAnchor), want) || !e.f.Active(DefaultAnchor) || len(e.tokens) != ntok+1 || e.f.Kills() != kills {
+		t.Fatalf("没有恢复：%s tokens=%v kills=%d", e.f.Raw(DefaultAnchor), e.tokens, e.f.Kills())
+	}
+	// Apply 回到接管规则（同样一次加载）
+	e.f.ResetCalls()
+	if err := e.p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(e.f.Calls(), "flush") || e.p.RestoredMode() || !e.p.Protected() || !blocked("160.79.104.10") || !blocked("1.1.1.1") {
+		t.Fatalf("回到接管：%v", e.f.Calls())
+	}
+	// Flush 退出这一模式
+	_ = e.p.ApplyRestored(ctx)
+	if err := e.p.Flush(ctx); err != nil || e.p.RestoredMode() || e.p.ReturnBlockActive() {
+		t.Fatal("Flush 应退出回国拦截模式")
+	}
+	if err := e.p.Step(ctx); err != nil || e.f.Raw(DefaultAnchor) != nil {
+		t.Fatal("暂停期间不应加载")
+	}
+}
+
+// 打印形式（-n -v -o none 实测，2026-11-26）：pf 给两行都补上 from any，Matcher 判一致。
+func TestMatcherReturnBlock(t *testing.T) {
+	want, _ := Render(ReturnBlockConfig())
+	shown := []byte("block return out quick inet from any to 160.79.104.0/21\nblock return out quick inet6 from any to 2607:6bc0::/32\n")
+	m := PrintMatcher{User: "_abroad"}
+	if !m.Same(want, Status{AnchorRules: shown}) {
+		t.Fatal("应判一致")
+	}
+	if m.Same(want, Status{AnchorRules: []byte("block return out quick inet from any to 160.79.104.0/21\n")}) {
+		t.Fatal("少一行应判不同")
 	}
 }

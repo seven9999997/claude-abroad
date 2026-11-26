@@ -32,6 +32,16 @@ var ErrStatusUnavailable = errors.New("读不到 pf 的状态")
 //   - 有过 Load：再取一次 Status，Matcher 必须判一致，否则 ErrVerifyFailed（新规则保留，不 Flush）；
 //   - 主规则集不再引用 com.apple/*：做完以上步骤后返回 ErrAnchorNotReferenced（处置在 M2-6c）。
 func (c *Controller) Ensure(ctx context.Context, expected, previous []byte) (EnsureResult, error) {
+	return c.ensure(ctx, expected, previous, true)
+}
+
+// EnsureNoKill 同 Ensure，但加载后不清状态（M6-11a 回国拦截那一组：回国前已经结束了 Claude，这组只拦新连接；
+// 不为它清掉本机全部连接的状态，少影响别的软件）。
+func (c *Controller) EnsureNoKill(ctx context.Context, expected, previous []byte) (EnsureResult, error) {
+	return c.ensure(ctx, expected, previous, false)
+}
+
+func (c *Controller) ensure(ctx context.Context, expected, previous []byte, kill bool) (EnsureResult, error) {
 	var r EnsureResult
 	if c.Matcher == nil {
 		return r, errors.New("没有配置 Matcher")
@@ -46,10 +56,12 @@ func (c *Controller) Ensure(ctx context.Context, expected, previous []byte) (Ens
 			return r, err
 		}
 		r.Loaded, r.WasAbsent = true, true
-		if err := c.KillStates(ctx); err != nil {
-			return r, err
+		if kill {
+			if err := c.KillStates(ctx); err != nil {
+				return r, err
+			}
+			r.KilledStates = true
 		}
-		r.KilledStates = true
 	case !c.Matcher.Same(expected, st):
 		if err := c.Load(ctx, expected); err != nil {
 			return r, err
@@ -57,10 +69,12 @@ func (c *Controller) Ensure(ctx context.Context, expected, previous []byte) (Ens
 		r.Loaded = true
 		if len(previous) == 0 || !c.Matcher.Same(previous, st) {
 			r.Foreign = true
-			if err := c.KillStates(ctx); err != nil {
-				return r, err
+			if kill {
+				if err := c.KillStates(ctx); err != nil {
+					return r, err
+				}
+				r.KilledStates = true
 			}
-			r.KilledStates = true
 		}
 	}
 	if !st.Enabled {

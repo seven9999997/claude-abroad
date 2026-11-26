@@ -16,6 +16,9 @@ type PF interface {
 	Apply(ctx context.Context, utun string) error
 	// Flush 清空锚点并暂停巡检（之后巡检不会把规则加载回去）。
 	Flush(ctx context.Context) error
+	// ApplyRestored 把锚点经一次加载换成“回国拦截”那一组（M6-11a，没有空窗），解除暂停，巡检之后按这一组核对。
+	// pf 没启用时启用；这时拿到的新 token 取代状态文件里的全部旧 token（pf 关过，旧的都已失效）。
+	ApplyRestored(ctx context.Context) error
 	// Release 释放一个启用引用。token 已失效时返回包着 pf.ErrTokenInvalid 的错误（状态机只用它区分事件文案）。
 	Release(ctx context.Context, token string) error
 	// SaveUnsaved 把拿到了、但追加进状态文件失败的 token 补存（回滚和恢复开始前调用）。
@@ -126,6 +129,9 @@ type Deps struct {
 	Locale   sysnet.MacRegion
 	VMRegion VMRegion
 	Targets  TargetSource
+	// ReturnBlock 报告回国后是否保留“回国拦截”（M6-11a，设计 10.2）：打开了启动管控、首次准备做过、没在卸载也没卸载过。
+	// nil 或返回假时回国行为和以前完全一样（清空锚点、释放全部启用引用）。每次回国、恢复时读一次。
+	ReturnBlock func() bool
 }
 
 // EventKind 是状态机事件的种类。
@@ -139,6 +145,7 @@ const (
 	EvTokenUnknown         EventKind = "token_unknown"          // 恢复时“将要启用”标记仍在，可能漏了一个启用引用
 	EvTokenReleaseFailed   EventKind = "token_release_failed"   // 锚点清空后释放启用引用失败（已从文件去掉，继续恢复）
 	EvTokenUnsaved         EventKind = "token_unsaved"          // 状态文件写不进去，标记或 token 没能落盘（照样启用 pf）
+	EvReturnBlockFailed    EventKind = "return_block_failed"    // 已回国：回国拦截那一组没能加载（巡检会再试）
 	EvCorrupt              EventKind = "corrupt"                // 状态文件损坏，按“非 RESTORED”加载 pf
 	EvOrigDNSUnknown       EventKind = "orig_dns_unknown"       // 启用时读不出本机 DNS（直连按域名会失败，M3-7）
 	EvRegionUserSkipped    EventKind = "region_user_skipped"    // 没有人登录或登录的换了人：跳过用户级的语言和地区格式

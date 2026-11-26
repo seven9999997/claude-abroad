@@ -133,6 +133,8 @@ var sampleCfgs = map[string]Config{
 	"full":  {UtunName: "utun9", LAN: LANPrefixes(pfx("192.168.1.0/24")), VMIfs: []string{"bridge100", "vmenet0"}, User: "nobody"},
 	"boot":  {LAN: LANPrefixes(pfx("192.168.1.0/24")), VMIfs: []string{"bridge100"}, User: "nobody"},
 	"nolan": {UtunName: "utun9", VMIfs: []string{"bridge100"}, User: "nobody"},
+	// M6-11a：回国拦截那一组（2026-11-26 非 root 的 pfctl -n -v -o none 实测）
+	"returnblock": ReturnBlockConfig(),
 }
 
 func tableShow(rules []byte) []byte {

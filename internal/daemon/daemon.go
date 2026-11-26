@@ -239,6 +239,7 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	d.m = &state.Machine{Store: d.store, D: state.Deps{
 		PF: d.ppf, Tun: d.tun, Routes: s.Routes, DNS: s.DNS, IPv6: s.IPv6,
 		VM: s.VM, Check: s.Exit, Gate: d.gate, Recheck: d.re, Teardown: s.Teardown, Killer: s.Killer, Preflight: s.Preflight,
+		ReturnBlock: d.returnBlockOn,
 	}, OnEvent: d.stateEvent("state")}
 	if o.Clock != nil {
 		d.m.Now = o.Clock.Now
@@ -472,6 +473,8 @@ type Status struct {
 	LaunchControl bool `json:"launch_control,omitempty"`
 	// M6-8a：首次准备（写入解析锁和托管设置）的结果（打开了首次准备时）。
 	Prepare *PrepareStatus `json:"prepare,omitempty"`
+	// M6-11a：回国拦截（回国后 pf 只拦 Anthropic 的地址段）。打开了首次准备时才有。
+	ReturnBlock *ReturnBlockStatus `json:"return_block,omitempty"`
 	// M4-8：分流出口（正式的和开发用的）的摘要、可用状态、最近一次检查；各出口（含 main）的开流计数。
 	// 不含出口 IP、端点地址、配置。
 	Exits []ExitStatus          `json:"exits,omitempty"`
@@ -506,6 +509,9 @@ func (d *Daemon) Status() Status {
 	if p := d.prepareSt.Load(); p != nil {
 		ps := *p
 		st.Prepare = &ps
+	}
+	if d.opts.Sys.FirstRun {
+		st.ReturnBlock = d.returnBlockStatus()
 	}
 	if f, err := d.store.Load(); err != nil {
 		st.State, st.Corrupt = "UNKNOWN", true

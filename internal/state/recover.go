@@ -13,6 +13,7 @@ import (
 //   - DISABLED：重建 utun、pf、路由、DNS，闸门保持关闭；
 //   - ENABLED：同样重建；运行中的地区同步被中断时接着写完；清 state 原因，立即补一轮复查；检查和开闸门交给复查循环（m4-plan v2.2 决定 4）；
 //   - RESTORING：先再结束一次 Claude（失败就停在 RESTORING），再从断点接着做；
+//   - RESTORED：保留回国拦截时（M6-11a）加载那一组，否则什么都不做；
 //   - 状态文件损坏：确保 pf 已加载，发事件，返回 ErrCorrupt（应急程序 abroad-rescue 处理，M6-5b）。
 func (m *Machine) Recover(ctx context.Context) error {
 	if !m.Store.HoldsLock() {
@@ -32,6 +33,13 @@ func (m *Machine) Recover(ctx context.Context) error {
 		return err
 	}
 	if f.State == Restored {
+		// 保留回国拦截时（M6-11a）：把那一组加载回来（重启后锚点是空的）。失败只记事件：状态已经是 RESTORED，
+		// 巡检之后每轮再试。
+		if m.returnBlock() {
+			if err := m.D.PF.ApplyRestored(ctx); err != nil {
+				m.emit(EvReturnBlockFailed, "回国拦截没能加载，稍后再试")
+			}
+		}
 		return nil
 	}
 	// I3：先确保 pf 已加载（闸门本来就是关的：进程刚启动）。

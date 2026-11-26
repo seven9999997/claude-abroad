@@ -80,6 +80,36 @@ type Patrol struct {
 	verifyConfirmed bool
 	// paused 由 Flush 置上：暂停期间 Step 什么都不做，Protected 为 false；Apply 解除（M2-7c）。
 	paused bool
+	// restored 由 ApplyRestored 置上（M6-11a）：之后每轮的期望是“回国拦截”那一组（ReturnBlock），不是接管规则；
+	// Protected 一直为 false（这组不是断网保护），不调用 OnApplied（开机时 guard 用的参数仍是接管的那一份），
+	// 加载后不清状态。Apply、Flush 解除。rbOK 是这一模式下最近一轮是否成功。
+	restored, rbOK bool
+}
+
+// ReturnBlockConfig 是回国拦截那一组的配置（地址段是编译进程序的 AnthropicNets）。
+func ReturnBlockConfig() Config { return Config{ReturnBlock: AnthropicNets} }
+
+// ApplyRestored 解除暂停、切到回国拦截模式并立即跑一轮（M6-11a）：锚点经一次加载从接管规则换成这一组（没有空窗），
+// pf 没启用时启用（新 token 照样经 OnToken 交出）。
+func (p *Patrol) ApplyRestored(ctx context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.paused, p.restored, p.protected = false, true, false
+	return p.step(ctx)
+}
+
+// RestoredMode 报告巡检是否处于回国拦截模式（ApplyRestored 之后、Apply 或 Flush 之前）。
+func (p *Patrol) RestoredMode() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.restored && !p.paused
+}
+
+// ReturnBlockActive 报告回国拦截那一组是否在生效（处于这一模式，且最近一轮成功）。
+func (p *Patrol) ReturnBlockActive() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.restored && !p.paused && p.rbOK
 }
 
 // ErrNoTokenSink 是 OnToken 为 nil（新 token 没地方交，不允许丢）。
@@ -141,7 +171,7 @@ func (p *Patrol) expected(ctx context.Context) ([]byte, error) {
 func (p *Patrol) Apply(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.paused = false
+	p.paused, p.restored, p.rbOK = false, false, false
 	return p.step(ctx)
 }
 
@@ -151,6 +181,7 @@ func (p *Patrol) Flush(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.paused, p.protected = true, false
+	p.restored, p.rbOK = false, false
 	p.lastExpected, p.lastApplied = nil, nil
 	p.verifyExp, p.verifyShown, p.verifyConfirmed = nil, nil, false
 	p.softFails, p.repairStreak = 0, 0
@@ -181,6 +212,9 @@ func (p *Patrol) step(ctx context.Context) error {
 	}
 	if p.C == nil || p.Net == nil {
 		return errors.New("巡检没有配置 Controller 或 NetSource")
+	}
+	if p.restored {
+		return p.stepRestored(ctx)
 	}
 	exp, err := p.expected(ctx)
 	if err != nil {
@@ -243,6 +277,38 @@ func (p *Patrol) step(ctx context.Context) error {
 		// 已经确认坏状态（锚点不在、被改、pf 没启用），修复却失败：当轮判失效。
 		p.protected, p.softFails = false, 0
 		p.emit(Event{Kind: EvEnsureError, Detail: "修复失败"})
+	}
+	return err
+}
+
+// stepRestored 是回国拦截模式的一轮（调用方持锁）：期望是固定的那一组；复核不一致、主规则集不引用锚点都只记事件。
+func (p *Patrol) stepRestored(ctx context.Context) error {
+	p.protected = false
+	exp, err := Render(ReturnBlockConfig())
+	if err != nil {
+		p.rbOK = false
+		p.emit(Event{Kind: EvEnsureError, Detail: "生成回国拦截规则失败"})
+		return err
+	}
+	r, err := p.C.EnsureNoKill(ctx, exp, p.lastApplied)
+	if r.NewToken != "" {
+		p.OnToken(r.NewToken)
+		p.emit(Event{Kind: EvEnabled})
+	}
+	if r.Loaded {
+		p.emit(Event{Kind: EvReloaded, WasAbsent: r.WasAbsent, Foreign: r.Foreign, Detail: "回国拦截"})
+	}
+	p.rbOK = err == nil
+	switch {
+	case err == nil, errors.Is(err, ErrAnchorNotReferenced):
+		p.lastApplied = exp
+		if err != nil {
+			p.emit(Event{Kind: EvNotReferenced, Detail: "别的软件替换了系统防火墙规则（回国拦截不生效）"})
+		}
+	case errors.Is(err, ErrVerifyFailed):
+		p.emit(Event{Kind: EvVerifyFailed, Detail: "回国拦截"})
+	default:
+		p.emit(Event{Kind: EvEnsureError, Detail: "回国拦截没能加载"})
 	}
 	return err
 }

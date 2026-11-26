@@ -372,6 +372,21 @@ func (s *Store) MarkRestored() error {
 	return s.Save(File{Version: Version, State: Restored})
 }
 
+// MarkRestoredKeep 同 MarkRestored，但留下给出的启用引用（M6-11a：回国拦截那一组保留一个 pf 启用引用，卸载时释放）。
+func (s *Store) MarkRestoredKeep(tokens []string) error {
+	return s.Save(File{Version: Version, State: Restored, PFTokens: tokens})
+}
+
+// ReplaceTokens 用一个新 token 取代全部旧 token 并清掉 pending（M6-11a：回国拦截模式下 pf 被关过、重新启用时，
+// 旧 token 都已失效；不去释放它们，免得撞上别人的新 token）。
+func (s *Store) ReplaceTokens(tok string) error {
+	return s.Update(func(f *File) error {
+		f.PFTokens = []string{tok}
+		f.PFEnablePending = false
+		return nil
+	})
+}
+
 // SetEnablePending 在调用 pfctl -E 之前置 pending 并落盘。
 func (s *Store) SetEnablePending() error {
 	return s.Update(func(f *File) error { f.PFEnablePending = true; return nil })

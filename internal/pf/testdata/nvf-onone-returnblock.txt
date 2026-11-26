@@ -1,0 +1,6 @@
+pfctl: Use of -f option, could result in flushing of rules
+present in the main ruleset added by the system at startup.
+See /etc/pf.conf for further details.
+
+block return out quick inet from any to 160.79.104.0/21
+block return out quick inet6 from any to 2607:6bc0::/32

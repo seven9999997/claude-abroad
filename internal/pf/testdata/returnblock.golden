@@ -1,0 +1,2 @@
+block return out quick inet to 160.79.104.0/21
+block return out quick inet6 to 2607:6bc0::/32
