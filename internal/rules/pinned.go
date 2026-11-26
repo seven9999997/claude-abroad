@@ -7,6 +7,11 @@ var builtinPinned = []pattern{
 	{Base: "claude.ai"}, {Wild: true, Base: "claude.ai"},
 	{Base: "claude.com"}, {Wild: true, Base: "claude.com"},
 	{Base: "anthropic.com"}, {Wild: true, Base: "anthropic.com"},
+	// M6-12（2026-11-26）：依据 Claude Code 官方文档“Enterprise network configuration”的 Network access requirements：
+	// *.claudeusercontent.com 给桌面版、claude.ai 的 Artifact 和 Claude in Chrome 桥接；claudemcpcontent.com 的子域名
+	// 给桌面版、claude.ai 里的 MCP Apps 小组件。证据见设计 10.2 的 M6-12 段。
+	{Base: "claudeusercontent.com"}, {Wild: true, Base: "claudeusercontent.com"},
+	{Base: "claudemcpcontent.com"}, {Wild: true, Base: "claudemcpcontent.com"},
 }
 
 // anthropicNets 是 Anthropic 的地址段（design 5.2、R14）。只用来让连接更严格，不作为放行依据。

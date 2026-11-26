@@ -36,7 +36,7 @@ func TestResolverLockInDaemon(t *testing.T) {
 	d := e.start(o)
 	st := status(t, d)
 	if st.ResolverLock == nil || !st.ResolverLock.Written || !st.ResolverLock.Effective || st.ResolverLock.Form != "default" ||
-		strings.Join(st.ResolverLock.Domains, ",") != "claude.ai,claude.com,anthropic.com" {
+		strings.Join(st.ResolverLock.Domains, ",") != strings.Join(resolverlock.Domains(), ",") || len(st.ResolverLock.Domains) != 5 {
 		t.Fatalf("状态 %+v", st.ResolverLock)
 	}
 	_, raw := call(t, d, "GET", "/v1/status", nil)

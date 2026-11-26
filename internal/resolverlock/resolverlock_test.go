@@ -47,7 +47,7 @@ func TestDomainsFromBuiltinPinned(t *testing.T) {
 			bases = append(bases, b)
 		}
 	}
-	if !slices.Equal(Domains(), bases) || !slices.Equal(Domains(), []string{"claude.ai", "claude.com", "anthropic.com"}) {
+	if !slices.Equal(Domains(), bases) || !slices.Equal(Domains(), []string{"claude.ai", "claude.com", "anthropic.com", "claudeusercontent.com", "claudemcpcontent.com"}) {
 		t.Fatalf("锁的域名 %v，内置置顶 %v", Domains(), bases)
 	}
 	// pinned_extra 不进锁：解析一份带追加名单的规则，锁的域名不变
@@ -63,7 +63,7 @@ func TestDomainsFromBuiltinPinned(t *testing.T) {
 func TestWriteIdempotent(t *testing.T) {
 	l := newLock(t)
 	res, err := l.Write()
-	if err != nil || len(res.Written) != 3 || len(res.Conflicts) != 0 {
+	if err != nil || len(res.Written) != len(Domains()) || len(res.Conflicts) != 0 {
 		t.Fatalf("%+v %v", res, err)
 	}
 	want, _ := Content(Default())
@@ -89,7 +89,7 @@ func TestWriteIdempotent(t *testing.T) {
 	}
 	// 换成回环写法再写：覆盖我们自己写的旧内容（不是冲突）
 	l.Form = Loopback(5353)
-	if res, err := l.Write(); err != nil || len(res.Written) != 3 {
+	if res, err := l.Write(); err != nil || len(res.Written) != len(Domains()) {
 		t.Fatalf("换写法：%+v %v", res, err)
 	}
 	if st := l.Check(); !st.Effective || st.Form != "loopback_port" {
@@ -104,7 +104,7 @@ func TestConflictsAndRemove(t *testing.T) {
 	other := []byte("nameserver 10.0.0.1\n")
 	_ = os.WriteFile(filepath.Join(l.Dir, "claude.com"), other, 0o644)
 	res, err := l.Write()
-	if err != ErrConflict || !slices.Equal(res.Conflicts, []string{"claude.com"}) || len(res.Written) != 2 {
+	if err != ErrConflict || !slices.Equal(res.Conflicts, []string{"claude.com"}) || len(res.Written) != len(Domains())-1 {
 		t.Fatalf("%+v %v", res, err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(l.Dir, "claude.com")); string(b) != string(other) {
@@ -117,7 +117,7 @@ func TestConflictsAndRemove(t *testing.T) {
 	// 我们写的 anthropic.com 被人改了
 	_ = os.WriteFile(filepath.Join(l.Dir, "anthropic.com"), []byte("nameserver 1.1.1.1\n"), 0o644)
 	rr, err := l.Remove()
-	if err != nil || !slices.Equal(rr.Removed, []string{"claude.ai"}) || !slices.Contains(rr.Left, "claude.com") || !slices.Contains(rr.Left, "anthropic.com") {
+	if err != nil || !slices.Equal(rr.Removed, []string{"claude.ai", "claudeusercontent.com", "claudemcpcontent.com"}) || !slices.Contains(rr.Left, "claude.com") || !slices.Contains(rr.Left, "anthropic.com") {
 		t.Fatalf("删除 %+v %v", rr, err)
 	}
 	for _, d := range []string{"claude.com", "anthropic.com"} {
@@ -156,7 +156,7 @@ func TestPartialWriteRecoverable(t *testing.T) {
 	}
 	// 障碍去掉后再写：齐全
 	_ = os.Remove(blocker)
-	if res, err := l.Write(); err != nil || len(res.Written) != 3 {
+	if res, err := l.Write(); err != nil || len(res.Written) != len(Domains()) {
 		t.Fatalf("再写 %+v %v", res, err)
 	}
 }

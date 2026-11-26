@@ -74,11 +74,11 @@ sudo networksetup -setv6automatic "Wi-Fi"
 
 下面这些会让 Claude 在本机网络下能正常连接。只删内容是 Claude 出国写的文件（打开看一眼再删）。
 
-- Claude 域名解析锁：`/etc/resolver/claude.ai`、`/etc/resolver/claude.com`、`/etc/resolver/anthropic.com`，内容是 `nameserver 198.18.0.2`（或 `nameserver 127.0.0.1` 加 `port`）和 `timeout 1`：
+- Claude 域名解析锁：`/etc/resolver/claude.ai`、`/etc/resolver/claude.com`、`/etc/resolver/anthropic.com`、`/etc/resolver/claudeusercontent.com`、`/etc/resolver/claudemcpcontent.com`，内容是 `nameserver 198.18.0.2`（或 `nameserver 127.0.0.1` 加 `port`）和 `timeout 1`：
 
   ```sh
-  cat /etc/resolver/claude.ai /etc/resolver/claude.com /etc/resolver/anthropic.com
-  sudo rm -f /etc/resolver/claude.ai /etc/resolver/claude.com /etc/resolver/anthropic.com
+  cat /etc/resolver/claude.ai /etc/resolver/claude.com /etc/resolver/anthropic.com /etc/resolver/claudeusercontent.com /etc/resolver/claudemcpcontent.com
+  sudo rm -f /etc/resolver/claude.ai /etc/resolver/claude.com /etc/resolver/anthropic.com /etc/resolver/claudeusercontent.com /etc/resolver/claudemcpcontent.com
   ```
 
 - Claude Code 的托管设置：`/Library/Application Support/ClaudeCode/managed-settings.d/claude-abroad.json`（内容是指向 `http://127.0.0.1:47821` 的代理变量）：

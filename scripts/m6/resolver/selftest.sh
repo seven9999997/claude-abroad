@@ -77,7 +77,9 @@ printf '%s' "${ALL_ANS}" | M6R_TEST_DIR="$D" bash "${RUN}" >"${TMP}/a.out" 2>&1;
 [ $rc = 0 ] && ok "a. 正常走完，退出码 0" || bad "a. 退出码 ${rc}：$(tail -5 "${TMP}/a.out")"
 check_clean "$D" "a"
 [ ! -e "$D/state" ] && ok "a. 状态目录清掉了" || bad "a. 状态目录还在：$(ls -A "$D/state")"
-[ "$(grep -c '已写入锁文件' "${TMP}/a.out")" = 7 ] && [ "$(grep -c '已删除锁文件' "${TMP}/a.out")" = 7 ] && ok "a. 预演 1 个 + 两种写法各 3 个，写入 7 次、删除 7 次" || bad "a. 写入、删除次数不对：$(grep -cE '已写入锁文件' "${TMP}/a.out")/$(grep -c '已删除锁文件' "${TMP}/a.out")"
+NDOM=$("${M6R_ABROAD_DEV}" resolver-lock domains | grep -c .)
+NWANT=$((1 + 2 * NDOM))
+[ "$(grep -c '已写入锁文件' "${TMP}/a.out")" = "${NWANT}" ] && [ "$(grep -c '已删除锁文件' "${TMP}/a.out")" = "${NWANT}" ] && ok "a. 预演 1 个 + 两种写法各 ${NDOM} 个（内置名单），写入、删除各 ${NWANT} 次" || bad "a. 写入、删除次数不对：$(grep -cE '已写入锁文件' "${TMP}/a.out")/$(grep -c '已删除锁文件' "${TMP}/a.out")"
 [ ! -e "$D/resolver" ] || [ -d "$D/resolver" ] && ok "a. 原来就有的锁文件目录没被删" || bad "a. 锁文件目录被动了"
 EV=$(ls "$D"/out/evidence-*.txt 2>/dev/null | head -1)
 if [ -n "${EV}" ] && grep -q '手动 写法=default 场景=当前 claude_code=y 备注：第一种' "${EV}" && grep -q '手动 写法=loopback 场景=当前 claude_code=n' "${EV}" &&

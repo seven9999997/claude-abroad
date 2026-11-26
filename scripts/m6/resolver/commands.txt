@@ -8,10 +8,10 @@ CHANGE ^chmod 700 /Library/Application Support/claude-abroad-m6r$
 CHANGE ^死人开关 [0-9]+ 秒后执行 <仓库>/scripts/m6/resolver/restore\.sh（第 [0-9]+ 轮）$
 CHANGE ^取消死人开关（第 [0-9]+ 轮）$
 CHANGE ^mkdir -m 755 /etc/resolver$
-CHANGE ^install -m 644 /Library/Application Support/claude-abroad-m6r/lock\.(claude\.ai|claude\.com|anthropic\.com|lock-test\.claude-abroad\.invalid) /etc/resolver/(claude\.ai|claude\.com|anthropic\.com|lock-test\.claude-abroad\.invalid)$
-CHANGE ^rm -f /etc/resolver/(claude\.ai|claude\.com|anthropic\.com|lock-test\.claude-abroad\.invalid)$
+CHANGE ^install -m 644 /Library/Application Support/claude-abroad-m6r/lock\.(claude\.ai|claude\.com|anthropic\.com|claudeusercontent\.com|claudemcpcontent\.com|lock-test\.claude-abroad\.invalid) /etc/resolver/(claude\.ai|claude\.com|anthropic\.com|claudeusercontent\.com|claudemcpcontent\.com|lock-test\.claude-abroad\.invalid)$
+CHANGE ^rm -f /etc/resolver/(claude\.ai|claude\.com|anthropic\.com|claudeusercontent\.com|claudemcpcontent\.com|lock-test\.claude-abroad\.invalid)$
 CHANGE ^rm -f /etc/resolver/<记录里的域名>（只删内容和记录一致的）$
-CHANGE ^rm -f /Library/Application Support/claude-abroad-m6r/lock\.(claude\.ai|claude\.com|anthropic\.com|lock-test\.claude-abroad\.invalid|<记录里的域名>)$
+CHANGE ^rm -f /Library/Application Support/claude-abroad-m6r/lock\.(claude\.ai|claude\.com|anthropic\.com|claudeusercontent\.com|claudemcpcontent\.com|lock-test\.claude-abroad\.invalid|<记录里的域名>)$
 CHANGE ^rm -f /Library/Application Support/claude-abroad-m6r/(deadman_gen|created_dir|deadman\.log)$
 CHANGE ^rmdir /etc/resolver（是 run\.sh 建的、并且已经空了才删）$
 CHANGE ^rmdir /Library/Application Support/claude-abroad-m6r$
