@@ -46,6 +46,18 @@ type UninstallStep struct {
 type UninstallResult struct {
 	Steps    []UninstallStep `json:"steps"`
 	Complete bool            `json:"complete"` // 全部步骤完成（含安装器那一步）
+	// BrowsersLeft：选了“同时强制退出浏览器”但还在运行的浏览器（M6-4b-3 补审返工）。
+	BrowsersLeft []string `json:"browsers_left,omitempty"`
+}
+
+// browsersLeft 取回国服务记下的“还在运行的浏览器”（没有这个能力的实现返回空）。
+func (d *Daemon) browsersLeft() []string {
+	for _, x := range []any{d.opts.Sys.Claude, d.opts.Sys.Killer} {
+		if bl, ok := x.(interface{ BrowsersLeft() []string }); ok && x != nil {
+			return bl.BrowsersLeft()
+		}
+	}
+	return nil
 }
 
 func (d *Daemon) uninstalled() bool {
@@ -73,6 +85,7 @@ func (d *Daemon) runUninstall(ctx context.Context) (UninstallResult, error) {
 		}
 	}
 	add("结束 Claude 并恢复本机网络", true, "")
+	res.BrowsersLeft = d.browsersLeft()
 	// 2. 解除启动管控
 	var notes []string
 	if d.opts.Sys.ResolverLock == nil && d.opts.Sys.ClaudeSettings == nil && d.opts.Sys.LaunchGuard == nil {

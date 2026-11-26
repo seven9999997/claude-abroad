@@ -230,3 +230,64 @@ func TestPrepareOffByDefault(t *testing.T) {
 		t.Fatal("没打开首次准备时不应写")
 	}
 }
+
+// M6-12：名单变长后补写——老版本写过两个域名并完成首次准备；新版本（名单更长）启动时自动补写缺的并记事件；
+// 以前写过、后来不见的不重写；新域名有别人的文件时不算完成、挡住启用，处理掉后“重新检测”就补上。
+func TestPrepareBackfillAfterUpgrade(t *testing.T) {
+	e := newPrepEnv(t)
+	e.lock.Domains = []string{"claude.ai", "claude.com"} // 老版本的名单
+	d := e.start(false)
+	if !status(t, d).Prepare.Done {
+		t.Fatal("老版本应先完成首次准备")
+	}
+	if err := d.Shutdown(); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Remove(filepath.Join(e.lock.Dir, "claude.com")) // 以前写过、后来不见了
+	other := []byte("nameserver 10.0.0.1\n")
+	_ = os.WriteFile(filepath.Join(e.lock.Dir, "claudemcpcontent.com"), other, 0o644) // 新域名有别人的文件
+	e.lock.Domains = nil                                                              // 新版本：内置名单（5 个）
+	d = e.start(false)
+	st := status(t, d)
+	if st.Prepare.Done || !strings.Contains(strings.Join(st.Prepare.Notes, ""), "claudemcpcontent.com") {
+		t.Fatalf("新域名有冲突时不应算完成：%+v", st.Prepare)
+	}
+	for _, n := range []string{"anthropic.com", "claudeusercontent.com"} {
+		if _, err := os.Stat(filepath.Join(e.lock.Dir, n)); err != nil {
+			t.Fatalf("应补写 %s", n)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(e.lock.Dir, "claude.com")); !os.IsNotExist(err) {
+		t.Fatal("以前写过、后来不见的不应自动重写")
+	}
+	if b, _ := os.ReadFile(filepath.Join(e.lock.Dir, "claudemcpcontent.com")); string(b) != string(other) {
+		t.Fatal("别人的文件被覆盖了")
+	}
+	if !hasEvent(d, "prepare", "resolver_lock_backfilled") {
+		t.Fatal("应记补写的事件")
+	}
+	if code, b := callOp(t, d, "/v1/enable"); code != 422 || !strings.Contains(string(b), "claudemcpcontent.com") {
+		t.Fatalf("应挡住启用：%d %s", code, b)
+	}
+	_ = os.Remove(filepath.Join(e.lock.Dir, "claudemcpcontent.com"))
+	if _, raw := call(t, d, "GET", "/v1/preflight", nil); strings.Contains(string(raw), "首次准备没有完成") {
+		t.Fatalf("处理掉后重新检测应补上：%s", raw)
+	}
+	if _, err := os.Stat(filepath.Join(e.lock.Dir, "claudemcpcontent.com")); err != nil {
+		t.Fatal("应补写 claudemcpcontent.com")
+	}
+	if !status(t, d).Prepare.Done {
+		t.Fatal("补上后应完成")
+	}
+}
+
+// 没打开启动管控时不补写（首次准备整个不运行）。
+func TestPrepareBackfillOffWithoutLaunchControl(t *testing.T) {
+	e := newPrepEnv(t)
+	o := e.opts()
+	o.Sys.ResolverLock = e.lock // FirstRun 为假：没打开管控
+	d := e.env.start(o)
+	if _, err := os.Stat(e.lock.Dir); !os.IsNotExist(err) || hasEvent(d, "prepare", "resolver_lock_backfilled") {
+		t.Fatal("没打开管控时不应写任何锁文件")
+	}
+}

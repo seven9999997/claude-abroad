@@ -56,6 +56,8 @@ var commands = []command{
 	{path: []string{"engine", "ls"}, route: "engines", run: cmdEngineLs},
 	{path: []string{"launchguard"}, route: "launchguard", run: cmdLaunchGuard},
 	{path: []string{"diagnostics"}, route: "diagnostics", run: cmdDiagnostics},
+	{path: []string{"domains", "clear"}, route: "claude-domains-clear", run: cmdDomainsClear},
+	{path: []string{"domains"}, route: "claude-domains", run: cmdDomains},
 	{path: []string{"engine", "install"}, later: "引擎的安装和升级随更新机制提供"},
 	{path: []string{"engine", "rollback"}, later: "引擎的回滚随更新机制提供"},
 }
@@ -369,7 +371,7 @@ func cmdUninstall(a *app, args []string) int {
 		printUninstallSteps(a, resp.Body, true) // 失败时也列出走到了哪一步（M6-5a 补审建议改）
 		return code
 	}
-	return a.out(resp, func() { printUninstallSteps(a, resp.Body, false) })
+	return a.out(resp, func() { printUninstallSteps(a, resp.Body, false); printBrowsersLeft(a, resp.Body) })
 }
 
 // printUninstallSteps 列出卸载的步骤：✓ 完成；✗ 失败停在这一步；… 还没轮到（例如要由安装器完成的那一步）。
@@ -425,7 +427,20 @@ func cmdRestore(a *app, args []string) int {
 	if code != ExitOK {
 		return code
 	}
-	return printState(a, resp)
+	rc := printState(a, resp)
+	printBrowsersLeft(a, resp.Body)
+	return rc
+}
+
+// printBrowsersLeft：选了 --kill-browsers 但还在运行的浏览器（M6-4b-3 补审返工；回国仍算成功）。
+func printBrowsersLeft(a *app, body []byte) {
+	var v struct {
+		BrowsersLeft []string `json:"browsers_left"`
+	}
+	if json.Unmarshal(body, &v) != nil || len(v.BrowsersLeft) == 0 || a.json {
+		return
+	}
+	fmt.Fprintf(a.stdout, "这些浏览器还开着：%s，其中的 Claude 页面请自行关闭\n", strings.Join(v.BrowsersLeft, "、"))
 }
 
 func cmdApps(a *app, args []string) int {
@@ -1042,10 +1057,15 @@ func regionPut(a *app, body map[string]any) int {
 
 // cmdDiagnostics 输出诊断包（M6-6a）：后台已整段脱敏的 JSON，原样写到标准输出（重定向到文件交给维护者）。
 func cmdDiagnostics(a *app, args []string) int {
-	if len(args) > 0 {
-		return usageErr(a, "diagnostics 不接受参数（重定向到文件：abroad diagnostics > 诊断包.json）")
+	f, err := parseFlags(args, nil, []string{"--include-domains"}, nil)
+	if err != nil {
+		return usageErr(a, "diagnostics 只接受 --include-domains（重定向到文件：abroad diagnostics > 诊断包.json）")
 	}
-	resp, code := a.call("GET", "/v1/diagnostics", nil)
+	path := "/v1/diagnostics"
+	if f.bools["--include-domains"] { // 显式选择才带 Claude 访问过的域名清单（M6-12；里面会有你让 Claude Code 访问过的网站）
+		path += "?include_domains=1"
+	}
+	resp, code := a.call("GET", path, nil)
 	if code != ExitOK {
 		return code
 	}
@@ -1134,4 +1154,50 @@ func cmdEngineLs(a *app, args []string) int {
 			fmt.Fprintf(a.stdout, "  %s：%s（重启 %d 次）\n", e.Name, e.State, e.Restarts)
 		}
 	})
+}
+
+// cmdDomains 是 abroad domains：启用时 Claude 访问过的、不在内置 Claude 域名之下的域名（M6-12，只观察）。
+func cmdDomains(a *app, args []string) int {
+	if len(args) > 0 {
+		return usageErr(a, "domains 不接受参数（清空：abroad domains clear）")
+	}
+	resp, code := a.call("GET", "/v1/claude-domains", nil)
+	if code != ExitOK {
+		return code
+	}
+	return a.out(resp, func() { printDomains(a, resp.Body) })
+}
+
+// cmdDomainsClear 是 abroad domains clear：清空记录。
+func cmdDomainsClear(a *app, args []string) int {
+	if len(args) > 0 {
+		return usageErr(a, "domains clear 不接受参数")
+	}
+	resp, code := a.call("DELETE", "/v1/claude-domains", nil)
+	if code != ExitOK {
+		return code
+	}
+	return a.out(resp, func() { fmt.Fprintln(a.stdout, "已清空 Claude 访问过的域名") })
+}
+
+func printDomains(a *app, body []byte) {
+	var v struct {
+		Count   int    `json:"count"`
+		Note    string `json:"note"`
+		Domains []struct {
+			Domain string `json:"domain"`
+			Count  int64  `json:"count"`
+			First  string `json:"first"`
+			Last   string `json:"last"`
+		} `json:"domains"`
+	}
+	_ = json.Unmarshal(body, &v)
+	fmt.Fprintln(a.stdout, v.Note)
+	if v.Count == 0 {
+		fmt.Fprintln(a.stdout, "（还没有记录）")
+		return
+	}
+	for _, d := range v.Domains {
+		fmt.Fprintf(a.stdout, "  %s  %d 次  最近 %s\n", d.Domain, d.Count, d.Last)
+	}
 }

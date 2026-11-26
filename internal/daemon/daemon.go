@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"claude-abroad/internal/api"
+	"claude-abroad/internal/claudedomains"
 	"claude-abroad/internal/console"
 	"claude-abroad/internal/envcheck"
 	"claude-abroad/internal/exitcheck"
@@ -97,8 +98,11 @@ type Daemon struct {
 	prepareSt    atomic.Pointer[PrepareStatus] // 首次准备最近一次的结果（M6-8a；没打开时为 nil）
 	prepareMu    sync.Mutex                    // 首次准备同时只有一次尝试
 	gs           *guardState
-	uninstalling atomic.Bool // 一键卸载进行中（M6-5a 补审返工：整段互斥，期间别的改动请求得到“忙”）
-	lgMu         sync.Mutex  // 保护 lgStop、lgDone（卸载和退出都可能停第三层）
+	uninstalling atomic.Bool          // 一键卸载进行中（M6-5a 补审返工：整段互斥，期间别的改动请求得到“忙”）
+	lgMu         sync.Mutex           // 保护 lgStop、lgDone（卸载和退出都可能停第三层）
+	domains      *claudedomains.Store // Claude 访问的域名（M6-12；有数据面时）
+	cdStop       func()
+	cdDone       chan struct{}
 	lgStop       func()
 	lgDone       chan struct{}
 	resolverLast string // 上一次解析锁自检的摘要（变化时才记事件）
@@ -315,8 +319,9 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 		}
 	}()
 
-	d.startClaudeProxy() // 第四层的本机代理端口（M6-3b；没配置时什么都不做）
-	d.startLaunchGuard() // 启动管控的第三层（M6-4b；没配置时什么都不做）
+	d.startClaudeProxy()   // 第四层的本机代理端口（M6-3b；没配置时什么都不做）
+	d.startClaudeDomains() // 记录 Claude 访问的域名（M6-12；有数据面时）
+	d.startLaunchGuard()   // 启动管控的第三层（M6-4b；没配置时什么都不做）
 	if chk := preflightChecker(s.Preflight); chk != nil && d.cproxy != nil {
 		chk.ClaudeProxyDown = d.claudeProxyDown // 端口被占用：冲突检查的“必须处理”项
 	}
@@ -385,9 +390,10 @@ func (d *Daemon) stopInternals(closeGate bool) {
 	if closeGate {
 		d.gate.AddReason(gatesm.ReasonState, "abroadd 退出")
 	}
-	d.stopLaunchGuard()  // 启动管控的第三层
-	d.cproxy.stop()      // 第四层的本机代理端口（没配置时为 nil，stop 什么都不做）
-	if d.vmStop != nil { // 由 abroadd 管理的虚拟机：关掉自己拉起的（先请它退出，超时强制结束）
+	d.stopLaunchGuard()   // 启动管控的第三层
+	d.stopClaudeDomains() // 记录 Claude 访问的域名：最后落一次盘
+	d.cproxy.stop()       // 第四层的本机代理端口（没配置时为 nil，stop 什么都不做）
+	if d.vmStop != nil {  // 由 abroadd 管理的虚拟机：关掉自己拉起的（先请它退出，超时强制结束）
 		d.vmStop()
 		<-d.vmDone
 	}
@@ -459,6 +465,9 @@ type Status struct {
 	ClaudeCode *ClaudeProxyStatus `json:"claude_code,omitempty"`
 	// M6-7：程序完整性校验的结果（接了校验时；不通过时只保留断网规则、不接管、不能启用）。
 	Integrity *integrity.Result `json:"integrity,omitempty"`
+	// M6-4b-3 补审返工：最近一次回国时，用户选了“同时强制退出浏览器”但还在运行的浏览器（没能结束的、签名确认不了
+	// 所以没动的、只列出的）。只有名字。
+	BrowsersLeft []string `json:"browsers_left,omitempty"`
 	// M6-4b-1 返工：这次安装是否打开了启动管控（--launch-control）。没打开时解析锁、托管设置、第三层都“未启用”。
 	LaunchControl bool `json:"launch_control,omitempty"`
 	// M6-8a：首次准备（写入解析锁和托管设置）的结果（打开了首次准备时）。
@@ -493,6 +502,7 @@ func (d *Daemon) Status() Status {
 		st.Integrity = &ir
 	}
 	st.LaunchControl = d.opts.Sys.LaunchControl
+	st.BrowsersLeft = d.browsersLeft()
 	if p := d.prepareSt.Load(); p != nil {
 		ps := *p
 		st.Prepare = &ps

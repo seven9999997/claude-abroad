@@ -61,6 +61,8 @@ func RouteTable() []api.Route {
 		{ID: "setup-get", Method: "GET", Path: "/v1/setup", Level: api.Read, Resp: SetupView{}, Note: "安装引导的进度"},
 		{ID: "setup-complete", Method: "POST", Path: "/v1/setup/complete", Level: api.Normal, Resp: SetupView{}, Note: "完成安装引导（主代理没应用过时 422）"},
 		{ID: "engines", Method: "GET", Path: "/v1/engines", Level: api.Read, Resp: EnginesView{}, Note: "引擎与虚拟机的状态（不含配置和端点）"},
+		{ID: "claude-domains", Method: "GET", Path: "/v1/claude-domains", Level: api.Read, Resp: ClaudeDomainsView{}, Note: "启用时 Claude 访问过的、不在内置 Claude 域名之下的域名（只观察；本机、本人可看；不含地址）"},
+		{ID: "claude-domains-clear", Method: "DELETE", Path: "/v1/claude-domains", Level: api.Normal, Resp: ClaudeDomainsView{}, Note: "清空 Claude 访问过的域名"},
 		{ID: "launchguard", Method: "GET", Path: "/v1/launchguard", Level: api.Read, Resp: LaunchGuardView{}, Note: "启动管控：现在是否允许启动 Claude、四层各自是否生效、第三层的覆盖范围、最近的拦截（不含命令行和路径）"},
 		{ID: "exit-check", Method: "POST", Path: "/v1/exits/{tag}/check", Level: api.Normal, Resp: ExitCheckResult{}, Note: "单独检查一个分流出口（同一出口同时只跑一个，有最小间隔）"},
 		{ID: "job-get", Method: "GET", Path: "/v1/jobs/{id}", Level: api.Read, Resp: Job{}, Note: "任务的状态和结果（只在内存里，保留最近 16 个）"},
@@ -106,6 +108,8 @@ func (d *Daemon) handlerFuncs() map[string]http.HandlerFunc {
 		"setup-complete":        d.handleSetupComplete,
 		"engines":               d.handleEngines,
 		"launchguard":           d.handleLaunchGuard,
+		"claude-domains":        d.handleClaudeDomains,
+		"claude-domains-clear":  d.handleClaudeDomainsClear,
 		"envcheck-device":       d.handleDeviceCheck,
 		"diagnostics":           d.handleDiagnostics,
 		"exit-check":            d.handleExitCheck,
@@ -167,7 +171,7 @@ func (d *Daemon) guard(rt api.Route, fn http.HandlerFunc) http.HandlerFunc {
 }
 
 // AllowedAfterUninstall 是卸载完成后仍然允许的改动类接口（回国和再次卸载是幂等的；设备体检只读）。
-var AllowedAfterUninstall = map[string]bool{"restore": true, "restore-alias": true, "uninstall": true, "envcheck-device": true}
+var AllowedAfterUninstall = map[string]bool{"restore": true, "restore-alias": true, "uninstall": true, "envcheck-device": true, "claude-domains-clear": true}
 
 // ErrUninstalledOp 是正在卸载或已经卸载时，改动类操作在状态机里被拒（状态机的 Admit）。
 var ErrUninstalledOp = errors.New("Claude 出国正在卸载或已经卸载")

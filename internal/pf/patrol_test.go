@@ -1,6 +1,7 @@
 package pf
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"runtime"
@@ -332,21 +333,45 @@ func TestPatrolVerifyFailedNoReloadLoop(t *testing.T) {
 			}
 		}
 		loads = append(loads, n)
-		if i > 0 && e.f.Kills() != k {
+		if i > 1 && e.f.Kills() != k {
 			t.Fatalf("第 %d 轮不应再清状态", i+1)
 		}
 		if e.p.Protected() {
 			t.Fatalf("第 %d 轮 Protected 应为 false", i+1)
 		}
 	}
-	if !slices.Equal(loads, []int{1, 0, 0, 0}) || e.count(EvRepeatedlyCleared) != 0 {
-		t.Fatalf("只有第 1 轮加载，且不误报：%v，回调 %d 次", loads, e.count(EvRepeatedlyCleared))
+	// 同一组内容最多重载两次：第 1 轮加载、第 2 轮再完整重载一次（打印结果和上次一模一样才确认是格式对不上），之后不再重载
+	if !slices.Equal(loads, []int{1, 1, 0, 0}) || e.count(EvRepeatedlyCleared) != 0 {
+		t.Fatalf("只有前两轮加载，且不误报：%v，回调 %d 次", loads, e.count(EvRepeatedlyCleared))
 	}
 	e.f.ClearAnchor()
 	e.f.ResetCalls()
 	e.p.Step(context.Background())
 	if !slices.Contains(e.f.Calls(), "load") {
 		t.Fatal("锚点被清后仍应重新加载")
+	}
+}
+
+// M6-4b-3 补审时定：复核时锚点里是别人刚写的内容（不是打印格式对不上），下一轮巡检再完整重载一次就恢复保护。
+func TestPatrolVerifyForeignWriteRecovers(t *testing.T) {
+	e := newPatrolEnv(t)
+	foreign := []byte("pass out quick all\n") // 别人（例如开机时的 guard）写的更宽的规则
+	e.f.AfterNextLoad(func() { _ = (&Controller{R: e.f}).Load(context.Background(), foreign) })
+	if err := e.p.Step(context.Background()); !errors.Is(err, ErrVerifyFailed) {
+		t.Fatalf("第 1 轮复核应看到别人的内容：%v", err)
+	}
+	if e.p.Protected() {
+		t.Fatal("第 1 轮应判保护失效")
+	}
+	e.f.ResetCalls()
+	if err := e.p.Step(context.Background()); err != nil {
+		t.Fatalf("第 2 轮应重载成功：%v", err)
+	}
+	if !slices.Contains(e.f.Calls(), "load") || !e.p.Protected() {
+		t.Fatalf("第 2 轮应重载并恢复保护：%v", e.f.Calls())
+	}
+	if bytes.Equal(e.f.Raw(DefaultAnchor), foreign) {
+		t.Fatal("锚点里不应再是别人的内容")
 	}
 }
 

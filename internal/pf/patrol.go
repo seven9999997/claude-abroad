@@ -75,6 +75,9 @@ type Patrol struct {
 	repairStreak int // 连续发生修复的轮数
 	// 上一轮复核不一致时的期望规则和锚点原始打印：下一轮两者都没变就不再重载、清状态（设计 6.1）。
 	verifyExp, verifyShown []byte
+	// verifyConfirmed：同一组“期望内容加打印结果”连续两次重载都一样（M6-4b-3 补审时定：见一次就放弃会把“别人刚好在
+	// 中间写了别的内容”误当成“打印格式对不上”，锚点会一直留着别人的内容）。只有确认了才不再重载。
+	verifyConfirmed bool
 	// paused 由 Flush 置上：暂停期间 Step 什么都不做，Protected 为 false；Apply 解除（M2-7c）。
 	paused bool
 }
@@ -149,7 +152,7 @@ func (p *Patrol) Flush(ctx context.Context) error {
 	defer p.mu.Unlock()
 	p.paused, p.protected = true, false
 	p.lastExpected, p.lastApplied = nil, nil
-	p.verifyExp, p.verifyShown = nil, nil
+	p.verifyExp, p.verifyShown, p.verifyConfirmed = nil, nil, false
 	p.softFails, p.repairStreak = 0, 0
 	return p.C.Flush(ctx)
 }
@@ -185,7 +188,7 @@ func (p *Patrol) step(ctx context.Context) error {
 		p.emit(Event{Kind: EvEnsureError, Detail: "连最小配置也生成不了"})
 		return err
 	}
-	if p.verifyShown != nil && bytes.Equal(exp, p.verifyExp) {
+	if p.verifyConfirmed && p.verifyShown != nil && bytes.Equal(exp, p.verifyExp) {
 		if st, serr := p.C.Status(ctx); serr == nil && st.Enabled && st.Referenced && bytes.Equal(st.AnchorRules, p.verifyShown) {
 			// 和上一轮复核不一致时一模一样：不 Load、不 Kill、不计修复，仍判保护失效。
 			p.protected, p.softFails, p.repairStreak = false, 0, 0
@@ -193,7 +196,8 @@ func (p *Patrol) step(ctx context.Context) error {
 			return ErrVerifyFailed
 		}
 	}
-	p.verifyExp, p.verifyShown = nil, nil
+	prevExp, prevShown := p.verifyExp, p.verifyShown
+	p.verifyExp, p.verifyShown, p.verifyConfirmed = nil, nil, false
 	r, err := p.C.Ensure(ctx, exp, p.lastApplied)
 	if r.NewToken != "" {
 		p.OnToken(r.NewToken)
@@ -225,6 +229,8 @@ func (p *Patrol) step(ctx context.Context) error {
 	case errors.Is(err, ErrVerifyFailed):
 		p.protected, p.softFails = false, 0
 		p.verifyExp, p.verifyShown = exp, r.ShownAfterLoad
+		// 第一次不一致：下一轮再完整重载一次；重载后打印结果和上次一模一样才认定格式对不上，之后不再重载。
+		p.verifyConfirmed = prevShown != nil && bytes.Equal(prevExp, exp) && bytes.Equal(prevShown, r.ShownAfterLoad)
 		p.emit(Event{Kind: EvVerifyFailed})
 	case errors.Is(err, ErrStatusUnavailable):
 		// 看不到状态，可能是偶发：连续 2 轮才判失效。

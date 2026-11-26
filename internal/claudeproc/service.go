@@ -3,6 +3,7 @@ package claudeproc
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"claude-abroad/internal/usererror"
 )
@@ -30,6 +31,19 @@ type Service struct {
 	Browsers *Browsers // 回国时的浏览器（可为 nil）
 	Skip     bool
 	Logf     func(format string, args ...any)
+
+	mu           sync.Mutex
+	browsersLeft []string // 最近一次回国时：选了结束浏览器、但还在运行的（M6-4b-3 补审返工）
+}
+
+// BrowsersLeft 是最近一次结束 Claude 时、用户选了“同时强制退出浏览器”但还在运行的浏览器名字（没选时为空）。
+func (s *Service) BrowsersLeft() []string {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.browsersLeft...)
 }
 
 // SkipNotice 是不结束进程时预览里的说明。
@@ -79,14 +93,20 @@ func (s *Service) KillClaude(ctx context.Context) error {
 		return err
 	}
 	s.logf("Claude 进程已全部结束")
+	var stillOpen []string
 	if KillBrowsersRequested(ctx) && s.Browsers != nil {
-		// 用户显式选择：结束确认过的浏览器。结束不了的只记日志，不中止回国（浏览器不是不泄漏的依据，网络恢复靠的是 Claude 进程已结束）。
-		left, err := s.Browsers.Kill(ctx, s.Killer)
+		// 用户显式选择：结束确认过的浏览器。结束不了的不中止回国（浏览器不是不泄漏的依据，网络恢复靠的是 Claude 进程
+		// 已结束），但如实告诉用户哪些还开着（应答、通知、命令行）。
+		left, names, err := s.Browsers.KillReport(ctx, s.Killer)
+		stillOpen = names
 		if err != nil || len(left) > 0 {
 			s.logf("结束浏览器：残留 %d 个", len(left))
 		} else {
 			s.logf("确认过的浏览器已结束")
 		}
 	}
+	s.mu.Lock()
+	s.browsersLeft = stillOpen
+	s.mu.Unlock()
 	return nil
 }

@@ -92,6 +92,19 @@ public struct ClaudecfgStatus: Codable, Sendable {
     }
 }
 
+public struct ClaudedomainsEntry: Codable, Sendable {
+    public var domain: String
+    public var count: Int64
+    public var first: String
+    public var last: String
+    enum CodingKeys: String, CodingKey {
+        case domain = "domain"
+        case count = "count"
+        case first = "first"
+        case last = "last"
+    }
+}
+
 public struct ClaudeprocCoverageRow: Codable, Sendable {
     public var kind: String
     public var name: String
@@ -200,6 +213,17 @@ public struct DaemonBaselineSummary: Codable, Sendable {
     }
 }
 
+public struct DaemonClaudeDomainsView: Codable, Sendable {
+    public var count: Int64
+    public var domains: [ClaudedomainsEntry]?
+    public var note: String
+    enum CodingKeys: String, CodingKey {
+        case count = "count"
+        case domains = "domains"
+        case note = "note"
+    }
+}
+
 public struct DaemonClaudeProxyConn: Codable, Sendable {
     public var at: String
     public var app: String
@@ -266,6 +290,15 @@ public struct DaemonConfirmRequest: Codable, Sendable {
     }
 }
 
+public struct DaemonDiagnosticDomains: Codable, Sendable {
+    public var count: Int64
+    public var domains: [ClaudedomainsEntry]?
+    enum CodingKeys: String, CodingKey {
+        case count = "count"
+        case domains = "domains"
+    }
+}
+
 public struct DaemonDiagnosticVersion: Codable, Sendable {
     public var module: String
     public var version: String
@@ -287,12 +320,14 @@ public struct DaemonDiagnostics: Codable, Sendable {
     public var status: DaemonStatus
     public var envcheck: EnvcheckReport?
     public var launchguard: DaemonLaunchGuardView
+    public var claudeDomains: DaemonDiagnosticDomains
     enum CodingKeys: String, CodingKey {
         case generatedAt = "generated_at"
         case version = "version"
         case status = "status"
         case envcheck = "envcheck"
         case launchguard = "launchguard"
+        case claudeDomains = "claude_domains"
     }
 }
 
@@ -711,6 +746,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var resolverLock: ResolverlockStatus?
     public var claudeCode: DaemonClaudeProxyStatus?
     public var integrity: IntegrityResult?
+    public var browsersLeft: [String]?
     public var launchControl: Bool?
     public var prepare: DaemonPrepareStatus?
     public var exits: [DaemonExitStatus]?
@@ -734,6 +770,7 @@ public struct DaemonStatus: Codable, Sendable {
         case resolverLock = "resolver_lock"
         case claudeCode = "claude_code"
         case integrity = "integrity"
+        case browsersLeft = "browsers_left"
         case launchControl = "launch_control"
         case prepare = "prepare"
         case exits = "exits"
@@ -764,9 +801,11 @@ public struct DaemonStreamEvent: Codable, Sendable {
 public struct DaemonUninstallResult: Codable, Sendable {
     public var steps: [DaemonUninstallStep]?
     public var complete: Bool
+    public var browsersLeft: [String]?
     enum CodingKeys: String, CodingKey {
         case steps = "steps"
         case complete = "complete"
+        case browsersLeft = "browsers_left"
     }
 }
 

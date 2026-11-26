@@ -335,7 +335,13 @@ public final class StatusModel: ObservableObject {
         case .ok(let st):
             apply(st)
             notice = nil
-            if op == .restore { notifier.restoreDone(pending: st.region?.pending ?? []) }
+            if op == .restore {
+                let browsers = st.browsersLeft ?? []
+                notifier.restoreDone(pending: st.region?.pending ?? [], browsers: browsers)
+                if !browsers.isEmpty { // 回国成功，但用户选了结束浏览器、还有浏览器开着：首页如实提示
+                    notice = Notice(kind: .info, text: ErrorText(raw: L10n.browsersStillOpen(browsers)))
+                }
+            }
         case .needsConfirm(let p):
             phase = before
             // 交给统一的确认框：确认码无效时重新发起第一步取新预览；后台这次不再要求确认时照常处理结果。

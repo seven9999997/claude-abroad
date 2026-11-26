@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"claude-abroad/internal/claudedomains"
 	"claude-abroad/internal/envcheck"
 	"claude-abroad/internal/redact"
 )
@@ -28,6 +29,15 @@ type Diagnostics struct {
 	Status      Status            `json:"status"`
 	EnvCheck    *envcheck.Report  `json:"envcheck,omitempty"`
 	LaunchGuard LaunchGuardView   `json:"launchguard"`
+	// ClaudeDomains 是 Claude 访问过的域名（M6-12）：默认只放条数；用户显式选择（?include_domains=1）才放清单——
+	// 里面会有用户让 Claude Code 访问过的网站。
+	ClaudeDomains DiagnosticDomains `json:"claude_domains"`
+}
+
+// DiagnosticDomains 是诊断包里的 Claude 访问域名。
+type DiagnosticDomains struct {
+	Count   int                   `json:"count"`
+	Domains []claudedomains.Entry `json:"domains,omitempty"`
 }
 
 // DiagnosticVersion 是程序的版本信息。
@@ -52,19 +62,32 @@ func buildVersion() DiagnosticVersion {
 	return v
 }
 
-func (d *Daemon) diagnostics() Diagnostics {
+func (d *Daemon) diagnostics(includeDomains bool) Diagnostics {
 	dg := Diagnostics{GeneratedAt: time.Now().UTC(), Version: buildVersion(), Status: d.Status(), LaunchGuard: d.launchGuardView()}
 	if d.env != nil {
 		if rep, ok := d.env.Last(); ok {
 			dg.EnvCheck = &rep
 		}
 	}
+	cd := d.claudeDomainsView()
+	dg.ClaudeDomains.Count = cd.Count
+	if includeDomains {
+		dg.ClaudeDomains.Domains = cd.Domains
+	} else if cc := dg.Status.ClaudeCode; cc != nil && len(cc.Recent) > 0 {
+		// 本机代理端口的最近连接里也有目的域名：默认去掉（程序名和去向留着），和清单同样的规则（M6-12）
+		c := *cc
+		c.Recent = append([]ClaudeProxyConn(nil), cc.Recent...)
+		for i := range c.Recent {
+			c.Recent[i].Host = ""
+		}
+		dg.Status.ClaudeCode = &c
+	}
 	return dg
 }
 
 // handleDiagnostics 是 GET /v1/diagnostics：整段脱敏后的诊断包（JSON）。命令行和应用把它存成文件交给用户。
 func (d *Daemon) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
-	raw, err := json.MarshalIndent(d.diagnostics(), "", "  ")
+	raw, err := json.MarshalIndent(d.diagnostics(r.URL.Query().Get("include_domains") == "1"), "", "  ")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, errBody{"生成诊断包失败"})
 		return

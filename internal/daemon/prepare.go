@@ -69,6 +69,7 @@ func (d *Daemon) tryPrepare() PrepareStatus {
 	defer func() { d.prepareSt.Store(ps) }()
 	if _, err := os.Stat(d.preparedMarker()); err == nil {
 		ps.Done = true
+		d.backfillLock(ps) // M6-12：新版本的内置名单比写入时多出来的，补写（冲突时不算完成）
 		return *ps
 	}
 	if d.uninstalled() {
@@ -120,4 +121,28 @@ func (d *Daemon) tryPrepare() PrepareStatus {
 	ps.Done = true
 	d.events.Add("prepare", "done", "")
 	return *ps
+}
+
+// backfillLock 在首次准备已经完成时补写解析锁（M6-12，m6-plan v2.8 第 4 条）：新版本的内置名单比记录里多出来的那几个
+// 自动补写并记事件；以前写过、后来被改或不见的不自动重写（自检照常报告未生效）；已卸载不写；别人的同名文件不覆盖——
+// 这时按“冲突不算完成”处理：done 为假、说明写清下一步，冲突检查挡住启用，处理掉后检查时再试（完成标记不删）。
+func (d *Daemon) backfillLock(ps *PrepareStatus) {
+	lk := d.opts.Sys.ResolverLock
+	if lk == nil || d.uninstalled() {
+		return
+	}
+	res, err := lk.Backfill()
+	if len(res.Written) > 0 {
+		d.events.Add("prepare", "resolver_lock_backfilled", strings.Join(res.Written, "、"))
+	}
+	switch {
+	case errors.Is(err, resolverlock.ErrConflict):
+		ps.Done = false
+		ps.Notes = append(ps.Notes, "Claude 域名解析锁（新版本追加的域名）：这些域名在解析锁的目录里已有别人的文件，没有覆盖："+strings.Join(res.Conflicts, "、")+"。"+prepareNext)
+		d.events.Add("prepare", "resolver_lock_conflict", strings.Join(res.Conflicts, "、"))
+	case err != nil:
+		ps.Done = false
+		ps.Notes = append(ps.Notes, "补写 Claude 域名解析锁失败（会再试）")
+		d.events.Add("prepare", "resolver_lock_failed", err.Error())
+	}
 }

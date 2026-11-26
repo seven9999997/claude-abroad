@@ -44,3 +44,26 @@ private func settingsWith(_ extra: String) async -> SettingsModel {
     #expect(m.prepareText == L10n.prepareNotDone + "\n写入 Claude 域名解析锁失败（下次启动重试）")
     #expect(m.prepareWarn)
 }
+
+/// M6-12：设置里显示 Claude 访问过的域名（每个一行、带次数），能清空；没有记录时一句话。
+@MainActor
+@Test func claudeDomainsInSettings() async {
+    final class Box: @unchecked Sendable { var cleared = false }
+    let box = Box()
+    let t = FakeTransport { req in
+        switch (req.method, req.path) {
+        case ("GET", "/v1/claude-domains"):
+            return json(200, box.cleared ? #"{"count":0,"domains":[],"note":"说明"}"# : #"{"count":1,"domains":[{"domain":"cdn.example.net","count":3,"first":"2026-11-26T00:00:00Z","last":"2026-11-26T01:00:00Z"}],"note":"说明"}"#)
+        case ("DELETE", "/v1/claude-domains"):
+            box.cleared = true
+            return json(200, #"{"count":0,"domains":[],"note":"说明"}"#)
+        case (_, "/v1/restore/preview"): return json(200, "{\"processes\":[],\"will_kill\":true}")
+        default: return json(200, statusJSON(state: "RESTORED", gate: false))
+        }
+    }
+    let m = SettingsModel(client: APIClient(transport: t))
+    await m.load()
+    #expect(m.claudeDomainLines == [L10n.claudeDomainLine("cdn.example.net", 3)])
+    await m.clearClaudeDomains()
+    #expect(m.claudeDomainLines == [L10n.claudeDomainsNone] && box.cleared)
+}

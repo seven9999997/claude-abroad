@@ -177,14 +177,51 @@ func ours(cur, want []byte, rec *record) bool {
 
 // Write 写入锁文件（首次准备调用；可重入，重复写入结果相同）。先写记录再写文件：写到一半失败时，
 // 再次 Write 或 Remove 都能收拾干净。已有别人的同名文件时不覆盖，记进 Conflicts；有冲突时返回 ErrConflict（其余照写）。
-func (l *Lock) Write() (WriteResult, error) {
+func (l *Lock) Write() (WriteResult, error) { return l.writeDomains(l.domains()) }
+
+// Missing 返回当前域名清单里有、但记录里没有的域名（新版本的内置名单比写入时多出来的；M6-12）。没有记录时为空
+// （还没写过：那是首次准备的事，不是补写）。
+func (l *Lock) Missing() ([]string, error) {
+	rec, err := l.readRecord()
+	if err != nil || rec == nil {
+		return nil, err
+	}
+	var out []string
+	for _, d := range l.domains() {
+		if !slices.Contains(rec.Domains, d) {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
+// Backfill 只补写 Missing 里的域名（M6-12：名单变长后自动补齐）。以前写过、后来被删或被改的不动（自检照常报告）；
+// 别人的同名文件不覆盖，记进 Conflicts 并返回 ErrConflict。
+func (l *Lock) Backfill() (WriteResult, error) {
+	miss, err := l.Missing()
+	if err != nil || len(miss) == 0 {
+		return WriteResult{}, err
+	}
+	res, werr := l.writeDomains(miss)
+	if len(res.Conflicts) > 0 {
+		// 因冲突没写成的新域名不留在记录里：冲突处理掉之后，下一次补写还会把它们算作缺的
+		if rec, err := l.readRecord(); err == nil && rec != nil {
+			rec.Domains = slices.DeleteFunc(rec.Domains, func(d string) bool { return slices.Contains(res.Conflicts, d) })
+			if err := l.writeRecord(*rec); err != nil {
+				return res, err
+			}
+		}
+	}
+	return res, werr
+}
+
+func (l *Lock) writeDomains(doms []string) (WriteResult, error) {
 	var res WriteResult
 	f := l.form()
 	want, err := Content(f)
 	if err != nil {
 		return res, err
 	}
-	doms := l.domains()
 	for _, d := range doms {
 		if !validDomain(d) {
 			return res, fmt.Errorf("域名不合法：%q", d)

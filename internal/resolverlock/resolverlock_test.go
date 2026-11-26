@@ -251,3 +251,47 @@ func TestRemoveCleansCreatedDir(t *testing.T) {
 		t.Fatal("原来就有的目录不应删")
 	}
 }
+
+// M6-12：名单变长后补写——只写新多出来的；以前写过、后来被删的不重写；新域名有别人的同名文件时不覆盖、报冲突；
+// 没写过（没有记录）时不补写。
+func TestBackfill(t *testing.T) {
+	dir := t.TempDir()
+	old := &Lock{Dir: filepath.Join(dir, "resolver"), RecordDir: dir, Domains: []string{"claude.ai", "claude.com"}}
+	if miss, _ := old.Missing(); len(miss) != 0 {
+		t.Fatalf("没有记录时不应补写：%v", miss)
+	}
+	if _, err := old.Write(); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Remove(filepath.Join(old.Dir, "claude.com")) // 以前写过、后来不见了
+	cur := &Lock{Dir: old.Dir, RecordDir: dir, Domains: []string{"claude.ai", "claude.com", "claudeusercontent.com"}}
+	miss, err := cur.Missing()
+	if err != nil || !slices.Equal(miss, []string{"claudeusercontent.com"}) {
+		t.Fatalf("Missing：%v %v", miss, err)
+	}
+	res, err := cur.Backfill()
+	if err != nil || !slices.Equal(res.Written, []string{"claudeusercontent.com"}) {
+		t.Fatalf("应只补写新多出来的：%+v %v", res, err)
+	}
+	if _, err := os.Stat(filepath.Join(old.Dir, "claude.com")); !os.IsNotExist(err) {
+		t.Fatal("以前写过、后来被删的不应自动重写")
+	}
+	if miss, _ := cur.Missing(); len(miss) != 0 {
+		t.Fatalf("补写后记录应包含新域名：%v", miss)
+	}
+	// 新域名有别人的同名文件：不覆盖、报冲突
+	more := &Lock{Dir: old.Dir, RecordDir: dir, Domains: []string{"claude.ai", "claude.com", "claudeusercontent.com", "claudemcpcontent.com"}}
+	other := []byte("nameserver 10.0.0.1\n")
+	_ = os.WriteFile(filepath.Join(old.Dir, "claudemcpcontent.com"), other, 0o644)
+	if res, err := more.Backfill(); err != ErrConflict || !slices.Equal(res.Conflicts, []string{"claudemcpcontent.com"}) {
+		t.Fatalf("冲突：%+v %v", res, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(old.Dir, "claudemcpcontent.com")); string(b) != string(other) {
+		t.Fatal("别人的文件被覆盖了")
+	}
+	// 冲突处理掉之后再补写：能补上
+	_ = os.Remove(filepath.Join(old.Dir, "claudemcpcontent.com"))
+	if res, err := more.Backfill(); err != nil || !slices.Equal(res.Written, []string{"claudemcpcontent.com"}) {
+		t.Fatalf("冲突处理掉后应能补上：%+v %v", res, err)
+	}
+}

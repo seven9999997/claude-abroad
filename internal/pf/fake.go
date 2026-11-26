@@ -29,7 +29,11 @@ type FakePF struct {
 	failNext   map[string]error
 	calls      []string
 	kills      int
+	afterLoad  func() // 只给测试：下一次加载完成后调用一次（不持锁），模拟别人刚好在加载和复核之间写了别的内容
 }
+
+// AfterNextLoad 设置下一次加载完成后要做的事（只调用一次）。
+func (f *FakePF) AfterNextLoad(fn func()) { f.mu.Lock(); f.afterLoad = fn; f.mu.Unlock() }
 
 type fakeAnchor struct {
 	raw       []byte // 加载的原文（求值用）
@@ -125,7 +129,21 @@ func (f *FakePF) op(name string) error {
 }
 
 // Run 实现 Runner。
-func (f *FakePF) Run(_ context.Context, args []string, stdin []byte) ([]byte, []byte, error) {
+func (f *FakePF) Run(ctx context.Context, args []string, stdin []byte) ([]byte, []byte, error) {
+	so, se, err := f.run(ctx, args, stdin)
+	if err == nil && slices.Contains(args, "-f") {
+		f.mu.Lock()
+		h := f.afterLoad
+		f.afterLoad = nil
+		f.mu.Unlock()
+		if h != nil {
+			h()
+		}
+	}
+	return so, se, err
+}
+
+func (f *FakePF) run(_ context.Context, args []string, stdin []byte) ([]byte, []byte, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	j := strings.Join(args, " ")

@@ -42,6 +42,14 @@ struct SettingsView: View {
                 if let t = model.prepareText {
                     LabeledContent(L10n.prepareTitle) { Text(t).foregroundStyle(model.prepareWarn ? .orange : .primary) }
                 }
+                LabeledContent(L10n.claudeDomainsTitle) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let note = model.claudeDomains?.note { Text(note).font(.caption).foregroundStyle(.secondary) }
+                        ForEach(model.claudeDomainLines, id: \.self) { Text($0).font(.caption.monospaced()) }
+                        Button(L10n.claudeDomainsClear) { Task { await model.clearClaudeDomains() } }
+                            .disabled((model.claudeDomains?.count ?? 0) == 0)
+                    }
+                }
                 LabeledContent(L10n.integrityTitle) {
                     Text(model.integrityText).foregroundStyle(model.integrityWarn ? .red : .primary)
                 }

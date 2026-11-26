@@ -4,7 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"claude-abroad/internal/claudeproc"
 	"claude-abroad/internal/daemon"
+	"claude-abroad/internal/procinfo"
 )
 
 // M6-5a 补审返工：命令行的卸载。
@@ -53,5 +55,43 @@ func TestCLIUninstallFailureSteps(t *testing.T) {
 	r.sys.Kill.SetFail(nil)
 	if x := r.run("--yes", "uninstall"); x.code != ExitOK || !strings.Contains(x.out, "✓ 结束 Claude 并恢复本机网络") {
 		t.Fatalf("重试应完成：%+v", x)
+	}
+}
+
+// M6-4b-3 补审返工：回国带 --kill-browsers、有浏览器还开着（冒名路径的 Safari，确认不了）：回国成功，输出写明。
+func TestCLIRestoreBrowsersLeft(t *testing.T) {
+	r := newRig(t, rigOpt{})
+	r.sys.Claude.Browsers = &claudeproc.Browsers{Procs: r.sys.Procs, Bundle: func(app string) (string, error) {
+		if strings.HasSuffix(app, "/Safari.app") {
+			return "com.apple.Safari", nil
+		}
+		return "com.example.other", nil
+	}}
+	mustOK(t, r.run("--yes", "up"), "启用")
+	r.sys.Procs.Add(procinfo.Proc{PID: 4343, PPID: 1, Path: "/Users/u/Downloads/Safari.app/Contents/MacOS/Safari"}, claudeproc.ExitOnTerm, 0)
+	x := r.run("--yes", "restore", "--kill-browsers")
+	if x.code != ExitOK || !strings.Contains(x.out, "这些浏览器还开着：Safari") {
+		t.Fatalf("%+v", x)
+	}
+}
+
+// M6-12：domains 列出记录（没有时说明“还没有记录”）、domains clear 清空；diagnostics 默认不带清单，--include-domains 才带。
+func TestCLIDomains(t *testing.T) {
+	r := newRig(t, rigOpt{})
+	x := r.run("domains")
+	if x.code != ExitOK || !strings.Contains(x.out, "还没有记录") || !strings.Contains(x.out, "只是线索") {
+		t.Fatalf("%+v", x)
+	}
+	if x := r.run("domains", "clear"); x.code != ExitOK || !strings.Contains(x.out, "已清空") {
+		t.Fatalf("%+v", x)
+	}
+	if x := r.run("diagnostics"); x.code != ExitOK || !strings.Contains(x.out, `"claude_domains"`) || strings.Contains(x.out, `"domains":`) {
+		t.Fatalf("诊断包默认只有条数：%+v", x)
+	}
+	if x := r.run("diagnostics", "--include-domains"); x.code != ExitOK {
+		t.Fatalf("%+v", x)
+	}
+	if x := r.run("diagnostics", "--bogus"); x.code != ExitUsage {
+		t.Fatalf("不认识的参数应是参数错：%+v", x)
 	}
 }

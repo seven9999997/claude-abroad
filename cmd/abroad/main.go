@@ -59,6 +59,9 @@ const usage = `用法：abroad [--json] [--yes] [--socket <路径>] <子命令> 
   app ls | set <应用> direct|block|main|proxy:<出口> | rm <应用>     应用分流（改成直连等放松保护的改动需要 sudo）
   region show | set <时区> <语言> [--locale <地区格式>] | auto      地区（地区会变时需要 sudo 和确认）
   engine ls | install <名字> | rollback <名字>
+  launchguard                      启动管控：现在是否允许启动 Claude、四层是否生效
+  diagnostics [--include-domains]  诊断包（脱敏；--include-domains 才带 Claude 访问过的域名清单）
+  domains | domains clear          Claude 访问过的、不在内置 Claude 域名之下的域名（只观察）| 清空
 
 首次使用：sudo abroad main add-source … → sudo abroad main use <节点> → sudo abroad main apply → abroad up
 

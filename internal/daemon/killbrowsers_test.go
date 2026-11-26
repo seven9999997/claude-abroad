@@ -50,3 +50,31 @@ func TestRestoreKillBrowsers(t *testing.T) {
 		}
 	}
 }
+
+// M6-4b-3 补审返工：选了结束浏览器、但有浏览器还开着（这里是冒名路径的 Safari，确认不了所以没动）：回国照常成功，
+// 状态里 browsers_left 列出它；全部结束时没有这一项。
+func TestRestoreReportsBrowsersLeft(t *testing.T) {
+	for _, leave := range []bool{true, false} {
+		e := newEnv(t)
+		e.sys.Claude.Browsers = &claudeproc.Browsers{Procs: e.sys.Procs, Bundle: func(app string) (string, error) {
+			if strings.HasSuffix(app, "/Safari.app") {
+				return "com.apple.Safari", nil
+			}
+			return "com.example.other", nil
+		}}
+		d := e.start(e.opts())
+		post(t, d, "/v1/enable", 200)
+		e.sys.Procs.Add(procinfo.Proc{PID: 4242, PPID: 1, Path: kbSafari}, claudeproc.ExitOnTerm, 0)
+		if leave {
+			e.sys.Procs.Add(procinfo.Proc{PID: 4343, PPID: 1, Path: "/Users/u/Downloads/Safari.app/Contents/MacOS/Safari"}, claudeproc.ExitOnTerm, 0)
+		}
+		restoreWith(t, d, true)
+		st := status(t, d)
+		if st.State != "RESTORED" {
+			t.Fatalf("回国应成功：%s", st.State)
+		}
+		if leave && strings.Join(st.BrowsersLeft, ",") != "Safari" || !leave && len(st.BrowsersLeft) != 0 {
+			t.Fatalf("leave=%v：browsers_left %v", leave, st.BrowsersLeft)
+		}
+	}
+}

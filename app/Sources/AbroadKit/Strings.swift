@@ -207,6 +207,10 @@ public enum L10n {
     public static let launchControl = "启动管控"
     // M6-3：第一层（Claude 域名解析锁）
     public static let uninstalledError = "操作失败：Claude 出国已经一键卸载。要继续使用请重新安装。"
+    public static let claudeDomainsTitle = "Claude 访问过的域名"
+    public static let claudeDomainsNone = "还没有记录"
+    public static let claudeDomainsClear = "清空"
+    public static func claudeDomainLine(_ d: String, _ n: Int) -> String { d + "（\(n) 次）" }
     public static let launchControlOff = "未启用：这次安装没有打开启动管控（开发用的运行方式）"
     public static let resolverLockTitle = "第一层：Claude 域名解析锁"
     public static let resolverLockUnknown = "后台没有报告解析锁的状态"
@@ -347,6 +351,9 @@ public enum L10n {
     // M6-4b-1 返工：启动管控拦下 Claude 时的通知（回国状态那一句取自设计 10.2 第三层）。
     public static let notifyLaunchBlockedRestored = "现在是本机网络（已回国），不允许启动 Claude。要使用 Claude，请先启用 Claude 出国；如果不再使用，可以在设置里一键卸载。"
     public static let notifyLaunchBlockedEnv = "环境检测通过前不允许启动 Claude，刚打开的 Claude 已结束。检测通过后再打开。"
+    public static func browsersStillOpen(_ names: [String]) -> String {
+        "这些浏览器还开着：" + names.joined(separator: "、") + "，其中的 Claude 页面请自行关闭"
+    }
     public static let notifyRegionReady = "时区和语言已写入，环境检测通过，可以打开 Claude 了"
 
     public static func titleLine(_ phase: String) -> String { appName + "：" + phase }

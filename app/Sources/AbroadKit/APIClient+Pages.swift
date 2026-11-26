@@ -102,6 +102,11 @@ extension APIClient {
     public func engines() async -> Outcome<DaemonEnginesView> { await get("/v1/engines") }
     /// 启动管控（M6-4b）：现在是否允许启动 Claude、四层、覆盖范围、最近的拦截。
     public func launchGuard() async -> Outcome<DaemonLaunchGuardView> { await get("/v1/launchguard") }
+    /// Claude 访问过的、不在内置 Claude 域名之下的域名（M6-12，只观察）。
+    public func claudeDomains() async -> Outcome<DaemonClaudeDomainsView> { await get("/v1/claude-domains") }
+    public func clearClaudeDomains() async -> Outcome<DaemonClaudeDomainsView> {
+        await call(HTTPRequest(method: "DELETE", path: "/v1/claude-domains"))
+    }
 }
 
 extension Outcome {

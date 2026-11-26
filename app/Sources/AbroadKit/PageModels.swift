@@ -395,6 +395,8 @@ public final class SettingsModel: PageModel {
     @Published public private(set) var launchGuard: DaemonLaunchGuardView?
     /// 程序完整性（M6-7）；后台没接时为 nil。
     @Published public private(set) var integrity: IntegrityResult?
+    /// Claude 访问过的域名（M6-12）；后台没给时为 nil。
+    @Published public private(set) var claudeDomains: DaemonClaudeDomainsView?
     /// 首次准备（M6-8a）；后台没打开时为 nil（不显示）。
     @Published public private(set) var prepare: DaemonPrepareStatus?
     public let env: EnvModel
@@ -427,6 +429,7 @@ public final class SettingsModel: PageModel {
             previewError = other.errorText?.raw ?? L10n.loadFailed
         }
         if case .ok(let lg) = await client.launchGuard() { launchGuard = lg }
+        if case .ok(let cd) = await client.claudeDomains() { claudeDomains = cd }
         await env.load()
     }
 
@@ -502,6 +505,17 @@ public final class SettingsModel: PageModel {
         let written = c.settings?.written ?? false
         return (written && !c.effective) || !c.listening || !(c.settings?.conflicts ?? []).isEmpty
     }
+    /// Claude 访问过的域名：每个一行（域名和次数）；没有时一句“还没有记录”。
+    public var claudeDomainLines: [String] {
+        guard let cd = claudeDomains, let ds = cd.domains, !ds.isEmpty else { return [L10n.claudeDomainsNone] }
+        return ds.map { L10n.claudeDomainLine($0.domain, Int($0.count)) }
+    }
+
+    /// 清空 Claude 访问过的域名。
+    public func clearClaudeDomains() async {
+        if case .ok(let cd) = await client.clearClaudeDomains() { claudeDomains = cd }
+    }
+
     /// 程序完整性的一句话（M6-7）。
     public var integrityText: String {
         guard let r = integrity else { return L10n.integrityUnknown }

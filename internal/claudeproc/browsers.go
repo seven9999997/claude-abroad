@@ -2,6 +2,7 @@ package claudeproc
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -20,6 +21,8 @@ type browserApp struct {
 	name   string
 	teams  []string
 	paths  []string // 没有 Team ID 的系统应用：只认这些系统保护的路径前缀
+	// listOnly：只列出、永远不结束（没有核对过的签名信息；M6-4b-3 补审建议改）
+	listOnly bool
 }
 
 var browserApps = []browserApp{
@@ -28,13 +31,18 @@ var browserApps = []browserApp{
 	{bundle: "org.mozilla.firefox", name: "Firefox", teams: []string{"43AQ936H96"}},
 	{bundle: "com.microsoft.edgemac", name: "Microsoft Edge", teams: []string{"UBF8T346G9"}},
 	{bundle: "com.brave.browser", name: "Brave", teams: []string{"KL8N8XSYF4"}},
+	// 只列出、不结束：提醒用户它们开着，其中的 Claude 页面请自行关闭
+	{bundle: "company.thebrowser.browser", name: "Arc", listOnly: true},
+	{bundle: "com.operasoftware.opera", name: "Opera", listOnly: true},
+	{bundle: "com.vivaldi.vivaldi", name: "Vivaldi", listOnly: true},
+	{bundle: "org.chromium.chromium", name: "Chromium", listOnly: true},
 }
 
 // BrowserNote 是预览里浏览器那一段的说明。
-const BrowserNote = "下面这些浏览器正在运行，其中的 Claude 页面请自行关闭（这次不会结束浏览器）"
+const BrowserNote = "下面这些浏览器正在运行，其中的 Claude 页面请自行关闭（这次不会结束浏览器；清单之外的浏览器不会列出）"
 
 // BrowserKillNote 是选了“同时强制退出浏览器”时预览里的说明（M6-5a 补审返工：两种情况的文字不同，确认码绑定这个选项）。
-const BrowserKillNote = "确认后会结束下面这些确认过的浏览器，未保存的表单内容会丢失；签名确认不了的不会结束"
+const BrowserKillNote = "确认后会结束下面这些确认过的浏览器，未保存的表单内容会丢失；签名确认不了的、只列出的不会结束（清单之外的浏览器不会列出）"
 
 // WithBrowserChoice 按“同时强制退出浏览器”这个选项改写预览里的说明。
 func (p Preview) WithBrowserChoice(kill bool) Preview {
@@ -45,6 +53,8 @@ func (p Preview) WithBrowserChoice(kill bool) Preview {
 }
 
 const noteBrowserUnverified = "签名确认不了，不会结束"
+
+const noteBrowserListOnly = "只列出、不会结束：请自行关闭其中的 Claude 页面"
 
 func browserFor(bundle string) *browserApp {
 	for i := range browserApps {
@@ -92,6 +102,9 @@ func (b *Browsers) scan() ([]browserProc, error) {
 }
 
 func (b *Browsers) verify(p procinfo.Proc, app *browserApp) bool {
+	if app.listOnly {
+		return false
+	}
 	if len(app.teams) == 0 {
 		for _, pre := range app.paths {
 			if strings.HasPrefix(p.Path, pre) {
@@ -125,7 +138,10 @@ func (b *Browsers) Preview() ([]Target, error) {
 	var out []Target
 	for _, bp := range ps {
 		t := Target{PID: bp.p.PID, PPID: bp.p.PPID, Start: bp.p.Start, App: bp.app.name}
-		if !bp.verified {
+		switch {
+		case bp.app.listOnly:
+			t.Note = noteBrowserListOnly
+		case !bp.verified:
 			t.Note = noteBrowserUnverified
 		}
 		if i, ok := seen[bp.app.name]; ok {
@@ -148,16 +164,39 @@ func (b *Browsers) Preview() ([]Target, error) {
 
 // Kill 结束确认过的浏览器进程：先 TERM，等宽限期，还在的 KILL。返回结束不了的。确认不了的不碰。
 func (b *Browsers) Kill(ctx context.Context, k *Killer) ([]Target, error) {
+	left, _, err := b.KillReport(ctx, k)
+	return left, err
+}
+
+// KillReport 同 Kill，另外返回还在运行的浏览器名字（M6-4b-3 补审返工）：没能结束的、签名确认不了所以没动的、只列出的，
+// 每个浏览器一个名字、按名字排序。
+func (b *Browsers) KillReport(ctx context.Context, k *Killer) ([]Target, []string, error) {
 	ps, err := b.scan()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	names := map[string]bool{}
 	var ts []Target
 	for _, bp := range ps {
 		if bp.verified {
 			ts = append(ts, Target{PID: bp.p.PID, PPID: bp.p.PPID, Start: bp.p.Start, App: bp.app.name})
+		} else {
+			names[bp.app.name] = true
 		}
 	}
+	left, err := b.killTargets(ctx, k, ts)
+	for _, t := range left {
+		names[t.App] = true
+	}
+	out := make([]string, 0, len(names))
+	for n := range names {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return left, out, err
+}
+
+func (b *Browsers) killTargets(ctx context.Context, k *Killer, ts []Target) ([]Target, error) {
 	if len(ts) == 0 {
 		return nil, nil
 	}

@@ -528,3 +528,24 @@ let isFirstStep: @Sendable (HTTPRequest) -> Bool = { $0.path == "/v1/restore" &&
     _ = await m.refresh()
     #expect(m.integrityAlert == L10n.integrityAlert(["bin/abroad-vm 内容不对"]))
 }
+
+/// M6-4b-3 补审返工：回国完成时还有浏览器开着（选了结束浏览器、没能结束或确认不了）：通知和首页提示都写明；没有时不提。
+@MainActor
+@Test func restoreDoneBrowsersLeft() async {
+    let s = FakeSender()
+    let n = Notifier(sender: s)
+    n.restoreDone(pending: [], browsers: ["Firefox", "Safari"])
+    n.restoreDone(pending: [])
+    #expect(s.got[0].body == L10n.notifyRestoreDone + "；" + L10n.browsersStillOpen(["Firefox", "Safari"]))
+    #expect(s.got[1].body == L10n.notifyRestoreDone)
+    // 首页：回国应答里带 browsers_left 时有提示
+    let b = ConfirmBackend()
+    var after = statusJSON(state: "RESTORED", gate: false, protected: false)
+    after.removeLast()
+    b.afterConfirm = json(200, after + ",\"browsers_left\":[\"Firefox\"]}")
+    let (m, flow, _, _) = confirmRig(b)
+    _ = await m.refresh()
+    await m.restore()
+    await confirmNow(flow)
+    #expect(m.notice?.text.raw == L10n.browsersStillOpen(["Firefox"]))
+}

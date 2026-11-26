@@ -208,8 +208,11 @@ public final class Notifier {
     }
 
     /// 回国完成（操作的结果）；pending 是没能还原的项目名。
-    public func restoreDone(pending: [String]) {
-        emit(.restoreDone, pending.isEmpty ? L10n.notifyRestoreDone : L10n.notifyRestorePending(pending))
+    /// browsers 是选了“同时强制退出浏览器”但还在运行的浏览器（M6-4b-3 补审返工）。
+    public func restoreDone(pending: [String], browsers: [String] = []) {
+        var body = pending.isEmpty ? L10n.notifyRestoreDone : L10n.notifyRestorePending(pending)
+        if !browsers.isEmpty { body += "；" + L10n.browsersStillOpen(browsers) }
+        emit(.restoreDone, body)
     }
 
     /// 用户点了通知上的“打开 Claude”（唯一会打开 Claude 的地方）。

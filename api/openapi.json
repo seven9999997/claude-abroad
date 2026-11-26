@@ -103,6 +103,32 @@
         ],
         "type": "object"
       },
+      "ClaudedomainsEntry": {
+        "properties": {
+          "count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "first": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "domain",
+          "first",
+          "last"
+        ],
+        "type": "object"
+      },
       "ClaudeprocCoverageRow": {
         "properties": {
           "kind": {
@@ -299,6 +325,28 @@
         ],
         "type": "object"
       },
+      "DaemonClaudeDomainsView": {
+        "properties": {
+          "count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "domains": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudedomainsEntry"
+            },
+            "type": "array"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "note"
+        ],
+        "type": "object"
+      },
       "DaemonClaudeProxyConn": {
         "properties": {
           "action": {
@@ -414,6 +462,24 @@
         },
         "type": "object"
       },
+      "DaemonDiagnosticDomains": {
+        "properties": {
+          "count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "domains": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudedomainsEntry"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "type": "object"
+      },
       "DaemonDiagnosticVersion": {
         "properties": {
           "go": {
@@ -442,6 +508,9 @@
       },
       "DaemonDiagnostics": {
         "properties": {
+          "claude_domains": {
+            "$ref": "#/components/schemas/DaemonDiagnosticDomains"
+          },
           "envcheck": {
             "$ref": "#/components/schemas/EnvcheckReport"
           },
@@ -460,6 +529,7 @@
           }
         },
         "required": [
+          "claude_domains",
           "generated_at",
           "launchguard",
           "status",
@@ -1174,6 +1244,12 @@
       },
       "DaemonStatus": {
         "properties": {
+          "browsers_left": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "claude_code": {
             "$ref": "#/components/schemas/DaemonClaudeProxyStatus"
           },
@@ -1294,6 +1370,12 @@
       },
       "DaemonUninstallResult": {
         "properties": {
+          "browsers_left": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "complete": {
             "type": "boolean"
           },
@@ -1898,6 +1980,62 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DaemonAppsView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      }
+    },
+    "/v1/claude-domains": {
+      "delete": {
+        "description": "清空 Claude 访问过的域名",
+        "operationId": "claude-domains-clear",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonClaudeDomainsView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "normal"
+      },
+      "get": {
+        "description": "启用时 Claude 访问过的、不在内置 Claude 域名之下的域名（只观察；本机、本人可看；不含地址）",
+        "operationId": "claude-domains",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonClaudeDomainsView"
                 }
               }
             },

@@ -113,3 +113,67 @@ func TestServiceKillBrowsersOption(t *testing.T) {
 		}
 	}
 }
+
+// M6-4b-3 补审返工：选了结束浏览器，结束后报告还在运行的——一个怎么都不退（Chrome）、一个签名不对（Firefox）、
+// 冒名的 Safari（确认不了）、只列出的 Arc；全部结束时为空。
+func TestBrowsersKillReport(t *testing.T) {
+	w, s, b := browserWorld(t)
+	w.Remove(500)
+	w.Add(procinfo.Proc{PID: 500, PPID: 1, Path: chromeMain}, Unkillable, 0) // 怎么都不退
+	s.teams[500] = "EQHXZ8M8AV"
+	const arc = "/Applications/Arc.app/Contents/MacOS/Arc"
+	w.Add(procinfo.Proc{PID: 540, PPID: 1, Path: arc}, ExitOnTerm, 0)
+	b.Bundle = func(app string) (string, error) {
+		if strings.HasSuffix(app, "/Arc.app") {
+			return "company.thebrowser.Browser", nil
+		}
+		return browserBundles(app)
+	}
+	k := &Killer{Scanner: &Scanner{}, Info: w.Info, Sig: w, Clock: w}
+	_, names, _ := b.KillReport(context.Background(), k)
+	if strings.Join(names, ",") != "Arc,Firefox,Google Chrome,Safari" {
+		t.Fatalf("还在运行的：%v", names)
+	}
+	if !w.Alive(540) {
+		t.Fatal("只列出的 Arc 不应被结束")
+	}
+	pv, _ := b.Preview()
+	var arcNote string
+	for _, p := range pv {
+		if p.App == "Arc" {
+			arcNote = p.Note
+		}
+	}
+	if arcNote != noteBrowserListOnly {
+		t.Fatalf("预览里 Arc 应标“只列出”：%+v", pv)
+	}
+	// 全部结束：为空
+	w2, _, b2 := browserWorld(t)
+	w2.Remove(510)
+	w2.Remove(530)
+	k2 := &Killer{Scanner: &Scanner{}, Info: w2.Info, Sig: w2, Clock: w2}
+	if _, names, _ := b2.KillReport(context.Background(), k2); len(names) != 0 {
+		t.Fatalf("全部结束时应为空：%v", names)
+	}
+}
+
+// 回国服务记下“还在运行的浏览器”；没选结束浏览器时为空。
+func TestServiceBrowsersLeft(t *testing.T) {
+	for _, kill := range []bool{false, true} {
+		w, _, b := browserWorld(t)
+		svc := NewFakeService(w, &FakeSigner{}, 999, false, nil)
+		svc.Browsers = b
+		svc.Killer.Clock = w
+		ctx := context.Background()
+		if kill {
+			ctx = WithKillBrowsers(ctx)
+		}
+		if err := svc.KillClaude(ctx); err != nil {
+			t.Fatal(err)
+		}
+		got := strings.Join(svc.BrowsersLeft(), ",")
+		if kill && got != "Firefox,Safari" || !kill && got != "" {
+			t.Fatalf("kill=%v：%q", kill, got)
+		}
+	}
+}
