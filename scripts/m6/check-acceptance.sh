@@ -37,6 +37,19 @@ for k in 1 2 3 4 5; do
   sec1=$(sed -n '/^## 1\./,/^## 2\./p' "$DOC")
   printf '%s\n' "$sec1" | grep -qE "^\| ${k} \|" || bad "第 1 节缺第 ${k} 条完成标准"
 done
+# 风险表里写着“没有做”的行：引号里的功能名必须在第 7 节有对应的条目（不能只藏在风险表的半句话里）
+sec5=$(sed -n '/^## 5\./,/^## 6\./p' "$DOC"); sec7=$(sed -n '/^## 7\./,/^## 8\./p' "$DOC")
+while IFS= read -r row; do
+  [ -n "$row" ] || continue
+  id=$(printf '%s' "$row" | awk -F'|' '{gsub(/ /,"",$2); print $2}')
+  names=$(printf '%s' "$row" | grep -oE '“[^”]+”[^|“]{0,6}没有做' | sed -E 's/^“([^”]+)”.*/\1/')
+  total=$(printf '%s' "$row" | grep -o '没有做' | wc -l | tr -d ' ')
+  named=$(printf '%s\n' "$names" | grep -c . | tr -d ' ')
+  [ -n "$names" ] && [ "$total" = "$named" ] || { bad "${id} 写着“没有做”，但没有用引号写出是什么功能"; continue; }
+  while IFS= read -r nm; do
+    printf '%s\n' "$sec7" | grep -qF -- "$nm" || bad "${id} 里的“${nm}”没有做，但第 7 节没有对应的条目"
+  done <<<"$names"
+done < <(printf '%s\n' "$sec5" | grep -E '^\| R' | grep '没有做')
 grep -q '待定' "$DOC" && bad "清单里还有“待定”"
 grep -qE '^\| 用发布构建验证' "$DOC" || bad "“没有做”里缺用发布构建验证真实效果那一行"
 grep -E '^\| [^|]*发布构建验证' "$DOC" | grep -qE '\*\*达到' && bad "发布构建验证不能写成“达到”"

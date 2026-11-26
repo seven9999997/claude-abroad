@@ -76,6 +76,8 @@ grep -v '^| R17 |' docs/m6-acceptance.md >"${TMP}/acc3"; accneg "缺一条风险
 { cat docs/m6-acceptance.md; echo '| 用发布构建验证管控的真实效果 | **达到** |'; } >"${TMP}/acc4"; accneg "发布构建验证写成达到" "${TMP}/acc4"
 { cat docs/m6-acceptance.md; echo '待定'; } >"${TMP}/acc5"; accneg "还有待定" "${TMP}/acc5"
 { cat docs/m6-acceptance.md; echo '`swift:noSuchSwiftTest`'; } >"${TMP}/acc6"; accneg "引用不存在的应用测试" "${TMP}/acc6"
+sed -E 's/^(\| R16 \|.*)\|$/\1；“假功能甲”没有做 |/' docs/m6-acceptance.md >"${TMP}/acc7"; accneg "风险表里没有做的功能不在第 7 节" "${TMP}/acc7"
+sed -E 's/^(\| R16 \|.*)\|$/\1；有个功能没有做 |/' docs/m6-acceptance.md >"${TMP}/acc8"; accneg "风险表里写没有做却不说是什么" "${TMP}/acc8"
 
 # ---- e. 开发安装脚本 ----
 scripts/m6/install/selftest.sh >"${TMP}/inst" 2>&1 && ok "e. 开发安装脚本的自测通过（$(grep -c '^✓' "${TMP}/inst") 项）" || bad "e. 开发安装脚本的自测不通过：$(grep '^✗' "${TMP}/inst" | head -3)"
