@@ -248,6 +248,15 @@ public enum L10n {
         return "· " + name + "：" + s + "。" + reason
     }
     public static func launchGuardRecent(_ n: Int) -> String { "最近拦下 \(n) 次" }
+    // M6-11b：回国拦截（回国后 pf 只拦 Anthropic 登记的地址段；设计 10.2 第五道）。
+    public static let returnBlockTitle = "回国拦截"
+    public static let returnBlockConsequence = "回国后，本机任何程序（包括浏览器）都连不上 Anthropic 登记的地址段；本机另有代理软件接管时拦不住。只有卸载才解除。"
+    public static func returnBlockActive(_ nets: [String]) -> String { "生效中：拦 " + nets.joined(separator: "、") }
+    public static func returnBlockOn(_ nets: [String]) -> String { "已打开：回国后拦 " + nets.joined(separator: "、") }
+    public static let returnBlockTestTag = "测试段（开发构建）：只拦文档保留的地址，不影响真实的 Claude"
+    public static let returnBlockOff = "未启用（首次准备没完成，或已经卸载）"
+    public static let returnBlockHomeTitle = "已拦截 Anthropic 的地址"
+    public static let returnBlockHome = "本机直连 Anthropic 的地址已被拦截（回国拦截，只有卸载才解除）"
     public static let loginItemHint = "如果 Claude 设了“登录时打开”，请在 Claude 的设置里关掉：开机时它会比 Claude 出国先起来，会被拦下"
     public static let claudeCodeTitle = "第四层：Claude Code 的本机代理"
     // M6-7：程序完整性（没有付费开发者账号，用清单校验代替系统签名校验）

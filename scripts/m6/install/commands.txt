@@ -1,6 +1,8 @@
 # scripts/m6/install 的 install.sh、uninstall.sh 会执行的全部命令（扩展正则，每行一条）。check-commands.sh 用它核对空跑的输出
 # （输出里仓库的绝对路径先换成 <仓库>）。“CHANGE ” 是改动类命令，“QUERY ” 是只读查询。
-# 安装只装文件、建 _abroad、注册两个开发用 LaunchDaemon；不碰 pf、DNS、网卡、路由、IPv6。
+# 安装只装文件、建 _abroad、注册两个开发用 LaunchDaemon；脚本自己不碰 pf、DNS、网卡、路由、IPv6。装上后 abroadd 第一次启动
+# 会加载回国拦截（M6-11b；开发安装只管测试目标：测试段 192.0.2.0/24、2001:db8:abd::/48）并启用 pf——那是 abroadd 做的，
+# 不在本清单里；安装脚本只读核对。
 # 卸载的兜底（正常途径没走完时）只撤 Claude 出国自己的：pf 锚点 com.apple/250.abroad、DNS 键、按快照恢复 IPv6。
 CHANGE ^mkdir -p /Library/Application Support/claude-abroad-install-snap$
 CHANGE ^chmod 700 /Library/Application Support/claude-abroad-install-snap$
@@ -38,3 +40,5 @@ CHANGE ^rm -f /usr/local/bin/abroad$
 CHANGE ^rm -rf (/Applications/ClaudeAbroad\.app|/var/run/claude-abroad|/var/log/claude-abroad|/Library/Application Support/claude-abroad)$
 CHANGE ^rm -rf /Library/Application Support/claude-abroad-install-snap（对照一致时）$
 QUERY ^curl --unix-socket /var/run/claude-abroad/api\.sock http://abroadd/v1/status（应为 RESTORED、prepare\.done、integrity\.ok）$
+QUERY ^curl --unix-socket /var/run/claude-abroad/api\.sock http://abroadd/v1/status（return_block 应为 on、active、test，nets=192\.0\.2\.0/24,2001:db8:abd::/48）$
+QUERY ^pfctl -a com\.apple/250\.abroad -s rules$

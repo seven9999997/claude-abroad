@@ -36,7 +36,7 @@ func (m *Machine) Recover(ctx context.Context) error {
 		// 保留回国拦截时（M6-11a）：把那一组加载回来（重启后锚点是空的）。失败只记事件：状态已经是 RESTORED，
 		// 巡检之后每轮再试。
 		if m.returnBlock() {
-			if err := m.D.PF.ApplyRestored(ctx); err != nil {
+			if err := m.restoredReturnBlock(ctx); err != nil {
 				m.emit(EvReturnBlockFailed, "回国拦截没能加载，稍后再试")
 			}
 		}

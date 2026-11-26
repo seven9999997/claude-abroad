@@ -10,7 +10,8 @@ abroadd 在已启用时按规则转发，其余时候一律 403。对应 [docs/f
 
 ## 前提
 
-1. 开发安装已经装好（`scripts/m6/install`），在应用里配好主代理并**启用**。
+1. 开发安装已经装好（`scripts/m6/install`），在应用里配好主代理并**启用**。回国拦截必须是测试段（开发安装默认；M6-11b）：
+   用的是真实的 Anthropic 地址段时前提检查拒绝——那样回国后这台 Mac 直连 Anthropic 会被拒，正在运行的 Claude Code 会断开。
 2. 这台 Mac 上有 `claude` 命令（找不到时设 `M6L_CLAUDE=<路径>`）。
 3. `scripts/m6/layer4/run.sh --check-only`
 

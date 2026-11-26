@@ -194,7 +194,7 @@ func TakeTokens(runDir string) ([]string, error) {
 type Outcome int
 
 const (
-	Loaded     Outcome = iota // 加载了断网规则
+	Loaded     Outcome = iota // 加载了断网规则（或回国拦截那一组，M6-11b）
 	NotNeeded                 // 不需要加载（回国、全新安装、abroadd 本次开机已经加载过）
 	LoadFailed                // 要加载但失败了
 )
@@ -236,7 +236,9 @@ func (d Deps) logf(format string, a ...any) {
 }
 
 // Run 按状态文件决定是否加载断网规则：
-//   - 状态文件不存在（全新安装）、回国：什么都不做，不碰 pf；
+//   - 状态文件不存在（全新安装）：什么都不做，不碰 pf；
+//   - 回国：首次准备的标记在、没有卸载标记时加载“回国拦截”那一组（M6-11b，和 abroadd 同一个生成函数）并取一个启用
+//     引用交 abroadd 收养；否则（没准备过、已卸载）什么都不做；abroadd 本次开机已经加载过时同样不动；
 //   - 已启用、停用、启用中、恢复中、损坏：加载“只断网、不接管”的那一组；abroadd 本次开机已经加载过时不动；
 //   - 参数文件读不出、缺项或不合法：加载最严的一组（不放行任何例外）。
 func Run(ctx context.Context, d Deps) (Outcome, error) {
@@ -247,20 +249,25 @@ func Run(ctx context.Context, d Deps) (Outcome, error) {
 	f, err := st.Load()
 	switch {
 	case err == nil && f.State == state.Restored:
-		d.logf("状态是回国（或全新安装，没有状态文件）：不加载断网规则")
-		return NotNeeded, nil
+		if !state.FileExists(d.StateDir) || !state.ReturnBlockMarked(d.StateDir) {
+			d.logf("状态是回国（或全新安装，没有状态文件），没有要保留的回国拦截：不碰 pf")
+			return NotNeeded, nil
+		}
+		c := state.ChooseReturnBlock(d.StateDir) // 和 abroadd、应急程序同一个来源（M6-11b）
+		if c.Note != "" {
+			d.logf("%s", c.Note)
+		}
+		if !c.Load {
+			return NotNeeded, nil
+		}
+		d.logf("状态是回国，首次准备做过、没有卸载：加载回国拦截（%s）", c.Set)
+		return d.load(ctx, c.Config(), true)
 	case err == nil:
 		d.logf("状态是 %s：需要断网规则", f.State)
 	default:
 		d.logf("状态文件读不出来（%s）：按损坏处理，加载断网规则", errClass(err))
 	}
-	boot := ""
-	if d.BootID != nil {
-		if b, err := d.BootID(); err == nil {
-			boot = b
-		}
-	}
-	if markerMatches(d.RunDir, boot) {
+	if d.bootMarked() {
 		d.logf("abroadd 本次开机已经加载过规则：不动")
 		return NotNeeded, nil
 	}
@@ -268,6 +275,27 @@ func Run(ctx context.Context, d Deps) (Outcome, error) {
 	if perr != nil {
 		d.logf("参数文件读不出或不合法（%s）：加载最严的一组", errClass(perr))
 		cfg = pf.Config{Lockdown: true}
+	}
+	return d.load(ctx, cfg, false)
+}
+
+// bootMarked 报告 abroadd 本次开机是否已经加载过规则。
+func (d Deps) bootMarked() bool {
+	boot := ""
+	if d.BootID != nil {
+		if b, err := d.BootID(); err == nil {
+			boot = b
+		}
+	}
+	return markerMatches(d.RunDir, boot)
+}
+
+// load 加载一组规则到本项目的锚点、取一个启用引用并写下交 abroadd 收养。returnBlock 为真时是回国拦截那一组：
+// abroadd 本次开机已经起来过就不动（它自己按开关加载）。
+func (d Deps) load(ctx context.Context, cfg pf.Config, returnBlock bool) (Outcome, error) {
+	if returnBlock && d.bootMarked() {
+		d.logf("abroadd 本次开机已经起来过：不动")
+		return NotNeeded, nil
 	}
 	rules, err := pf.Render(cfg)
 	if err != nil {
@@ -284,7 +312,11 @@ func Run(ctx context.Context, d Deps) (Outcome, error) {
 		// 规则已经加载、pf 已经启用：保护已经生效；token 没存下只影响回国时能否释放这一个引用（重启后消失）。
 		d.logf("启用引用没能写下（%s）：回国后 pf 可能保持启用但锚点为空，无害，重启后消失", errClass(err))
 	}
-	d.logf("已加载断网规则（%d 行）", bytes.Count(rules, []byte("\n")))
+	if returnBlock {
+		d.logf("已加载回国拦截（%d 行）", bytes.Count(rules, []byte("\n")))
+	} else {
+		d.logf("已加载断网规则（%d 行）", bytes.Count(rules, []byte("\n")))
+	}
 	return Loaded, nil
 }
 

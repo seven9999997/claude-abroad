@@ -44,6 +44,7 @@ type realFlags struct {
 	vmArgs                                                  []string // 传给 abroad-vm run 的其他参数
 	manifest, manifestBase                                  string   // 完整性清单（M6-7）
 	launchControl                                           bool     // 打开启动管控（--launch-control）
+	rbKillStates                                            bool     // 回国拦截重新加载时定向清状态（--return-block-kill-states，M6-11b）
 	fakeClaudeDir                                           string   // 开发构建：只针对这个目录下的进程
 }
 
@@ -298,7 +299,9 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 	d, err := daemon.Start(context.Background(), daemon.Options{StateDir: f.stateDir, Sys: sys, Log: logger, SocketDir: f.socketDir,
 		ClaudeProxyAddr: ctl.proxyAddr, // 第四层的本机代理端口（M6-3b；只有带 --launch-control）
 		// M6-2b：运行时目录沿用 socket 目录（/var/run/claude-abroad，重启后清空）：给开机时的 guard 写标记、收养它的启用引用。
-		RunDir: f.socketDir})
+		RunDir: f.socketDir,
+		// M6-11b：回国拦截被重新加载时只清到那几段的连接状态（默认关，等真机结论）。
+		ReturnBlockKillStates: f.rbKillStates})
 	if err != nil {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)
 		return 1

@@ -72,6 +72,8 @@ public final class ConfirmPrompt: @unchecked Sendable {
     public let message: ErrorText
     public let preview: ClaudeprocPreview
     public let region: DaemonRegionChange?
+    /// 这次回国后会保留回国拦截（M6-11b）：确认框写出后果。
+    public let returnBlock: Bool
     public let expiresIn: Int64
     let request: HTTPRequest // 第一次请求（确认时带上确认码再发一次）
     private let lock = NSLock()
@@ -81,6 +83,7 @@ public final class ConfirmPrompt: @unchecked Sendable {
         message = ErrorText(raw: needed.error)
         preview = needed.preview
         region = needed.region
+        returnBlock = needed.returnBlock ?? false
         expiresIn = needed.expiresInS
         self.request = request
         code = needed.confirm

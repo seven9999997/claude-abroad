@@ -189,6 +189,11 @@ func (f *FakePF) run(_ context.Context, args []string, stdin []byte) ([]byte, []
 			f.enabled = false
 		}
 		return nil, []byte("pf disabled\n"), nil
+	case len(args) == 4 && args[0] == "-k" && args[2] == "-k":
+		if err := f.op("killto " + args[3]); err != nil {
+			return nil, nil, err
+		}
+		return nil, nil, nil
 	case j == "-F states":
 		if err := f.op("kill"); err != nil {
 			return nil, nil, err

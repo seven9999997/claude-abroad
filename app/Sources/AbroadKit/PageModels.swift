@@ -399,6 +399,8 @@ public final class SettingsModel: PageModel {
     @Published public private(set) var claudeDomains: DaemonClaudeDomainsView?
     /// 首次准备（M6-8a）；后台没打开时为 nil（不显示）。
     @Published public private(set) var prepare: DaemonPrepareStatus?
+    /// 回国拦截（M6-11b）；没打开启动管控时后台不给，为 nil（不显示）。
+    @Published public private(set) var returnBlock: DaemonReturnBlockStatus?
     public let env: EnvModel
 
     public let preference: NotificationPreference
@@ -417,7 +419,7 @@ public final class SettingsModel: PageModel {
     override public func load() async {
         let o = await client.status()
         state = LoadState.from(o)
-        if case .ok(let st) = o { security = st.security; resolverLock = st.resolverLock; claudeCode = st.claudeCode; integrity = st.integrity; prepare = st.prepare; launchControlOn = st.launchControl ?? (st.resolverLock != nil || st.claudeCode != nil) }
+        if case .ok(let st) = o { security = st.security; resolverLock = st.resolverLock; claudeCode = st.claudeCode; integrity = st.integrity; prepare = st.prepare; returnBlock = st.returnBlock; launchControlOn = st.launchControl ?? (st.resolverLock != nil || st.claudeCode != nil) }
         switch await client.restorePreview() {
         case .ok(let pv):
             processes = pv.processes ?? []
@@ -460,6 +462,14 @@ public final class SettingsModel: PageModel {
         if let r = g.recent, !r.isEmpty { lines.append(L10n.launchGuardRecent(r.count)) }
         lines.append(L10n.loginItemHint)
         return lines.joined(separator: "\n")
+    }
+    /// 回国拦截的文字（M6-11b）：是否生效、拦哪几段，加上后果那一句。状态里没有这一项时为 nil（不显示）。
+    public var returnBlockText: String? {
+        guard let r = returnBlock else { return nil }
+        let nets = r.nets ?? []
+        let head = !r.on ? L10n.returnBlockOff : (r.active ? L10n.returnBlockActive(nets) : L10n.returnBlockOn(nets))
+        if r.test == true { return head + "\n" + L10n.returnBlockTestTag }
+        return head + "\n" + L10n.returnBlockConsequence
     }
     /// 第一层（域名解析锁）的状态文字：生效、未写入、未生效（哪些域名什么问题）、有冲突。
     public var resolverLockText: String {

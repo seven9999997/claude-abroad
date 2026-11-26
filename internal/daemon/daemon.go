@@ -20,6 +20,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sync"
@@ -72,6 +73,8 @@ type Options struct {
 	// 否则可用”，规则也可以引用它们。只有开发工具（daemon-sim、测试）在构造时给；没有任何接口能打这个标记
 	// （m4-plan v2.12 决定 4）。
 	DevExits []string
+	// ReturnBlockKillStates：回国拦截被重新加载时只清掉目的地在那几段里的连接状态（M6-11b；默认关，等真机结论）。
+	ReturnBlockKillStates bool
 	// RunDir 是运行时目录（M6-2b，真实模式是 /var/run/claude-abroad）：给了就为开机时的 guard 另存参数
 	// （状态目录里的 guard-params.json）、写“本次开机已加载规则”的标记、收养 guard 取得的 pf 启用引用。空时都不做。
 	RunDir string
@@ -226,6 +229,8 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	ctl := &pf.Controller{R: s.PFRunner, Matcher: pf.PrintMatcher{User: s.PFUser, UID: s.PFUID}}
 	d.ppf = state.NewPatrolPF(ctl, d.store, &netWatch{inner: sysnet.NetSource(s.Ifaces), d: d}, s.PFUser, nil, d.stateEvent("pf"))
 	d.ppf.P.OnEvent = func(e pf.Event) { d.events.Add("patrol", string(e.Kind), e.Detail) }
+	d.ppf.P.KillReturnBlockStates = o.ReturnBlockKillStates
+	d.ppf.P.ReturnBlockNets = func() []netip.Prefix { return d.rbChoice().Nets } // M6-11b：按选择文件
 	d.gate = newGate(o.Clock)
 	d.gate.onEvent = func(kind, detail string) { d.events.Add("gate", kind, detail) }
 	// 出口复查（m4-plan M4-3）：只在状态是启用时运行；检查前先确认虚拟机在。

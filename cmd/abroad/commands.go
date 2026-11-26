@@ -218,6 +218,13 @@ func cmdStatus(a *app, args []string) int {
 				Done  bool     `json:"done"`
 				Notes []string `json:"notes"`
 			} `json:"prepare"`
+			ReturnBlock *struct {
+				On     bool     `json:"on"`
+				Active bool     `json:"active"`
+				Nets   []string `json:"nets"`
+				Test   bool     `json:"test"`
+				Note   string   `json:"note"`
+			} `json:"return_block"`
 		}
 		_ = json.Unmarshal(resp.Body, &st)
 		fmt.Fprintf(a.stdout, "状态：%s\n闸门：%s\n", st.State, map[bool]string{true: "开", false: "关"}[st.GateOpen])
@@ -250,6 +257,20 @@ func cmdStatus(a *app, args []string) int {
 			}
 			for _, n := range st.Prepare.Notes {
 				fmt.Fprintf(a.stdout, "首次准备：%s\n", n)
+			}
+		}
+		if rb := st.ReturnBlock; rb != nil { // M6-11b：回国拦截
+			nets := strings.Join(rb.Nets, "、")
+			if rb.Test {
+				nets += "（测试段，开发构建）"
+			}
+			switch {
+			case !rb.On:
+				fmt.Fprintln(a.stdout, "回国拦截：未启用（首次准备没完成，或已经卸载）")
+			case rb.Active:
+				fmt.Fprintf(a.stdout, "回国拦截：生效中，拦 %s。%s\n", nets, rb.Note)
+			default:
+				fmt.Fprintf(a.stdout, "回国拦截：已打开，回国后拦 %s。%s\n", nets, rb.Note)
 			}
 		}
 	})

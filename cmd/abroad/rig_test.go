@@ -45,6 +45,7 @@ type rigOpt struct {
 	main   bool // 主代理一侧：基准、假虚拟机、订阅抓取
 	claude bool // 进程表里有一个 Claude
 	reject bool // abroadd 认为对端是“其他用户”（连接被断开）
+	prep   bool // 打开首次准备（M6-11b：回国拦截随之打开）
 }
 
 func newRig(t *testing.T, o rigOpt) *rig {
@@ -62,6 +63,7 @@ func newRig(t *testing.T, o rigOpt) *rig {
 		r.sys.Procs.Add(procinfo.Proc{PID: 7100, PPID: 1, Path: exe, Args: []string{exe}}, claudeproc.ExitOnTerm, 0)
 	}
 	sys := r.sys.System()
+	sys.FirstRun = o.prep
 	if o.main {
 		r.vm, r.pr = &fakeVM{boot: "boot-1"}, &fakeProber{}
 		sys.Baseline = daemon.NewBaselineService(r.pr, r.dir)

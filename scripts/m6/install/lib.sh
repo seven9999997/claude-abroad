@@ -24,6 +24,10 @@ M6I_CLI_LINK=/usr/local/bin/abroad
 M6I_RESOLVER=/etc/resolver
 M6I_CC_DIR="/Library/Application Support/ClaudeCode/managed-settings.d"
 M6I_ANCHOR=com.apple/250.abroad
+# M6-11b：开发安装只管测试目标，回国拦截用测试段（文档保留地址，和 internal/pf/rbset_dev.go 一致；不出现真实的地址段）。
+M6I_RB_NETS="192.0.2.0/24,2001:db8:abd::/48"
+M6I_RB_RULES="block return out quick inet from any to 192.0.2.0/24
+block return out quick inet6 from any to 2001:db8:abd::/48"
 M6I_DNS_KEY=State:/Network/Service/claude-abroad/DNS
 DRY_RUN=${DRY_RUN:-0}
 
@@ -144,7 +148,8 @@ m6i_snap_files() {
     printf '%s\t%s\t%s\n' "$p" "$kind" "$sum" >>"$out"
   done < <(m6i_snap_paths)
 }
-# 系统部分的快照（真实模式；自测、空跑跳过）：专用用户、两个 LaunchDaemon 是否已注册、pf 锚点里的规则数、DNS 键、各网络服务的 IPv6。
+# 系统部分的快照（真实模式；自测、空跑跳过）：专用用户、两个 LaunchDaemon 是否已注册、pf 锚点里的规则数、pf 是否启用
+# （M6-11b：装上后回国拦截会启用 pf，卸载后要复原）、DNS 键、各网络服务的 IPv6。
 m6i_snap_system() {
   local out=$1
   [ "${M6I_MODE}" = real ] || { : >"$out"; return 0; }
@@ -153,6 +158,7 @@ m6i_snap_system() {
     printf 'launchd.d\t%s\n' "$(launchctl print "system/${M6I_LABEL_D}" >/dev/null 2>&1 && echo yes || echo no)"
     printf 'launchd.g\t%s\n' "$(launchctl print "system/${M6I_LABEL_G}" >/dev/null 2>&1 && echo yes || echo no)"
     printf 'pf.anchor\t%s\n' "$(pfctl -a "${M6I_ANCHOR}" -s rules 2>/dev/null | grep -c . || true)"
+    printf 'pf.enabled\t%s\n' "$(pfctl -s info 2>/dev/null | awk 'NR==1{print $2}')"
     printf 'dns.key\t%s\n' "$(printf 'show %s\nquit\n' "${M6I_DNS_KEY}" | scutil 2>/dev/null | grep -q 'No such key' && echo no || echo yes)"
     networksetup -listallnetworkservices 2>/dev/null | tail -n +2 | grep -v '^\*' | while IFS= read -r s; do
       printf 'ipv6\t%s\t%s\n' "$s" "$(networksetup -getinfo "$s" 2>/dev/null | awk -F': ' '/^IPv6: /{print $2}')"

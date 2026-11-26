@@ -109,7 +109,7 @@ func wireReal(d *rescue.Deps, o options, stderr io.Writer) error {
 	st := state.NewStore(o.stateDir)
 	d.Store = st
 	d.Claude = claudeproc.NewSystemService(sig, logf)
-	d.PF = &pf.Controller{R: pf.ExecRunner{}} // 默认锚点 com.apple/250.abroad；只用 Flush 和 Release
+	d.PF = &pf.Controller{R: pf.ExecRunner{}} // 默认锚点 com.apple/250.abroad；只用 Flush、Load（回国拦截那一组）和 Release
 	d.DNS = sysnet.MacDNS{R: run, Server: state.TakeoverDNS}
 	d.Routes = sysnet.MacRoutes{R: run, Iface: func() string { // 我们的 utun：状态文件里记着（abroadd 不在时通常已经消失）
 		if f, err := st.Load(); err == nil {

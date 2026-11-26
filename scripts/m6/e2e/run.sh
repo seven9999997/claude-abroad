@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # M6-9 开发安装的端到端（真机，m6-plan M6-9）：开发安装 → 在应用里配好主代理 → 启用 → 回国 → 再启用 → 重启电脑看开机时的
-# guard → 回国 → 卸载 → 对照安装前的快照和地区快照。分两段，中间由你重启电脑。
+# guard → 回国 → 已回国时再重启看 guard 加载回国拦截（M6-11b）→ 卸载 → 对照安装前的快照和地区快照。分三段，中间由你重启电脑。
 # 默认开发构建（abroadd 带 --dev-skip-claude-kill、--dev-resolver-test-domain）：不结束任何 Claude 进程，解析锁只锁测试域名，
 # 不写 Claude Code 的托管设置。对真实域名和真实程序的验证（R9、R18）用 scripts/m6/resolver，不在这里。
 # 会改动本机网络和时区、需要 sudo，启用期间和重启后的一段时间会断网（Claude Code 会话会断开）：由你在不需要会话的时候执行。
 # 会话里只做空跑、--check-only 和自测。用法见 README.md。
 #
 #   sudo scripts/m6/e2e/run.sh                  # 第一段（装到启用，最后请你重启）
-#   sudo scripts/m6/e2e/run.sh --after-reboot   # 第二段（重启后）
+#   sudo scripts/m6/e2e/run.sh --after-reboot   # 第二段（重启后；最后请你再重启一次）
+#   sudo scripts/m6/e2e/run.sh --after-reboot-2 # 第三段（已回国状态下重启后；卸载、收尾）
 #   scripts/m6/e2e/run.sh --check-only          # 前提检查（只读）
 #   DRY_RUN=1 scripts/m6/e2e/run.sh [--after-reboot]   # 空跑
 #
@@ -25,8 +26,9 @@ CHECK_ONLY=0
 case "${1:-}" in
   --check-only) CHECK_ONLY=1 ;;
   --after-reboot) PHASE=2 ;;
+  --after-reboot-2) PHASE=3 ;;
   "") ;;
-  *) echo "用法：sudo $0 [--check-only|--after-reboot]" >&2; exit 2 ;;
+  *) echo "用法：sudo $0 [--check-only|--after-reboot|--after-reboot-2]" >&2; exit 2 ;;
 esac
 
 OUT="${ROOT}/scripts/m6/e2e/out"
@@ -106,6 +108,25 @@ c_restored() {
   [ "${code}" = 204 ] || { echo "本机网络还没恢复（直连探测 ${code:-无应答}）"; return 1; }
   echo "已回国、解析锁仍在、本机网络恢复"
 }
+# M6-11b：回国拦截（开发安装只管测试目标：测试段）。状态里生效且是测试段、锚点里恰好是那两条（只读，经 pfcheck.sh）、
+# 不带凭据地连测试段的一个地址应立即失败（被拒；没有拦截时这个地址不可达，会一直等到超时）。
+RB_RULES="block return out quick inet from any to 192.0.2.0/24
+block return out quick inet6 from any to 2001:db8:abd::/48"
+c_rb() {
+  local st r t0 t1 rc
+  st=$(get /v1/status)
+  [ "$(jget "$st" return_block.active)" = true ] && [ "$(jget "$st" return_block.test)" = true ] || { echo "回国拦截应在生效且是测试段：$(jget "$st" return_block)"; return 1; }
+  r=$(bash scripts/m6/e2e/pfcheck.sh rules 2>/dev/null)
+  [ "$r" = "${RB_RULES}" ] || { echo "锚点里应恰好是测试段的两条：${r}"; return 1; }
+  t0=$(date +%s); curl -sS -m 8 --connect-timeout 8 -o /dev/null https://192.0.2.1/ 2>/dev/null; rc=$?; t1=$(date +%s)
+  [ "$rc" != 0 ] && [ $((t1 - t0)) -le 3 ] || { echo "连 192.0.2.1:443 应立即失败（退出码 ${rc}，用了 $((t1 - t0)) 秒）"; return 1; }
+  echo "回国拦截生效（测试段），锚点恰好两条，连测试段 $((t1 - t0)) 秒内被拒（curl 退出码 ${rc}）"
+}
+c_guard_rb() {
+  [ -f "${M6E_GUARD_LOG}" ] || { echo "没有 guard 的日志"; return 1; }
+  tail -20 "${M6E_GUARD_LOG}" | grep -q '已加载回国拦截' || { echo "guard 这次开机没有加载回国拦截：$(tail -3 "${M6E_GUARD_LOG}" | tr '\n' ' ')"; return 1; }
+  echo "开机时 guard 加载了回国拦截"
+}
 c_guard_loaded() {
   [ -f "${M6E_GUARD_LOG}" ] || { echo "没有 guard 的日志"; return 1; }
   tail -20 "${M6E_GUARD_LOG}" | grep -q '已加载断网规则' || { echo "guard 这次开机没有加载断网规则：$(tail -3 "${M6E_GUARD_LOG}" | tr '\n' ' ')"; return 1; }
@@ -156,6 +177,12 @@ if [ "${PHASE}" = 1 ]; then
   checkpoint P1 "在安装引导里添加来源（本地配置文件选 M6E_NODES 那份）→ 选节点 → 应用主代理（按提示在终端执行 sudo abroad …）→ 完成" c_mainproxy "从引导里配好主代理"
   checkpoint P2 "点“启用”（地区会变时确认框等 3 秒再确认）。这一步会接管本机网络" c_enabled "启用"
   checkpoint P3 "点“一键回国”并确认（开发构建只预览、不结束 Claude）" c_restored "回国：网络恢复、解析锁仍在"
+  check RB1 c_rb "回国后：回国拦截（测试段）" 15
+  # 定向清理连接状态的写法（M6-11b，abroadd 的 --return-block-kill-states 默认关，等这一步的结论）：只对测试段做。
+  step "定向清理：只清目的地在测试段里的连接状态（测试段没有真实连接）"
+  if [ "$DRY_RUN" = 1 ]; then DRY_RUN=1 bash scripts/m6/e2e/pfcheck.sh kill; res K1 跳过 "空跑"; else
+    if kout=$(bash scripts/m6/e2e/pfcheck.sh kill 2>&1); then res K1 通过 "pfctl -k 的写法被接受：$(printf '%s' "$kout" | tr '\n' ' ')"; else res K1 不通过 "pfctl -k 被拒：$(printf '%s' "$kout" | tr '\n' ' ')"; fi
+  fi
   # 第三层演练（M6-4b-1 返工）：开发安装带 --dev-fake-claude-dir，第三层只针对那个目录下的进程。已回国时在里面启动一个
   # 测试进程（/bin/sleep 的副本，以你自己的身份运行），应在几秒内被结束；本机真实的 Claude 不受影响。
   FAKE_DIR="/Library/Application Support/claude-abroad/fake-claude"
@@ -177,6 +204,41 @@ if [ "${PHASE}" = 1 ]; then
   printf 'WAIT: 重启电脑；开机后（先不要打开应用）执行 sudo scripts/m6/e2e/run.sh --after-reboot\n' >&3
   m6e_log "现在重启电脑。开机后会断网，直到 abroadd 接管（一般一两分钟）；如果一直没网，在终端执行 sudo scripts/m6/e2e/restore.sh（不需要网络）。"
   m6e_log "开机后（先不要打开应用）执行：sudo scripts/m6/e2e/run.sh --after-reboot"
+  exit 0
+fi
+
+# 卸载、核对地区、收尾（第三段最后）。
+finish() {
+  step "卸载（提示时输入 uninstall）"
+  if [ "$DRY_RUN" = 1 ]; then printf 'CHANGE: scripts/m6/install/uninstall.sh\n'; else
+    if bash scripts/m6/install/uninstall.sh; then res U1 通过 "卸载后和安装前的快照逐项一致（含 pf 锚点和 pf 是否启用）"; else res U1 不通过 "卸载后和安装前的快照不一致（见上）"; fi
+  fi
+  step "核对地区"
+  if [ "$DRY_RUN" = 1 ]; then res R1 跳过 "空跑"; else
+    cur="${M6E_STATE}/region.now"
+    rg_current "${SUDO_USER}" "${SUID}" >"${cur}"
+    d=$(rg_diff "${M6E_STATE}/region" "${cur}" | tr '\n' ' ')
+    if [ -z "$d" ]; then res R1 通过 "回国后地区和开始前一致"; else res R1 不通过 "回国后地区和开始前不一致：${d}（下面按快照还原）"; fi
+  fi
+  M6E_RESTORED=1
+  trap - EXIT
+  if [ "$DRY_RUN" = 1 ]; then DRY_RUN=1 bash "${RESTORE}"; else bash "${RESTORE}"; fi
+  m6e_log "结果汇总（${RESULTS}）："
+  [ "$DRY_RUN" = 1 ] || cat "${RESULTS}" >&2
+  m6e_log "请贴回：${RESULTS}，以及 scripts/m6/e2e/out/ 和 scripts/m6/install/out/ 下的日志"
+}
+
+# ---- 第三段（已回国状态下再重启一次之后，M6-11b）----
+if [ "${PHASE}" = 3 ]; then
+  if [ "$DRY_RUN" != 1 ] && [ "$(m6e_state_get phase)" != reboot2 ]; then
+    m6e_die "没有第二段的记录（${M6E_STATE}/phase 不是 reboot2）：先执行第二段"
+  fi
+  m6e_deadman_start "${DEADMAN_SECS}" "${RESTORE}"
+  m6e_arm_restore_trap "${RESTORE}"
+  m6e_state_set phase 3
+  check B3 c_guard_rb "已回国时重启：开机时的 guard 加载回国拦截"
+  check RB3 c_rb "重启后：回国拦截（测试段）" 180
+  finish
   exit 0
 fi
 
@@ -208,21 +270,12 @@ c_rescued() {
 check E2 c_rescued "应急程序之后" 15
 m6e_do launchctl bootstrap system "${D_PLIST}"
 check E3 c_restored "后台服务回来后仍是已回国（不重新接管）、解析锁仍在" 60
+check RB2 c_rb "应急程序之后：回国拦截（测试段）仍在" 30
 checkpoint P5 "打开应用，确认显示“已回国”" c_restored "应用里是已回国"
-step "卸载（提示时输入 uninstall）"
-if [ "$DRY_RUN" = 1 ]; then printf 'CHANGE: scripts/m6/install/uninstall.sh\n'; else
-  if bash scripts/m6/install/uninstall.sh; then res U1 通过 "卸载后和安装前的快照逐项一致"; else res U1 不通过 "卸载后和安装前的快照不一致（见上）"; fi
-fi
-step "核对地区"
-if [ "$DRY_RUN" = 1 ]; then res R1 跳过 "空跑"; else
-  cur="${M6E_STATE}/region.now"
-  rg_current "${SUDO_USER}" "${SUID}" >"${cur}"
-  d=$(rg_diff "${M6E_STATE}/region" "${cur}" | tr '\n' ' ')
-  if [ -z "$d" ]; then res R1 通过 "回国后地区和开始前一致"; else res R1 不通过 "回国后地区和开始前不一致：${d}（下面按快照还原）"; fi
-fi
+m6e_state_set phase reboot2
+m6e_deadman_stop # 重启会结束死人开关；第三段开头重新启动
 M6E_RESTORED=1
-trap - EXIT
-if [ "$DRY_RUN" = 1 ]; then DRY_RUN=1 bash "${RESTORE}"; else bash "${RESTORE}"; fi
-m6e_log "结果汇总（${RESULTS}）："
-[ "$DRY_RUN" = 1 ] || cat "${RESULTS}" >&2
-m6e_log "请贴回：${RESULTS}，以及 scripts/m6/e2e/out/ 和 scripts/m6/install/out/ 下的日志"
+step "第二段结束"
+printf 'WAIT: 再重启一次电脑（这次是已回国状态，看开机时的 guard 加载回国拦截）；开机后执行 sudo scripts/m6/e2e/run.sh --after-reboot-2\n' >&3
+m6e_log "现在再重启一次电脑（已回国状态，开机后不会断网）。开机后执行：sudo scripts/m6/e2e/run.sh --after-reboot-2"
+exit 0

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 	"testing/fstest"
+	"time"
 
 	"claude-abroad/internal/envcheck"
 )

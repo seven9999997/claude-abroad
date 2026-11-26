@@ -13,6 +13,9 @@
 ^rm -f /Library/Application Support/claude-abroad/fake-claude/claude-fake$
 ^launchctl bootstrap system /Library/LaunchDaemons/com\.claude-abroad\.dev\.abroadd\.plist$
 ^/Library/Application Support/claude-abroad/bin/abroad-rescue$
+# M6-11b：只清目的地在测试段里的连接状态（经 pfcheck.sh；测试段是文档保留地址，没有真实连接）。
+^pfctl -k 0\.0\.0\.0/0 -k 192\.0\.2\.0/24$
+^pfctl -k ::/0 -k 2001:db8:abd::/48$
 ^/usr/sbin/systemsetup -settimezone <快照里的时区>$
 ^/usr/bin/defaults write /Library/Preferences/com\.apple\.timezone\.auto Active -bool <快照里的值>（原来没有时 delete）$
 ^/bin/launchctl asuser <UID> /usr/bin/sudo -u <用户> /usr/bin/defaults write -g (AppleLanguages -array <快照里的语言>|AppleLocale -string <快照里的地区格式>)（原来没有时 delete）$

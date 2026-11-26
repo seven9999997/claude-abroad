@@ -271,6 +271,7 @@ public struct DaemonConfirmNeeded: Codable, Sendable {
     public var expiresInS: Int64
     public var preview: ClaudeprocPreview
     public var region: DaemonRegionChange?
+    public var returnBlock: Bool?
     enum CodingKeys: String, CodingKey {
         case error = "error"
         case code = "code"
@@ -278,6 +279,7 @@ public struct DaemonConfirmNeeded: Codable, Sendable {
         case expiresInS = "expires_in_s"
         case preview = "preview"
         case region = "region"
+        case returnBlock = "return_block"
     }
 }
 
@@ -682,11 +684,13 @@ public struct DaemonReturnBlockStatus: Codable, Sendable {
     public var on: Bool
     public var active: Bool
     public var nets: [String]?
+    public var test: Bool?
     public var note: String
     enum CodingKeys: String, CodingKey {
         case on = "on"
         case active = "active"
         case nets = "nets"
+        case test = "test"
         case note = "note"
     }
 }

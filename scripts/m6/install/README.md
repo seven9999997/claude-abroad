@@ -4,6 +4,9 @@
 代替以后的 `SMAppService` 注册。M6-9 的端到端也从这里开始。
 
 > **安装不会断网，也不会结束任何程序。** 装完是“已回国”状态：不加载断网规则、不接管网络。
+> **装上即生效（M6-11b）**：abroadd 第一次启动做完首次准备后，马上加载“回国拦截”并启用 pf（之前没启用时）。开发安装
+> 只管测试目标，拦的是测试段 `192.0.2.0/24`、`2001:db8:abd::/48`（文档保留地址，没有真实服务），本机真实的 Claude 和
+> 这台 Mac 上别的连接不受影响；pf 从此保持启用到卸载为止（卸载后按快照复原）。
 > 默认是开发构建：abroadd 带 `--launch-control`（打开启动管控）、`--dev-fake-claude-dir`（回国、卸载和第三层只针对
 > 安装目录下 `fake-claude` 里的测试进程，本机真实的 Claude 不受影响）和
 > `--dev-resolver-test-domain`（首次准备只锁测试域名 `lock-test.claude-abroad.invalid`，不写 Claude Code 的托管设置），
@@ -37,7 +40,13 @@ sudo scripts/m6/install/install.sh
 5. 应用复制到 `/Applications/ClaudeAbroad.app`，命令行链接 `/usr/local/bin/abroad`；已经有同名的都不覆盖。
 6. 注册 `com.claude-abroad.dev.guard`（开机时运行一次，按状态文件加载断网规则）和 `com.claude-abroad.dev.abroadd`（常驻）。
    abroadd 由它自己拉起和管理虚拟机，第一次启动时做首次准备（写解析锁）。
-7. 等 abroadd 起来，核对状态应为“已回国”、首次准备完成、完整性校验通过。
+7. 等 abroadd 起来，核对状态应为“已回国”、首次准备完成、完整性校验通过；回国拦截已生效且是测试段，锚点里恰好是这两条
+   （只读核对）：
+
+   ```
+   block return out quick inet from any to 192.0.2.0/24
+   block return out quick inet6 from any to 2001:db8:abd::/48
+   ```
 
 装好后以你自己的身份打开应用：`open /Applications/ClaudeAbroad.app`。
 
@@ -52,7 +61,7 @@ sudo scripts/m6/install/uninstall.sh
 3. 正常途径没走完时（abroadd 不在、卸载出错），按 [docs/emergency.md](../../../docs/emergency.md) 兜底：清空自己的 pf 锚点
    `com.apple/250.abroad`、删 DNS 键、按快照把原来是“自动”的 IPv6 改回来，按 abroadd 的记录删内容一致的解析锁和托管设置。
 4. 按安装记录删掉 plist、`_abroad`、命令行链接、应用（只删安装时放的）、各个目录。
-5. 和安装前的快照逐项对照：一致就删掉快照目录；不一致时列出差异、保留快照目录，退出码非零（可以重试卸载）。
+5. 和安装前的快照逐项对照（含 pf 锚点里的规则数和 pf 是否启用）：一致就删掉快照目录；不一致时列出差异、保留快照目录，退出码非零（可以重试卸载）。
 
 可以重复执行；没有安装记录时什么都不做。
 

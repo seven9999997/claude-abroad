@@ -28,7 +28,7 @@ import (
 const OpUninstall = "uninstall"
 
 // UninstalledFile 是“已卸载”的标记（状态目录里）。有它时启动管控一律允许。
-const UninstalledFile = "uninstalled"
+const UninstalledFile = state.UninstalledFile
 
 // Uninstaller 是安装器那一侧的卸载（注销后台服务、删除专用用户、目录、日志和凭据；M6-8 接上）。
 type Uninstaller interface {
@@ -115,6 +115,12 @@ func (d *Daemon) runUninstall(ctx context.Context) (UninstallResult, error) {
 		add("解除 Claude 启动管控", false, "")
 		return res, usererror.Wrap("记下已卸载", err, "请重试卸载。")
 	}
+	// 回国拦截（M6-11b）：已经回国时第 1 步不动 pf，锚点里的这一组和留下的启用引用在这里清掉、释放。标记先写：
+	// 之后巡检、guard、应急程序都不再加载这一组；这一步失败可以重试（重入是空操作）。
+	if err := d.m.DropReturnBlock(ctx); err != nil {
+		add("解除 Claude 启动管控", false, "")
+		return res, err
+	}
 	d.stopLaunchGuard()  // 第三层不再结束任何进程
 	if d.cproxy != nil { // 本机代理端口也不再需要（M6-5a 补审建议改）
 		d.cproxy.stop()
@@ -152,6 +158,9 @@ func (d *Daemon) uninstallPreview(ctx context.Context) (UninstallPreview, error)
 	}
 	if d.opts.Sys.ClaudeSettings != nil {
 		out.Removes = append(out.Removes, "Claude Code 的托管设置")
+	}
+	if d.opts.Sys.FirstRun {
+		out.Removes = append(out.Removes, "回国拦截（回国后拦 Anthropic 地址段的 pf 规则和它的启用引用）")
 	}
 	out.Removes = append(out.Removes, "启动管控", "后台服务、专用用户、日志和凭据")
 	return out, nil

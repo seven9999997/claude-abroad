@@ -213,6 +213,12 @@ public final class StatusModel: ObservableObject {
         return L10n.integrityAlert((r.problems ?? []).map { L10n.integrityItem($0.file, $0.kind) })
     }
 
+    /// 回国状态下回国拦截在生效时首页的说明（M6-11b）；其余情况为空。
+    public var returnBlockNotice: String? {
+        guard reachable, let st = status, st.state == "RESTORED", st.returnBlock?.active == true else { return nil }
+        return L10n.returnBlockHome
+    }
+
     /// 后台不可达时的说明。
     public var connectionText: String? {
         guard !reachable, let c = connection else { return nil }

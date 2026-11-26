@@ -39,6 +39,9 @@ struct SettingsView: View {
                 LabeledContent(L10n.claudeCodeTitle) {
                     Text(model.claudeCodeText).foregroundStyle(model.claudeCodeWarn ? .orange : .primary)
                 }
+                if let t = model.returnBlockText {
+                    LabeledContent(L10n.returnBlockTitle) { Text(t) }
+                }
                 if let t = model.prepareText {
                     LabeledContent(L10n.prepareTitle) { Text(t).foregroundStyle(model.prepareWarn ? .orange : .primary) }
                 }

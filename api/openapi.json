@@ -440,6 +440,9 @@
           },
           "region": {
             "$ref": "#/components/schemas/DaemonRegionChange"
+          },
+          "return_block": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1156,6 +1159,9 @@
             "type": "string"
           },
           "on": {
+            "type": "boolean"
+          },
+          "test": {
             "type": "boolean"
           }
         },

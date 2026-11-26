@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"claude-abroad/internal/claudeproc"
+	"claude-abroad/internal/pf"
 	"claude-abroad/internal/state"
 	"claude-abroad/internal/sysnet"
 )
@@ -44,9 +45,10 @@ type Claude interface {
 	KillClaude(ctx context.Context) error
 }
 
-// PF 是本项目自己的锚点：清空、释放启用引用。没有关闭 pf 的方法。
+// PF 是本项目自己的锚点：清空、加载（回国拦截那一组，M6-11b）、释放启用引用。没有关闭 pf 的方法。
 type PF interface {
 	Flush(ctx context.Context) error
+	Load(ctx context.Context, rules []byte) error
 	Release(ctx context.Context, token string) error
 }
 
@@ -117,7 +119,7 @@ func Run(ctx context.Context, d Deps) int {
 	if perr != nil {
 		hasPending = false
 	}
-	if records && f.State == state.Restored && !leftovers(f) && !hasPending {
+	if records && f.State == state.Restored && !leftovers(f, state.ReturnBlockMarked(d.Store.Dir) && state.ChooseReturnBlock(d.Store.Dir).Load) && !hasPending {
 		say("状态已经是“已回国”，没有要恢复的。")
 		return ExitOK
 	}
@@ -164,15 +166,32 @@ func Run(ctx context.Context, d Deps) int {
 		return fail(say, 3, "把状态文件写成“已回国”", err)
 	}
 	say("第 3 步 状态文件已写成“已回国”（之后后台服务被拉起来也不会重新接管）")
-	// ---- 4. 清空自己的锚点，释放启用引用 ----
-	if err := d.PF.Flush(ctx); err != nil {
-		return fail(say, 4, "清空本项目的 pf 锚点", err)
-	}
+	// ---- 4. 自己的锚点：清空并释放启用引用；首次准备做过、没卸载时换成回国拦截那一组并留一个（M6-11b） ----
 	toks := append([]string(nil), f.PFTokens...)
 	if d.GuardTokens != nil {
 		if gt, err := d.GuardTokens(); err == nil {
 			toks = append(toks, gt...)
 		}
+	}
+	choice := state.ChooseReturnBlock(d.Store.Dir) // 和 abroadd、guard 同一个来源（M6-11b）
+	rb := state.ReturnBlockMarked(d.Store.Dir) && choice.Load
+	if state.ReturnBlockMarked(d.Store.Dir) && choice.Note != "" {
+		say("第 4 步 %s", choice.Note)
+	}
+	var keep []string
+	if rb {
+		rules, err := pf.Render(choice.Config())
+		if err == nil {
+			err = d.PF.Load(ctx, rules) // 一次加载替换锚点里的内容，没有空窗
+		}
+		if err != nil {
+			return fail(say, 4, "把本项目的 pf 锚点换成回国拦截", err)
+		}
+		if n := len(toks); n > 0 { // 留最新的一个（开机 guard 的排在最后），其余释放
+			keep, toks = toks[n-1:], toks[:n-1:n-1]
+		}
+	} else if err := d.PF.Flush(ctx); err != nil {
+		return fail(say, 4, "清空本项目的 pf 锚点", err)
 	}
 	left := 0
 	for _, t := range toks {
@@ -180,9 +199,17 @@ func Run(ctx context.Context, d Deps) int {
 			left++ // 尽力而为：锚点已经清空，pf 保持启用无害，重启后消失（设计 6.2）
 		}
 	}
-	if left > 0 {
+	if records || rb {
+		if err := d.Store.Update(func(x *state.File) error { x.PFTokens, x.PFEnablePending = keep, false; return nil }); err != nil {
+			return fail(say, 4, "记下留下的启用引用", err)
+		}
+	}
+	switch {
+	case rb:
+		say("第 4 步 已把本项目的 pf 锚点换成回国拦截（只拦 Anthropic 的地址段，卸载时解除），留下 %d 个启用引用、释放了 %d 个（%d 个没能释放）", len(keep), len(toks)-left, left)
+	case left > 0:
 		say("第 4 步 已清空本项目的 pf 锚点；有 %d 个启用引用没能释放：pf 可能保持启用但锚点为空，无害，重启后消失", left)
-	} else {
+	default:
 		say("第 4 步 已清空本项目的 pf 锚点，释放了 %d 个启用引用（没有关闭 pf，没有动别人的规则）", len(toks))
 	}
 	// ---- 5. DNS 键和接管路由 ----
@@ -240,8 +267,8 @@ func Run(ctx context.Context, d Deps) int {
 		}
 		say("第 6 步 已恢复 IPv6、时区和语言")
 	}
-	// 全部做完：清掉原值（下一个周期重拍）。
-	if err := d.Store.MarkRestored(); err != nil {
+	// 全部做完：清掉原值（下一个周期重拍）；回国拦截留下的那个启用引用记着（卸载时释放）。
+	if err := d.Store.MarkRestoredKeep(keep); err != nil {
 		return fail(say, 6, "清理状态文件里的原值", err)
 	}
 	say("应急恢复完成。解析锁和 Claude Code 的托管设置没有动（那是管控，只有卸载才解除）。")
@@ -255,8 +282,13 @@ func fail(say func(string, ...any), step int, what string, err error) int {
 }
 
 // leftovers 报告“已回国”的状态文件里还有没处理完的东西（上一次应急恢复中途停下）。
-func leftovers(f state.File) bool {
-	return len(f.PFTokens) > 0 || len(f.IPv6Original) > 0 || f.Region.Original != nil || f.Region.Target != nil
+// leftovers 报告“已回国”的状态文件里还有没收拾的东西。保留回国拦截时（rb）留一个启用引用是正常的。
+func leftovers(f state.File, rb bool) bool {
+	keep := 0
+	if rb {
+		keep = 1
+	}
+	return len(f.PFTokens) > keep || len(f.IPv6Original) > 0 || f.Region.Original != nil || f.Region.Target != nil
 }
 
 func ignoreNotFound(err error) error {

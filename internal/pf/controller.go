@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"regexp"
 	"strings"
 )
@@ -156,6 +157,24 @@ func (c *Controller) Release(ctx context.Context, token string) error {
 func (c *Controller) KillStates(ctx context.Context) error {
 	if _, se, err := c.run(ctx, nil, "-F", "states"); err != nil {
 		return cmdErr("清状态", se, err)
+	}
+	return nil
+}
+
+// KillStatesToArgs 是“只清掉目的地在 dst 里的状态”的 pfctl 参数（M6-11b，architect 2026-11-27）：
+// `-k <同族的任意地址> -k <dst>`。macOS 上的确切效果待真机验证（scripts/m6 的核对步骤），验证之前默认不用。
+func KillStatesToArgs(dst netip.Prefix) []string {
+	all := "0.0.0.0/0"
+	if dst.Addr().Is6() {
+		all = "::/0"
+	}
+	return []string{"-k", all, "-k", dst.Masked().String()}
+}
+
+// KillStatesTo 只清掉目的地在 dst 里的状态（不动别的连接）。
+func (c *Controller) KillStatesTo(ctx context.Context, dst netip.Prefix) error {
+	if _, se, err := c.run(ctx, nil, KillStatesToArgs(dst)...); err != nil {
+		return cmdErr("清掉到回国拦截地址段的状态", se, err)
 	}
 	return nil
 }

@@ -51,6 +51,10 @@ for k in sys.argv[1].split("."):
     d = d[int(k)] if isinstance(d, list) and k.isdigit() and int(k) < len(d) else (d.get(k) if isinstance(d, dict) else None)
 print("" if d is None else (str(d).lower() if isinstance(d, bool) else d))' "$1" 2>/dev/null; }
 state() { get /v1/status | /usr/bin/python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("state",""))' 2>/dev/null; }
+# 回国拦截用的是不是测试段（M6-11b）：没有这一项（没打开管控）或是测试段时为 ok；真实段时为 real。
+rbset() { get /v1/status | /usr/bin/python3 -I -c 'import json,sys
+r=json.load(sys.stdin).get("return_block")
+print("ok" if not r or r.get("test") else "real")' 2>/dev/null; }
 
 # 以你自己的身份在登录 shell 里运行 claude -p（最多 120 秒）；返回 claude 的退出码，输出存到文件。
 run_claude() { # run_claude <名字> [环境变量…]
@@ -91,6 +95,7 @@ precheck() {
   local reasons=()
   [ -S "${API}" ] || reasons+=("连不上 abroadd（${API}）：先用 scripts/m6/install 装好开发安装")
   [ "$(state)" = ENABLED ] || reasons+=("abroadd 不在已启用状态：先在应用里启用（实测要在接管下做，绕开代理也不暴露本机 IP）")
+  [ "$(rbset)" = real ] && reasons+=("回国拦截用的是真实的 Anthropic 地址段（发布构建，或没有只管测试目标）：回国后这台 Mac 直连 Anthropic 会被拒，这里的 Claude Code 会话会断开。实测用开发安装（测试段）")
   [ "$(cc listening)" = true ] || reasons+=("本机代理端口 ${M6L_PORT} 没在听：$(cc listen_error)")
   [ -e "${M6L_STATE}" ] && reasons+=("上一次运行没有结束（${M6L_STATE}）：先执行 sudo scripts/m6/layer4/restore.sh")
   if [ -e "${M6L_FRAG}" ]; then reasons+=("${M6L_FRAG} 已经存在（开发安装默认不写它；可能是别的运行留下的）：确认后删除"); fi

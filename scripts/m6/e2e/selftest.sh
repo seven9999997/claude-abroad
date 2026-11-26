@@ -21,18 +21,22 @@ ST="/Library/Application Support/claude-abroad-m6e"
 [ -e "$ST" ] && bad "a. 运行前状态目录就存在"
 DRY_RUN=1 scripts/m6/e2e/run.sh >"${TMP}/e1" 2>/dev/null && ok "a. 第一段空跑退出码 0" || bad "a. 第一段空跑退出码非零"
 DRY_RUN=1 scripts/m6/e2e/run.sh --after-reboot >"${TMP}/e2" 2>/dev/null && ok "a. 第二段空跑退出码 0" || bad "a. 第二段空跑退出码非零"
+DRY_RUN=1 scripts/m6/e2e/run.sh --after-reboot-2 >"${TMP}/e3" 2>/dev/null && ok "a. 第三段空跑退出码 0" || bad "a. 第三段空跑退出码非零"
 DRY_RUN=1 scripts/m6/e2e/restore.sh >"${TMP}/r" 2>/dev/null && ok "a. restore.sh 空跑退出码 0" || bad "a. restore.sh 空跑退出码非零"
 [ -e "$ST" ] && bad "a. 空跑写了状态目录" || ok "a. 空跑没有写状态目录"
 
 # ---- b. 命令核对和反例 ----
-scripts/m6/e2e/check-commands.sh "${TMP}/e1" "${TMP}/e2" >"${TMP}/cc" && ok "b. 命令核对通过" || bad "b. 命令核对不通过：$(cat "${TMP}/cc")"
-neg() { if scripts/m6/e2e/check-commands.sh "$2" "$3" >/dev/null 2>&1; then bad "b. 反例没被拦下：$1"; else ok "b. 反例被拦下：$1"; fi; }
+scripts/m6/e2e/check-commands.sh "${TMP}/e1" "${TMP}/e2" "${TMP}/e3" >"${TMP}/cc" && ok "b. 命令核对通过" || bad "b. 命令核对不通过：$(cat "${TMP}/cc")"
+neg() { if scripts/m6/e2e/check-commands.sh "$2" "$3" "${4:-${TMP}/e3}" >/dev/null 2>&1; then bad "b. 反例没被拦下：$1"; else ok "b. 反例被拦下：$1"; fi; }
 { cat "${TMP}/e1"; echo 'CHANGE: pfctl -d'; } >"${TMP}/n1"; neg "碰 pf" "${TMP}/n1" "${TMP}/e2"
 { cat "${TMP}/e1"; echo 'CHANGE: open /Applications/ClaudeAbroad.app'; } >"${TMP}/n2"; neg "打开应用" "${TMP}/n2" "${TMP}/e2"
 { cat "${TMP}/e2"; echo 'CHANGE: rm -rf /Users'; } >"${TMP}/n3"; neg "清单外的命令" "${TMP}/e1" "${TMP}/n3"
 grep -v '死人开关 ' "${TMP}/e1" >"${TMP}/n4"; neg "第一段没有死人开关" "${TMP}/n4" "${TMP}/e2"
-awk '/^STEP: 检查点 P5/ { hold = $0; next } { print } /^CHANGE: scripts\/m6\/install\/uninstall\.sh$/ && hold { print hold; hold = "" }' "${TMP}/e2" >"${TMP}/n5"
-neg "卸载早于回国检查点" "${TMP}/e1" "${TMP}/n5"
+awk '/^STEP: 核对 B3/ { hold = $0; next } { print } /^CHANGE: scripts\/m6\/install\/uninstall\.sh$/ && hold { print hold; hold = "" }' "${TMP}/e3" >"${TMP}/n5"
+neg "卸载早于核对开机时的回国拦截" "${TMP}/e1" "${TMP}/e2" "${TMP}/n5"
+{ cat "${TMP}/e2"; echo 'CHANGE: scripts/m6/install/uninstall.sh'; } >"${TMP}/n9"; neg "第二段就卸载" "${TMP}/e1" "${TMP}/n9"
+{ cat "${TMP}/e1"; echo 'CHANGE: pfctl -k 0.0.0.0/0 -k 160.79.104.0/21'; } >"${TMP}/n10"; neg "定向清理碰真实的地址段" "${TMP}/n10" "${TMP}/e2"
+{ cat "${TMP}/e1"; echo 'CHANGE: pfctl -F states'; } >"${TMP}/n11"; neg "清全机的状态" "${TMP}/n11" "${TMP}/e2"
 grep -v '^CHANGE: kill <死人开关的 PID>$' "${TMP}/e1" >"${TMP}/n6"; neg "重启前没取消死人开关" "${TMP}/n6" "${TMP}/e2"
 awk '/^CHANGE: launchctl bootout / { hold = $0; next } { print } /bin\/abroad-rescue$/ && hold { print hold; hold = "" }' "${TMP}/e2" >"${TMP}/n7"
 neg "应急程序早于停掉后台服务" "${TMP}/e1" "${TMP}/n7"
@@ -48,6 +52,19 @@ for s in run.sh restore.sh lib.sh; do
     grep -nE '(^|[;&|(][[:space:]]*|then[[:space:]]+|do[[:space:]]+|^[[:space:]]+)(pfctl|networksetup|route|ifconfig|pkill|killall|open)[[:space:]]' >"${TMP}/d" &&
     bad "d. $s 里有不允许的命令：$(cat "${TMP}/d")" || ok "d. $s 没有直接碰网络、打开应用、按名字结束进程"
 done
+
+# M6-11b：pf 只在 pfcheck.sh 里，而且只有固定的三行；三段里都不出现真实的 Anthropic 地址段
+p=$(grep -nE '(^|[[:space:]])pfctl[[:space:]]' scripts/m6/e2e/pfcheck.sh | grep -v '^[0-9]*:#' | sed 's/^[0-9]*://; s/^[[:space:]]*//')
+want='rules) run QUERY pfctl -a com.apple/250.abroad -s rules ;;
+run CHANGE pfctl -k 0.0.0.0/0 -k 192.0.2.0/24 || exit 1
+run CHANGE pfctl -k ::/0 -k 2001:db8:abd::/48 ;;'
+[ "$p" = "$want" ] && ok "d. pfcheck.sh 里只有固定的三种 pf 命令" || bad "d. pfcheck.sh 里的 pf 命令不对：$p"
+bash scripts/m6/e2e/pfcheck.sh bogus >/dev/null 2>&1 && bad "d. pfcheck.sh 接受了别的参数" || ok "d. pfcheck.sh 不接受别的参数"
+if cat scripts/m6/e2e/run.sh scripts/m6/e2e/pfcheck.sh scripts/m6/e2e/commands.txt scripts/m6/e2e/README.md "${TMP}/e1" "${TMP}/e2" "${TMP}/e3" | grep -qE '160\.79\.104|2607:6bc0'; then
+  bad "d. 端到端里出现了真实的 Anthropic 地址段（开发构建只用测试段）"
+else
+  ok "d. 端到端里没有真实的 Anthropic 地址段"
+fi
 
 # ---- e. 开发安装脚本 ----
 scripts/m6/install/selftest.sh >"${TMP}/inst" 2>&1 && ok "e. 开发安装脚本的自测通过（$(grep -c '^✓' "${TMP}/inst") 项）" || bad "e. 开发安装脚本的自测不通过：$(grep '^✗' "${TMP}/inst" | head -3)"

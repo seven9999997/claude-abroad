@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"claude-abroad/internal/claudeproc"
+	"claude-abroad/internal/pf"
 	"claude-abroad/internal/region"
 	"claude-abroad/internal/state"
 	"claude-abroad/internal/sysnet"
@@ -63,6 +64,13 @@ func (p fPF) Flush(context.Context) error {
 	return p.r.do("pf.flush")
 }
 func (p fPF) Release(_ context.Context, tok string) error { return p.r.do("pf.release " + tok) }
+func (p fPF) Load(_ context.Context, rules []byte) error {
+	want, _ := pf.Render(state.ChooseReturnBlock(p.r.store.Dir).Config()) // 和 abroadd、guard 同一个来源
+	if !bytes.Equal(rules, want) {
+		p.r.seq = append(p.r.seq, "!load-not-return-block")
+	}
+	return p.r.do("pf.load")
+}
 
 type fDNS struct{ r *rec }
 
@@ -216,7 +224,7 @@ func TestOrder(t *testing.T) {
 		t.Fatal("应确认一次")
 	}
 	f := e.final(t)
-	if f.State != state.Restored || leftovers(f) {
+	if f.State != state.Restored || leftovers(f, false) {
 		t.Fatalf("最后应是干净的已回国：%+v", f)
 	}
 	if !e.loc.cur.Equal(original) {
@@ -287,7 +295,7 @@ func TestFailEachStepThenRetry(t *testing.T) {
 			if e.r.seq[1] != "claude.kill" || !strings.Contains(strings.Join(e.r.seq, "|"), "dns.remove") {
 				t.Fatalf("重试应从头走：%v", e.r.seq)
 			}
-			if f := e.final(t); f.State != state.Restored || leftovers(f) || !e.loc.cur.Equal(original) {
+			if f := e.final(t); f.State != state.Restored || leftovers(f, false) || !e.loc.cur.Equal(original) {
 				t.Fatalf("重试后结果应相同：%+v %+v", f, e.loc.cur)
 			}
 		})
@@ -443,5 +451,43 @@ func TestLockHolderKilled(t *testing.T) {
 	_ = cmd.Wait()
 	if code := e.run(); code != ExitOK {
 		t.Fatalf("持锁的进程没了之后应能走完：%d %s", code, e.out.String())
+	}
+}
+
+// M6-11b 验收 c：首次准备做过、没卸载 → 第 4 步换成回国拦截那一组（没有清空）、留最新的一个启用引用（开机 guard 的），
+// 其余释放，状态文件里记着它；否则清空并全部释放（TestOrder）。
+func TestReturnBlockKept(t *testing.T) {
+	for _, uninst := range []bool{false, true} {
+		e := newEnv(t)
+		e.enabled(t)
+		_ = os.WriteFile(filepath.Join(e.d.Store.Dir, state.PreparedFile), []byte("x\n"), 0o600)
+		_ = state.WriteReturnBlockSet(e.d.Store.Dir, pf.SetReal)
+		if uninst {
+			_ = os.WriteFile(filepath.Join(e.d.Store.Dir, state.UninstalledFile), []byte("x\n"), 0o600)
+		}
+		if code := e.run(); code != ExitOK {
+			t.Fatalf("退出码 %d：%s", code, e.out.String())
+		}
+		seq := strings.Join(e.r.seq, "|")
+		f := e.final(t)
+		if uninst {
+			if !strings.Contains(seq, "pf.flush|pf.release 11|pf.release 12|pf.release 77") || strings.Contains(seq, "pf.load") || len(f.PFTokens) != 0 {
+				t.Fatalf("卸载过：应清空并全部释放：%s %v", seq, f.PFTokens)
+			}
+			continue
+		}
+		if !strings.Contains(seq, "claude.kill|pf.load|pf.release 11|pf.release 12|dns.remove") || strings.Contains(seq, "pf.flush") || strings.Contains(seq, "!") {
+			t.Fatalf("应换组、留 77、释放其余：%s", seq)
+		}
+		if f.State != state.Restored || len(f.PFTokens) != 1 || f.PFTokens[0] != "77" || leftovers(f, true) {
+			t.Fatalf("状态文件应记着留下的那一个：%+v", f)
+		}
+		if !strings.Contains(e.out.String(), "回国拦截") {
+			t.Fatalf("输出应说明换成了回国拦截：%s", e.out.String())
+		}
+		// 再执行一次：没有要恢复的（留一个引用是正常的）
+		if code := e.run(); code != ExitOK || len(e.r.seq) != 0 {
+			t.Fatalf("第二次应什么都不做：%d %v", code, e.r.seq)
+		}
 	}
 }

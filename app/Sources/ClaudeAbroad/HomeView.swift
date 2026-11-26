@@ -22,6 +22,9 @@ struct HomeView: View {
             if let a = model.integrityAlert {
                 Banner(title: L10n.integrityAlertTitle, detail: a, symbol: "exclamationmark.octagon")
             }
+            if let n = model.returnBlockNotice {
+                Banner(title: L10n.returnBlockHomeTitle, detail: n, symbol: "hand.raised")
+            }
             if let p = model.protectionNote {
                 Banner(title: L10n.phaseError, detail: p, symbol: "exclamationmark.shield")
             }

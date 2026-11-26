@@ -62,6 +62,11 @@ type Patrol struct {
 	// OnToken、OnEvent 在 Patrol 持锁时被调用：回调里不能再调用 Patrol 的方法（会死锁）。
 	OnToken func(string)
 	OnEvent func(Event) // 可为 nil
+	// KillReturnBlockStates 打开时，回国拦截那一组被重新加载（原来不在或被别人改过）之后，只清掉目的地在这几段里的状态
+	// （M6-11b）：被清掉到重新加载之间连上这几段的连接靠已有的状态会一直通着。命令在 macOS 上的效果待真机验证，默认关。
+	KillReturnBlockStates bool
+	// ReturnBlockNets 给出回国拦截用的地址段（M6-11b：真实段或开发构建的测试段，abroadd 按选择文件给）；nil 时用真实段。
+	ReturnBlockNets func() []netip.Prefix
 	// OnApplied 在一轮成功应用（Ensure 无错）之后调用，参数是这轮的规则配置（M6-2b：abroadd 另存给开机时的
 	// guard、写“本次开机已加载”的标记）。同样在 Patrol 持锁时调用。可为 nil。
 	OnApplied func(Config)
@@ -94,6 +99,9 @@ func ReturnBlockConfig() Config { return Config{ReturnBlock: AnthropicNets} }
 func (p *Patrol) ApplyRestored(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if !p.restored { // 从接管模式换过来：上一模式的复核记录不适用
+		p.verifyExp, p.verifyShown, p.verifyConfirmed = nil, nil, false
+	}
 	p.paused, p.restored, p.protected = false, true, false
 	return p.step(ctx)
 }
@@ -171,6 +179,9 @@ func (p *Patrol) expected(ctx context.Context) ([]byte, error) {
 func (p *Patrol) Apply(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.restored {
+		p.verifyExp, p.verifyShown, p.verifyConfirmed = nil, nil, false
+	}
 	p.paused, p.restored, p.rbOK = false, false, false
 	return p.step(ctx)
 }
@@ -284,12 +295,31 @@ func (p *Patrol) step(ctx context.Context) error {
 // stepRestored 是回国拦截模式的一轮（调用方持锁）：期望是固定的那一组；复核不一致、主规则集不引用锚点都只记事件。
 func (p *Patrol) stepRestored(ctx context.Context) error {
 	p.protected = false
-	exp, err := Render(ReturnBlockConfig())
+	nets := AnthropicNets
+	if p.ReturnBlockNets != nil {
+		nets = p.ReturnBlockNets()
+	}
+	if len(nets) == 0 { // 不能退回成零值配置（那会生成接管规则）
+		p.rbOK = false
+		p.emit(Event{Kind: EvEnsureError, Detail: "回国拦截没有可用的地址段"})
+		return errors.New("回国拦截没有可用的地址段")
+	}
+	exp, err := Render(Config{ReturnBlock: nets})
 	if err != nil {
 		p.rbOK = false
 		p.emit(Event{Kind: EvEnsureError, Detail: "生成回国拦截规则失败"})
 		return err
 	}
+	// 防空转（architect 2026-11-27：和接管模式同一套）：同一组“期望加打印结果”连续两次重载都一样，就不再重载。
+	if p.verifyConfirmed && p.verifyShown != nil && bytes.Equal(exp, p.verifyExp) {
+		if st, serr := p.C.Status(ctx); serr == nil && st.Enabled && st.Referenced && bytes.Equal(st.AnchorRules, p.verifyShown) {
+			p.rbOK = false
+			p.emit(Event{Kind: EvVerifyFailed, Detail: "回国拦截：与上一轮相同，不再重载"})
+			return ErrVerifyFailed
+		}
+	}
+	prevExp, prevShown := p.verifyExp, p.verifyShown
+	p.verifyExp, p.verifyShown, p.verifyConfirmed = nil, nil, false
 	r, err := p.C.EnsureNoKill(ctx, exp, p.lastApplied)
 	if r.NewToken != "" {
 		p.OnToken(r.NewToken)
@@ -297,6 +327,13 @@ func (p *Patrol) stepRestored(ctx context.Context) error {
 	}
 	if r.Loaded {
 		p.emit(Event{Kind: EvReloaded, WasAbsent: r.WasAbsent, Foreign: r.Foreign, Detail: "回国拦截"})
+		if p.KillReturnBlockStates && (r.WasAbsent || r.Foreign) {
+			for _, n := range nets {
+				if kerr := p.C.KillStatesTo(ctx, n); kerr != nil {
+					p.emit(Event{Kind: EvEnsureError, Detail: "清掉到回国拦截地址段的状态失败"})
+				}
+			}
+		}
 	}
 	p.rbOK = err == nil
 	switch {
@@ -306,6 +343,8 @@ func (p *Patrol) stepRestored(ctx context.Context) error {
 			p.emit(Event{Kind: EvNotReferenced, Detail: "别的软件替换了系统防火墙规则（回国拦截不生效）"})
 		}
 	case errors.Is(err, ErrVerifyFailed):
+		p.verifyExp, p.verifyShown = exp, r.ShownAfterLoad
+		p.verifyConfirmed = prevShown != nil && bytes.Equal(prevExp, exp) && bytes.Equal(prevShown, r.ShownAfterLoad)
 		p.emit(Event{Kind: EvVerifyFailed, Detail: "回国拦截"})
 	default:
 		p.emit(Event{Kind: EvEnsureError, Detail: "回国拦截没能加载"})

@@ -379,3 +379,78 @@ func TestIntegrityOnlyLogged(t *testing.T) {
 		}
 	}
 }
+
+func (r *rig) mark(t *testing.T, name string) {
+	t.Helper()
+	if err := os.MkdirAll(r.stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(r.stateDir, name), []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// M6-11b 验收 a：guard 在回国状态下的情况表。
+func TestRestoredReturnBlockTable(t *testing.T) {
+	want, _ := pf.Render(pf.ReturnBlockConfig())
+	cases := []struct {
+		name      string
+		stateFile bool
+		prepared  bool
+		uninst    bool
+		load      bool
+	}{
+		{"已回国、准备过、未卸载", true, true, false, true},
+		{"已回国、没准备过", true, false, false, false},
+		{"已回国、已卸载", true, true, true, false},
+		{"没有状态文件（准备过也不动）", false, true, false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := newRig(t)
+			r.setParams(t, abroadCfg)
+			if c.stateFile {
+				r.setState(t, state.Restored)
+			}
+			if c.prepared {
+				r.mark(t, state.PreparedFile)
+				if err := state.WriteReturnBlockSet(r.stateDir, pf.SetReal); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if c.uninst {
+				r.mark(t, state.UninstalledFile)
+			}
+			o := r.run(t)
+			if !c.load {
+				if o != NotNeeded || len(r.fake.Calls()) != 0 {
+					t.Fatalf("不应碰 pf：%v %v", o, r.fake.Calls())
+				}
+				if _, err := os.Stat(filepath.Join(r.runDir, TokenFile)); !os.IsNotExist(err) {
+					t.Fatal("不应留启用引用")
+				}
+				return
+			}
+			if o != Loaded || !bytes.Equal(r.anchor(), want) || !r.fake.Active(pf.DefaultAnchor) {
+				t.Fatalf("应加载回国拦截：%v\n%s", o, r.anchor())
+			}
+			toks, err := TakeTokens(r.runDir)
+			if err != nil || len(toks) != 1 || len(r.fake.Tokens()) != 1 || toks[0] != r.fake.Tokens()[0] {
+				t.Fatalf("应留一个启用引用交 abroadd 收养：%v %v", toks, r.fake.Tokens())
+			}
+			if r.fake.Kills() != 0 {
+				t.Fatal("回国拦截不清状态")
+			}
+		})
+	}
+	// abroadd 本次开机已经起来过：不动
+	r := newRig(t)
+	r.setState(t, state.Restored)
+	r.mark(t, state.PreparedFile)
+	if err := WriteMarker(r.runDir, testBoot); err != nil {
+		t.Fatal(err)
+	}
+	if o := r.run(t); o != NotNeeded || len(r.fake.Calls()) != 0 {
+		t.Fatalf("abroadd 已经起来过：%v %v", o, r.fake.Calls())
+	}
+}

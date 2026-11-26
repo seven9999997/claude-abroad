@@ -8,17 +8,20 @@
 set -uo pipefail
 cd "$(dirname "$0")/../../.." || exit 1
 ROOT=$(pwd)
-[ $# -ge 2 ] || { echo "用法：$0 <第一段空跑输出> <第二段空跑输出>" >&2; exit 2; }
+[ $# -ge 3 ] || { echo "用法：$0 <第一段空跑输出> <第二段空跑输出> <第三段空跑输出>" >&2; exit 2; }
 fails=0
 bad() { echo "✗ $*"; fails=$((fails + 1)); }
 PAT=$(mktemp "${TMPDIR:-/tmp}/m6ecc.XXXXXX"); trap 'rm -f "${PAT:?}"' EXIT
 grep -v '^#' scripts/m6/e2e/commands.txt | grep . >"$PAT"
 BAN='(^|[ /])(pfctl|networksetup|route|ifconfig|pkill|killall|open)( |$)'
-for f in "$1" "$2"; do
+# 唯一允许的 pf 改动：只清测试段的连接状态（M6-11b，pfcheck.sh）
+PFOK='^pfctl -k (0\.0\.0\.0/0 -k 192\.0\.2\.0/24|::/0 -k 2001:db8:abd::/48)$'
+for f in "$1" "$2" "$3"; do
   c=$(sed -e "s|${ROOT}|<仓库>|g" "$f" | sed -n 's/^CHANGE: //p')
   [ -n "$c" ] || bad "$(basename "$f")：没有任何改动命令"
   while IFS= read -r l; do [ -n "$l" ] && bad "不在清单里：$l"; done < <(printf '%s\n' "$c" | grep -vE -f "$PAT")
-  while IFS= read -r l; do [ -n "$l" ] && bad "禁止的命令：$l"; done < <(printf '%s\n' "$c" | grep -E -- "$BAN")
+  while IFS= read -r l; do [ -n "$l" ] && bad "禁止的命令：$l"; done < <(printf '%s\n' "$c" | grep -E -- "$BAN" | grep -vE -- "$PFOK")
+  sed -n 's/^QUERY: //p' "$f" | grep -vE '^pfctl -a com\.apple/250\.abroad -s rules$' | grep -E -- "$BAN" | while IFS= read -r l; do echo "✗ 禁止的查询：$l"; done >>"$PAT.q"
 done
 awk '
   /^CHANGE: 死人开关/ { dm = NR; next }
@@ -37,11 +40,20 @@ awk '
   /^CHANGE: \/Library\/Application Support\/claude-abroad\/bin\/abroad-rescue$/ { if (!bo) print "应急演练应先停掉后台服务"; rs = NR }
   /^CHANGE: launchctl bootstrap / { if (!rs) print "应急程序之后才把后台服务注册回来"; bs = NR }
   /^STEP: 检查点 P5/ { p5 = NR }
-  /^CHANGE: scripts\/m6\/install\/uninstall\.sh$/ { if (!un) { if (!p5) print "卸载应在回国检查点之后"; un = NR } }
+  /^CHANGE: kill <死人开关的 PID>$/ { if (!p5) print "取消死人开关应在回国检查点之后"; stop = NR }
+  /^WAIT: 再重启一次电脑/ { if (!stop) print "请你再重启之前应先取消死人开关"; rb = NR }
+  /^CHANGE: scripts\/m6\/install\/uninstall\.sh$/ { print "卸载应在第三段" }
+  END { if (!rs || !bs) print "第二段没有应急演练"; if (!b1) print "第二段没有核对 guard"; if (!rb) print "第二段最后没有请你再重启" }' "$2" |
+  while IFS= read -r l; do echo "✗ 第二段：$l"; done >>"$PAT.o"
+awk '
+  /^CHANGE: 死人开关/ { dm = NR }
+  /^STEP: 核对 B3/ { if (!dm) print "核对 guard 之前应先启动死人开关"; b3 = NR }
+  /^CHANGE: scripts\/m6\/install\/uninstall\.sh$/ { if (!un) { if (!b3) print "卸载应在核对回国拦截之后"; un = NR } }
   /^CHANGE: \/usr\/sbin\/systemsetup -settimezone/ { if (!un) print "地区还原应在卸载之后"; rg = NR }
   /^CHANGE: rm -rf \/Library\/Application Support\/claude-abroad-m6e$/ { if (!rg) print "删状态目录之前应先还原地区"; rm = NR }
-  END { if (!rs || !bs) print "第二段没有应急演练"; if (!b1) print "第二段没有核对 guard"; if (!un) print "第二段没有卸载"; if (!rm) print "第二段最后没有执行 restore.sh" }' "$2" |
-  while IFS= read -r l; do echo "✗ 第二段：$l"; done >>"$PAT.o"
+  END { if (!b3) print "第三段没有核对开机时的回国拦截"; if (!un) print "第三段没有卸载"; if (!rm) print "第三段最后没有执行 restore.sh" }' "$3" |
+  while IFS= read -r l; do echo "✗ 第三段：$l"; done >>"$PAT.o"
+[ -s "$PAT.q" ] && cat "$PAT.q" >>"$PAT.o"; rm -f "${PAT:?}.q"
 if [ -s "$PAT.o" ]; then cat "$PAT.o"; fails=$((fails + $(wc -l <"$PAT.o"))); fi
 rm -f "${PAT:?}.o"
 [ $fails = 0 ] && echo "✓ 命令核对通过" || echo "命令核对：${fails} 处不符"

@@ -95,3 +95,16 @@ func TestCLIDomains(t *testing.T) {
 		t.Fatalf("不认识的参数应是参数错：%+v", x)
 	}
 }
+
+// M6-11b：status 写出回国拦截（打开了首次准备时）；没打开时不写。
+func TestCLIStatusReturnBlock(t *testing.T) {
+	r := newRig(t, rigOpt{prep: true})
+	x := r.run("status")
+	if x.code != ExitOK || !strings.Contains(x.out, "回国拦截：生效中，拦 160.79.104.0/21、2607:6bc0::/32") {
+		t.Fatalf("应写出回国拦截：%+v", x)
+	}
+	r2 := newRig(t, rigOpt{})
+	if x := r2.run("status"); strings.Contains(x.out, "回国拦截") {
+		t.Fatalf("没打开首次准备时不应写：%s", x.out)
+	}
+}

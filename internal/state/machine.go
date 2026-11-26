@@ -535,11 +535,8 @@ func (m *Machine) clearPF(ctx context.Context) error {
 	} else if err := m.D.PF.Flush(ctx); err != nil {
 		return err
 	}
-	// 开机时 guard 取得的启用引用（M6-2b）：先收养进状态文件，下面一起释放（回国干净）。
-	if ad, ok := m.D.PF.(interface{ AdoptExternal() error }); ok {
-		_ = ad.AdoptExternal()
-		_ = m.D.PF.SaveUnsaved()
-	}
+	// 开机时 guard 取得的启用引用（M6-2b）：先收养进状态文件，下面一起释放（保留回国拦截时留最新的一个）。
+	m.adoptExternal()
 	f, err := m.Store.Load()
 	if err != nil {
 		return err
@@ -561,6 +558,18 @@ func (m *Machine) clearPF(ctx context.Context) error {
 	}
 	// 锚点已清空（或只剩回国拦截）：释放是尽力而为（设计 6.2）。失败只记事件、从文件里去掉，不能卡在 RESTORING
 	// （否则每次开机都按“非 RESTORED”加载 pf）。
+	if err := m.releaseTokens(ctx, toks); err != nil {
+		return err
+	}
+	// ⑦ 写 RESTORED（清掉快照，下一个周期可以重拍）。
+	if rb {
+		return m.Store.MarkRestoredKeep(keep)
+	}
+	return m.Store.MarkRestored()
+}
+
+// releaseTokens 逐个释放（尽力而为，失败只记事件），每释放一个就从状态文件里去掉（重入时不重复释放）。
+func (m *Machine) releaseTokens(ctx context.Context, toks []string) error {
 	for _, tok := range toks {
 		if err := m.D.PF.Release(ctx, tok); err != nil {
 			if errors.Is(err, pf.ErrTokenInvalid) {
@@ -576,9 +585,57 @@ func (m *Machine) clearPF(ctx context.Context) error {
 			return err
 		}
 	}
-	// ⑦ 写 RESTORED（清掉快照，下一个周期可以重拍）。
-	if rb {
-		return m.Store.MarkRestoredKeep(keep)
+	return nil
+}
+
+// adoptExternal 收养开机时 guard 取得的启用引用（M6-2b）。
+func (m *Machine) adoptExternal() {
+	if ad, ok := m.D.PF.(interface{ AdoptExternal() error }); ok {
+		_ = ad.AdoptExternal()
+		_ = m.D.PF.SaveUnsaved()
+	}
+}
+
+// restoredReturnBlock 是 RESTORED 里保留回国拦截时的那一步（M6-11a、11b）：收养开机时 guard 的引用，加载这一组
+// （guard 已经加载过时不重复加载、pf 启用着时不重复取引用），然后只留最新的一个 token、其余释放。
+func (m *Machine) restoredReturnBlock(ctx context.Context) error {
+	m.adoptExternal()
+	if err := m.D.PF.ApplyRestored(ctx); err != nil {
+		return err
+	}
+	f, err := m.Store.Load()
+	if err != nil {
+		return err
+	}
+	if n := len(f.PFTokens); n > 1 {
+		return m.releaseTokens(ctx, f.PFTokens[:n-1:n-1])
+	}
+	return nil
+}
+
+// DropReturnBlock 解除回国拦截（M6-11b，卸载的“解除管控”一步调用；调用方先让开关变成关）：状态是 RESTORED 时清空锚点、
+// 释放状态文件里和 guard 留下的全部启用引用，巡检回到暂停。别的状态什么都不做（那时回国流程会按开关关来清）。可重入。
+func (m *Machine) DropReturnBlock(ctx context.Context) error {
+	if err := m.lock(); err != nil {
+		return err
+	}
+	defer m.unlock()
+	f, err := m.Store.Load()
+	if err != nil {
+		return err
+	}
+	if f.State != Restored {
+		return nil
+	}
+	if err := m.D.PF.Flush(ctx); err != nil {
+		return usererror.Wrap("清除回国拦截", err, "再执行一次卸载即可重试。")
+	}
+	m.adoptExternal()
+	if f, err = m.Store.Load(); err != nil {
+		return err
+	}
+	if err := m.releaseTokens(ctx, f.PFTokens); err != nil {
+		return err
 	}
 	return m.Store.MarkRestored()
 }

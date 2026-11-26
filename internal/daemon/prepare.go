@@ -9,6 +9,7 @@ import (
 
 	"claude-abroad/internal/claudecfg"
 	"claude-abroad/internal/resolverlock"
+	"claude-abroad/internal/state"
 )
 
 // 首次准备（M6-8a，设计 10.2、11.4）：abroadd 写入 Claude 启动管控里的两份静态文件——Claude 域名解析锁（第一层）和
@@ -25,7 +26,7 @@ import (
 //   - 开发构建只管测试目标时（System.PrepareTestOnly），不写 Claude Code 的托管设置（不影响本机真实的 Claude Code）。
 
 // PreparedFile 是“首次准备做完了”的标记（状态目录里）。
-const PreparedFile = "prepared"
+const PreparedFile = state.PreparedFile
 
 // PrepareStatus 是首次准备的结果（status.prepare）。
 type PrepareStatus struct {
@@ -69,6 +70,7 @@ func (d *Daemon) tryPrepare() PrepareStatus {
 	defer func() { d.prepareSt.Store(ps) }()
 	if _, err := os.Stat(d.preparedMarker()); err == nil {
 		ps.Done = true
+		d.writeReturnBlockSet(false) // M6-11b 之前做的首次准备没有选择文件：补写
 		d.backfillLock(ps) // M6-12：新版本的内置名单比写入时多出来的，补写（冲突时不算完成）
 		return *ps
 	}
@@ -119,6 +121,7 @@ func (d *Daemon) tryPrepare() PrepareStatus {
 		return *ps
 	}
 	ps.Done = true
+	d.writeReturnBlockSet(true)
 	d.events.Add("prepare", "done", "")
 	return *ps
 }

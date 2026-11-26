@@ -84,14 +84,14 @@ func TestSource(t *testing.T) {
 			}
 		}
 	}
-	// pf 只经 rescue.PF：只有 Flush 和 Release 两个方法
+	// pf 只经 rescue.PF：只有 Flush、Load（回国拦截那一组，M6-11b）和 Release 三个方法
 	pfType := reflect.TypeOf((*rescue.PF)(nil)).Elem()
 	var ms []string
 	for i := 0; i < pfType.NumMethod(); i++ {
 		ms = append(ms, pfType.Method(i).Name)
 	}
-	if !reflect.DeepEqual(ms, []string{"Flush", "Release"}) {
-		t.Fatalf("rescue.PF 只能有 Flush、Release：%v", ms)
+	if !reflect.DeepEqual(ms, []string{"Flush", "Load", "Release"}) {
+		t.Fatalf("rescue.PF 只能有 Flush、Load、Release：%v", ms)
 	}
 	// main.go 里 pf.Controller 只用默认锚点（不设 Anchor 字段）
 	f, _ := parser.ParseFile(token.NewFileSet(), "main.go", nil, 0)

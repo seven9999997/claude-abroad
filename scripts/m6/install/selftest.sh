@@ -190,6 +190,16 @@ neg "源码里有 route" "${TMP}/i.dry" "${TMP}/u.dry" "${TMP}/badsrc"
 cp scripts/m6/install/*.sh "${TMP}/badsrc/" && echo 'rm -rf "$X"' >>"${TMP}/badsrc/lib.sh"
 neg "源码里 rm -rf 没有保护" "${TMP}/i.dry" "${TMP}/u.dry" "${TMP}/badsrc"
 
+# M6-11b：开发安装的回国拦截只用测试段——脚本、命令清单、空跑输出里都不出现真实的 Anthropic 地址段；安装后核对测试段
+if cat scripts/m6/install/install.sh scripts/m6/install/uninstall.sh scripts/m6/install/lib.sh scripts/m6/install/check-commands.sh scripts/m6/install/README.md scripts/m6/install/commands.txt "${TMP}/i.dry" "${TMP}/u.dry" | grep -qE '160\.79\.104|2607:6bc0'; then
+  bad "M6-11b. 开发安装里出现了真实的 Anthropic 地址段"
+else
+  ok "M6-11b. 开发安装里没有真实的 Anthropic 地址段"
+fi
+grep -qF 'QUERY: curl --unix-socket /var/run/claude-abroad/api.sock http://abroadd/v1/status（return_block 应为 on、active、test，nets=192.0.2.0/24,2001:db8:abd::/48）' "${TMP}/i.dry" &&
+  grep -qF 'QUERY: pfctl -a com.apple/250.abroad -s rules' "${TMP}/i.dry" && ok "M6-11b. 安装后只读核对回国拦截是测试段" || bad "M6-11b. 安装后没有核对回国拦截"
+grep -qF "pf.enabled" scripts/m6/install/lib.sh && ok "M6-11b. 快照里有 pf 的启用状态" || bad "M6-11b. 快照里没有 pf 的启用状态"
+
 echo
 [ $fails = 0 ] && echo "自测全部通过" || echo "自测：${fails} 处不通过"
 exit $((fails > 0))

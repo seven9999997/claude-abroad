@@ -132,6 +132,8 @@ type ConfirmNeeded struct {
 	ExpiresInS int                `json:"expires_in_s"`
 	Preview    claudeproc.Preview `json:"preview"`
 	Region     *RegionChange      `json:"region,omitempty"` // 地区会变的操作：从 A 变为 B
+	// ReturnBlock：这次回国后会保留回国拦截（M6-11b；确认框写“回国后，本机任何程序（包括浏览器）都连不上这些地址”）。
+	ReturnBlock bool `json:"return_block,omitempty"`
 }
 
 func (d *Daemon) preview(ctx context.Context) (claudeproc.Preview, error) {
@@ -173,11 +175,12 @@ func (d *Daemon) handleRestore(w http.ResponseWriter, r *http.Request) {
 		}
 		d.opts.logf("恢复本机网络的预览：要结束的 Claude 进程 %d 个，没能确认的 %d 个", len(pv.Processes), len(pv.Unverified))
 		writeJSON(w, http.StatusConflict, ConfirmNeeded{
-			Code:       api.CodeNeedsConfirm,
-			Error:      "恢复本机网络需要确认：会强制结束下面的 Claude 进程，未保存的内容会丢失。确认后带上确认码再调用一次（60 秒内有效）。",
-			Confirm:    d.confirms.issue(OpRestore, digest),
-			ExpiresInS: int(ConfirmTTL / time.Second),
-			Preview:    pv,
+			Code:        api.CodeNeedsConfirm,
+			Error:       "恢复本机网络需要确认：会强制结束下面的 Claude 进程，未保存的内容会丢失。确认后带上确认码再调用一次（60 秒内有效）。",
+			Confirm:     d.confirms.issue(OpRestore, digest),
+			ExpiresInS:  int(ConfirmTTL / time.Second),
+			Preview:     pv,
+			ReturnBlock: d.returnBlockOn(),
 		})
 		return
 	}

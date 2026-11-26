@@ -199,11 +199,21 @@ print(d.get("state",""), "prepare=%s" % p.get("done"), "integrity=%s/%s" % (i.ge
     "RESTORED prepare=True integrity=True/True") ;;
     *) m6i_die "abroadd 的状态不对（应为 RESTORED、首次准备完成、完整性校验通过）：${chk}" ;;
   esac
+  # M6-11b：装上即生效——回国拦截已加载（开发构建只管测试目标：测试段），只读核对，不改任何东西
+  rb=$(printf '%s' "${st}" | /usr/bin/python3 -I -c 'import json,sys
+r=(json.load(sys.stdin).get("return_block") or {}); print("on=%s active=%s test=%s nets=%s" % (r.get("on"), r.get("active"), r.get("test"), ",".join(r.get("nets") or [])))' 2>/dev/null)
+  m6i_log "回国拦截：${rb}"
+  [ "${rb}" = "on=True active=True test=True nets=${M6I_RB_NETS}" ] || m6i_die "回国拦截应已生效且是测试段（${M6I_RB_NETS}）：${rb}"
+  anchor=$(pfctl -a "${M6I_ANCHOR}" -s rules 2>/dev/null)
+  m6i_log "锚点里的规则：${anchor}"
+  [ "${anchor}" = "${M6I_RB_RULES}" ] || m6i_die "锚点里应恰好是测试段的两条回国拦截：${anchor}"
 else
   m6i_say QUERY "curl --unix-socket ${API} http://abroadd/v1/status（应为 RESTORED、prepare.done、integrity.ok）"
+  m6i_say QUERY "curl --unix-socket ${API} http://abroadd/v1/status（return_block 应为 on、active、test，nets=${M6I_RB_NETS}）"
+  m6i_q pfctl -a "${M6I_ANCHOR}" -s rules
 fi
 m6i_do rm -f "$(P "${M6I_SNAP}")/installing"
 trap - EXIT
-m6i_log "安装完成（开发构建：不结束 Claude 进程、解析锁只锁测试域名、不写 Claude Code 的托管设置）。"
+m6i_log "安装完成（开发构建：不结束 Claude 进程、解析锁只锁测试域名、不写 Claude Code 的托管设置、回国拦截只拦测试段）。"
 m6i_say WAIT "以你自己的身份（不要 sudo）打开应用：open ${M6I_APP}；卸载：sudo scripts/m6/install/uninstall.sh"
 exit 0

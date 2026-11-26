@@ -12,6 +12,9 @@ struct ConfirmSheet: View {
             if let prompt = flow.prompt {
                 if flow.refreshed { Text(L10n.confirmRefreshed).foregroundStyle(.orange) }
                 ErrorBlock(text: prompt.message)
+                if prompt.returnBlock { // M6-11b：回国后保留回国拦截
+                    Text(L10n.returnBlockConsequence).foregroundStyle(.orange)
+                }
                 if let r = prompt.region {
                     Text(L10n.regionChange + "：" + L10n.regionFromTo(r.from, r.to))
                 }

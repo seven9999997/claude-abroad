@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -476,5 +477,112 @@ func TestMatcherReturnBlock(t *testing.T) {
 	}
 	if m.Same(want, Status{AnchorRules: []byte("block return out quick inet from any to 160.79.104.0/21\n")}) {
 		t.Fatal("少一行应判不同")
+	}
+}
+
+// neverSame 是打印和期望永远对不上的比对器（模拟真机打印格式和比对器不一致）。
+type neverSame struct{}
+
+func (neverSame) Present(st Status) bool       { return len(ruleLines(st.AnchorRules)) > 0 }
+func (neverSame) Same(_ []byte, _ Status) bool { return false }
+
+// architect 2026-11-27：回国拦截模式同样防空转——打印和期望对不上时最多重载两次，之后不再重载；被清掉仍重新加载；
+// 别人写了别的内容时下一轮重载恢复。
+func TestPatrolRestoredVerifyNoReloadLoop(t *testing.T) {
+	e := newPatrolEnv(t)
+	ctx := context.Background()
+	e.p.C.Matcher = neverSame{}
+	var loads []int
+	for i := range 4 {
+		e.f.ResetCalls()
+		var err error
+		if i == 0 {
+			err = e.p.ApplyRestored(ctx)
+		} else {
+			err = e.p.Step(ctx)
+		}
+		if !errors.Is(err, ErrVerifyFailed) {
+			t.Fatalf("第 %d 轮应 ErrVerifyFailed：%v", i+1, err)
+		}
+		n := 0
+		for _, op := range e.f.Calls() {
+			if op == "load" {
+				n++
+			}
+		}
+		loads = append(loads, n)
+		if e.p.ReturnBlockActive() {
+			t.Fatalf("第 %d 轮不应报告生效", i+1)
+		}
+	}
+	if !slices.Equal(loads, []int{1, 1, 0, 0}) || e.f.Kills() != 0 {
+		t.Fatalf("只有前两轮加载、从不清状态：%v kills=%d", loads, e.f.Kills())
+	}
+	e.f.ClearAnchor()
+	e.f.ResetCalls()
+	_ = e.p.Step(ctx)
+	if !slices.Contains(e.f.Calls(), "load") {
+		t.Fatal("锚点被清后仍应重新加载")
+	}
+
+	// 别人写了别的内容：下一轮重载恢复
+	e2 := newPatrolEnv(t)
+	foreign := []byte("pass out quick all\n")
+	e2.f.AfterNextLoad(func() { _ = (&Controller{R: e2.f}).Load(ctx, foreign) })
+	if err := e2.p.ApplyRestored(ctx); !errors.Is(err, ErrVerifyFailed) {
+		t.Fatalf("第 1 轮复核应看到别人的内容：%v", err)
+	}
+	if err := e2.p.Step(ctx); err != nil || !e2.p.ReturnBlockActive() {
+		t.Fatalf("第 2 轮应重载恢复：%v", err)
+	}
+	want, _ := Render(ReturnBlockConfig())
+	if !bytes.Equal(e2.f.Raw(DefaultAnchor), want) {
+		t.Fatal("锚点应是回国拦截那一组")
+	}
+}
+
+// M6-11b 验收 f：定向清状态默认关；打开时只在回国拦截被重新加载（原来不在或被别人改过）后，对每一段各清一次，参数是
+// “同族任意地址到这一段”，不清全机的状态。
+func TestPatrolReturnBlockKillStates(t *testing.T) {
+	if got := KillStatesToArgs(netip.MustParsePrefix("160.79.104.0/21")); !slices.Equal(got, []string{"-k", "0.0.0.0/0", "-k", "160.79.104.0/21"}) {
+		t.Fatalf("IPv4 参数：%v", got)
+	}
+	if got := KillStatesToArgs(netip.MustParsePrefix("2607:6bc0::/32")); !slices.Equal(got, []string{"-k", "::/0", "-k", "2607:6bc0::/32"}) {
+		t.Fatalf("IPv6 参数：%v", got)
+	}
+	ctx := context.Background()
+	count := func(calls []string) int {
+		n := 0
+		for _, c := range calls {
+			if strings.HasPrefix(c, "killto ") {
+				n++
+			}
+		}
+		return n
+	}
+	// 默认关
+	e := newPatrolEnv(t)
+	_ = e.p.ApplyRestored(ctx)
+	e.f.ClearAnchor()
+	_ = e.p.Step(ctx)
+	if n := count(e.f.Calls()); n != 0 {
+		t.Fatalf("默认不应清：%v", e.f.Calls())
+	}
+	// 打开
+	e = newPatrolEnv(t)
+	e.p.KillReturnBlockStates = true
+	_ = e.p.ApplyRestored(ctx) // 第一次加载（锚点原来是空的）
+	if c := e.f.Calls(); count(c) != 2 || !slices.Contains(c, "killto 160.79.104.0/21") || !slices.Contains(c, "killto 2607:6bc0::/32") || e.f.Kills() != 0 {
+		t.Fatalf("应只对两段各清一次、不清全机：%v kills=%d", c, e.f.Kills())
+	}
+	e.f.ResetCalls()
+	_ = e.p.Step(ctx) // 没变：不加载、不清
+	if count(e.f.Calls()) != 0 {
+		t.Fatalf("没有重新加载时不应清：%v", e.f.Calls())
+	}
+	e.f.ClearAnchor()
+	_ = e.p.Step(ctx)
+	if count(e.f.Calls()) != 2 {
+		t.Fatalf("被清掉后重新加载应再清：%v", e.f.Calls())
 	}
 }
