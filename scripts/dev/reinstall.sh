@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # 一条命令构建并安装或升级开发版（architect 2026-11-27；v0.71 起已装过时原地升级）：
 #   构建（开发构建 + 完整性清单）→ 组装 payload → 打包应用 →
-#   已装过：原地升级（sudo install.sh --upgrade，保留主代理和设置）；
+#   已装过：原地升级（sudo install.sh --upgrade，保留主代理和设置）→ 升级成功（或已经是这个版本）后以你自己的身份
+#     把新应用放进“应用程序”（scripts/dev/build-app.sh --place-only，放置逻辑只在那一份里）；升级被拒或失败时不放，
+#     应用和后台服务保持同一个版本；
 #   安装目录不在、只剩安装前的快照：卸载（只重做对照、删快照）→ 前提检查 → 安装；
 #   没装过：前提检查 → 安装。
 # 只编排已经审过的脚本，不新增任何改系统的命令；不传 --yes，不跳过各脚本自己的交互确认。
@@ -11,7 +13,8 @@
 #
 # 自测用（只在 DRY_RUN=1 时生效）：REINSTALL_TEST_EUID 假装的用户号，REINSTALL_TEST_INSTALLED=0|1 假装安装目录在不在，
 # REINSTALL_TEST_SNAP_ONLY=1 假装安装目录不在、只剩快照，
-# REINSTALL_TEST_FAIL_AT=<1–6> 让第几步失败（REINSTALL_TEST_RC 指定失败时的退出码，默认 1）。
+# REINSTALL_TEST_OLD_BUILD、REINSTALL_TEST_NEW_BUILD 升级前后的 build.json（结尾提示的版本号），
+# REINSTALL_TEST_FAIL_AT=<1–6> 让第几步失败（装过时第 5 步是放进“应用程序”；REINSTALL_TEST_RC 指定失败时的退出码，默认 1）。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "${ROOT}" || exit 1
@@ -32,7 +35,8 @@ if [ "${DRY_RUN}" = 1 ]; then
   snap_only=0
   [ "${REINSTALL_TEST_SNAP_ONLY:-0}" = 1 ] && installed=0 && snap_only=1
 else
-  for v in REINSTALL_TEST_EUID REINSTALL_TEST_INSTALLED REINSTALL_TEST_FAIL_AT REINSTALL_TEST_SNAP_ONLY REINSTALL_TEST_RC; do
+  for v in REINSTALL_TEST_EUID REINSTALL_TEST_INSTALLED REINSTALL_TEST_FAIL_AT REINSTALL_TEST_SNAP_ONLY REINSTALL_TEST_RC \
+    REINSTALL_TEST_OLD_BUILD REINSTALL_TEST_NEW_BUILD; do
     [ -z "${!v:-}" ] || { say "${v} 只能在空跑（DRY_RUN=1）的自测里用"; exit 2; }
   done
 fi
@@ -84,12 +88,31 @@ step "组装 payload（程序、镜像、清单、安装脚本）" "看上面的
   scripts/dev/payload.sh
 step "打包应用（带 payload：之后可以在应用里升级后台服务）" "看上面的错误，修好后重新运行本脚本。" \
   scripts/dev/app-bundle.sh --payload scripts/dev/out/payload
+# 版本号：build.json 的 commit 和构建时间（读不到时写“未知版本”）
+ver() {
+  local c t
+  c=$(/usr/bin/plutil -extract commit raw -o - "$1" 2>/dev/null) || c=""
+  t=$(/usr/bin/plutil -extract build_time raw -o - "$1" 2>/dev/null) || t=""
+  if [ -n "$c" ]; then printf '%s（构建于 %s）' "$c" "${t:-时间不明}"; else printf '未知版本'; fi
+}
 if [ "${installed}" = 1 ]; then
+  OLD_BUILD="${INST}/build.json" NEW_BUILD="${INST}/build.json"
+  [ "${DRY_RUN}" = 1 ] && OLD_BUILD=${REINSTALL_TEST_OLD_BUILD:-${OLD_BUILD}} NEW_BUILD=${REINSTALL_TEST_NEW_BUILD:-scripts/dev/out/payload/build.json}
+  old_ver=$(ver "${OLD_BUILD}")
   UPGRADE_STEP=1
   step "原地升级现在装着的开发版（主代理和设置保留）" "" \
     sudo scripts/m6/install/install.sh --upgrade
   UPGRADE_STEP=
-  say "完成。后台服务已升级，主代理和设置都保留，不用重新配置。"
+  new_ver=$(ver "${NEW_BUILD}")
+  # 升级成功（或已经是这个版本）才放应用：应用和后台服务保持同一个版本
+  step "把新应用放进“应用程序”（以你自己的身份）" "后台服务已经升级好了，只是应用没有更新：照上面的提示处理后运行 scripts/dev/build-app.sh --place-only。" \
+    scripts/dev/build-app.sh --place-only
+  if [ "${old_ver}" = "${new_ver}" ] && [ "${new_ver}" != 未知版本 ]; then
+    say "完成。后台服务已经是 ${new_ver}，没有变；主代理和设置都保留。"
+  else
+    say "完成。后台服务从 ${old_ver} 升到 ${new_ver}，主代理和设置都保留，不用重新配置。"
+  fi
+  say "应用也已更新到同一个版本：请退出并重新打开应用。"
   exit 0
 fi
 if [ "${snap_only}" = 1 ]; then

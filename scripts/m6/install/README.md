@@ -58,6 +58,8 @@ sudo scripts/m6/install/install.sh --upgrade            # 或者直接 scripts/d
 scripts/m6/install/install.sh --check-only --upgrade    # 只看能不能升级（只读）
 ```
 
+升级 = 运行 `scripts/dev/reinstall.sh`（会同时更新后台和应用）；或者运行 `scripts/dev/build-app.sh`，然后在应用里点“升级后台服务”。只运行 `install.sh --upgrade` 不会更新“应用程序”里的应用（应用交接给你之后它归你管、不在安装记录里）。
+
 只换程序、镜像、完整性清单、版本号（`build.json`）、安装目录里的 `scripts/`（卸载脚本，给应用里的卸载用）和两份 plist
 （内容变了才换）；**状态目录整个保留**（主代理来源和选择、规则、分流出口、地区、各开关、首次准备标记、解析锁和托管设置的记录），
 日志目录、`_abroad` 也不动。不碰 pf、DNS、网络服务。

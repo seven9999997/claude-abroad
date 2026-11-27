@@ -189,7 +189,9 @@ Ctrl-C 优雅停止（先请求虚拟机关机，10 秒不停再强停），再�
 
 ## reinstall.sh：一条命令构建并安装或升级开发版
 
+**升级 = 运行 `scripts/dev/reinstall.sh`（会同时更新后台和应用）；或者运行 `scripts/dev/build-app.sh`，然后在应用里点“升级后台服务”。**
+
 `scripts/dev/reinstall.sh`（不要带 sudo）：构建（`integrity-build.sh --dev`）→ 组装 payload（`payload.sh`）→ 打包应用 →
-**装过时原地升级**（`sudo scripts/m6/install/install.sh --upgrade`，主代理和设置都保留，v0.71）；安装目录不在、只剩安装前的快照时先卸载（只重做对照）再安装；没装过时检查后安装。需要管理员的步骤由 sudo 在终端里问密码。只编排已经审过的脚本，不新增改系统的命令；任何一步失败就停下并说明下一步（升级被拒、失败时按退出码说明：已启用先停用、不降级、状态格式变了先卸载、已退回旧版本……）。自测：`scripts/dev/reinstall-selftest.sh`（只用空跑）。
+**装过时原地升级**（`sudo scripts/m6/install/install.sh --upgrade`，主代理和设置都保留，v0.71）；安装目录不在、只剩安装前的快照时先卸载（只重做对照）再安装；没装过时检查后安装。升级成功（或已经是这个版本）后以你自己的身份把新应用放进“应用程序”（`scripts/dev/build-app.sh --place-only`，和 `build-app.sh` 共用同一份放置逻辑：只替换我们自己的 `com.claude-abroad.app`，别人的同名应用、符号链接不碰；应用开着也照样替换，结尾提示退出并重新打开）；升级被拒或失败时不放，应用和后台服务保持同一个版本。结尾写清后台服务从哪个版本升到哪个版本。需要管理员的步骤由 sudo 在终端里问密码。只编排已经审过的脚本，不新增改系统的命令；任何一步失败就停下并说明下一步（升级被拒、失败时按退出码说明：已启用先停用、不降级、状态格式变了先卸载、已退回旧版本……）。自测：`scripts/dev/reinstall-selftest.sh`（只用空跑）、`scripts/dev/build-app-selftest.sh`（放置逻辑，目标换成临时目录）。
 
 `scripts/dev/payload.sh [--src <目录>] [--out <目录>]`：在 `integrity-build.sh` 的产物上组装安装用的 payload（`scripts/dev/out/payload/`：程序、镜像、完整性清单、`build.json`、`scripts/m6/install/{install,uninstall,lib}.sh`、`scripts/lib/common.sh`、逐文件摘要 `payload.sha256`）。命令行安装、升级默认用它；阶段 B 的应用包里放的是它的副本。
