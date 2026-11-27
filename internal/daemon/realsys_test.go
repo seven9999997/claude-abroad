@@ -257,7 +257,7 @@ var pfAllowed = []*regexp.Regexp{
 }
 
 var netAllowed = []*regexp.Regexp{
-	regexp.MustCompile(`^/sbin/route -n (add|change) -net (0\.0\.0\.0/1|128\.0\.0\.0/1) -interface utun[0-9]+$`),
+	regexp.MustCompile(`^/sbin/route -n (add|change) -net (0\.0\.0\.0/1|128\.0\.0\.0/1) 198\.18\.0\.1$`),
 	regexp.MustCompile(`^/sbin/route -n delete -net (0\.0\.0\.0/1|128\.0\.0\.0/1)$`),
 	regexp.MustCompile(`^/sbin/route -n get [0-9.]+$`),
 	regexp.MustCompile(`^/usr/sbin/netstat -rn -f inet$`),

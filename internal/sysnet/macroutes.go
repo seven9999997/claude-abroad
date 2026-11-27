@@ -17,6 +17,11 @@ type MacRoutes struct {
 	R Runner
 	// Iface 返回我们的 utun 名（Present 用；为 nil 时 Present 报错）。
 	Iface func() string
+	// Gateway 是我们 utun 的对端地址。有效时路由按“经这个网关”添加（route add -net <网段> <网关>），
+	// 不用 -interface 的写法：2026-11-27 真机上 -interface 写法的 0/1、128/1 在时，按物理网卡限定的查找
+	// （route get -ifscope en0）答“not in table”，IP_BOUND_IF 绑物理网卡的拨号一律 ENETUNREACH，
+	// 虚拟机连不上第一跳；带网关的写法（和 Clash 的 TUN 同形）不受影响。无效时退回 -interface（测试、旧调用方）。
+	Gateway netip.Addr
 }
 
 func checkNet(dst netip.Prefix) error {
@@ -36,6 +41,30 @@ func RouteChangeArgs(dst netip.Prefix, ifName string) []string {
 	return []string{"-n", "change", "-net", dst.String(), "-interface", ifName}
 }
 
+// RouteAddViaArgs 是经网关 gw 添加路由的参数（gw 是我们 utun 的对端地址，系统据此落到那块 utun）。
+func RouteAddViaArgs(dst netip.Prefix, gw netip.Addr) []string {
+	return []string{"-n", "add", "-net", dst.String(), gw.String()}
+}
+
+// RouteChangeViaArgs 是把已有路由改成经网关 gw 的参数。
+func RouteChangeViaArgs(dst netip.Prefix, gw netip.Addr) []string {
+	return []string{"-n", "change", "-net", dst.String(), gw.String()}
+}
+
+func (m MacRoutes) addArgs(dst netip.Prefix, ifName string) []string {
+	if m.Gateway.IsValid() {
+		return RouteAddViaArgs(dst, m.Gateway)
+	}
+	return RouteAddArgs(dst, ifName)
+}
+
+func (m MacRoutes) changeArgs(dst netip.Prefix, ifName string) []string {
+	if m.Gateway.IsValid() {
+		return RouteChangeViaArgs(dst, m.Gateway)
+	}
+	return RouteChangeArgs(dst, ifName)
+}
+
 // RouteDeleteArgs 是删除路由的参数。
 func RouteDeleteArgs(dst netip.Prefix) []string {
 	return []string{"-n", "delete", "-net", dst.String()}
@@ -51,7 +80,7 @@ func (m MacRoutes) Add(ctx context.Context, dst netip.Prefix, ifName string) err
 	if err := ValidUtun(ifName); err != nil {
 		return fmt.Errorf("接口名：%w", err)
 	}
-	_, se, err := m.R.Run(ctx, PathRoute, RouteAddArgs(dst, ifName), nil)
+	_, se, err := m.R.Run(ctx, PathRoute, m.addArgs(dst, ifName), nil)
 	if err == nil {
 		return nil
 	}
@@ -63,7 +92,7 @@ func (m MacRoutes) Add(ctx context.Context, dst netip.Prefix, ifName string) err
 	if verr == nil && via == ifName {
 		return fmt.Errorf("路由 %s：%w", dst, ErrExists)
 	}
-	if _, se, err := m.R.Run(ctx, PathRoute, RouteChangeArgs(dst, ifName), nil); err != nil {
+	if _, se, err := m.R.Run(ctx, PathRoute, m.changeArgs(dst, ifName), nil); err != nil {
 		return fmt.Errorf("把路由 %s 改到 %s：%w（%s）", dst, ifName, err, firstLine(se))
 	}
 	return nil

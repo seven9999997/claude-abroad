@@ -27,6 +27,7 @@ type SimRunner struct {
 	calls   []string            // 每条命令（路径 + 参数 + stdin 首行）
 	unknown []string            // 不认识的命令
 	ifcfg   map[string][]string // utun 名 → 最近一次 ifconfig 的参数
+	lastCfg string              // 最近一次 ifconfig 的 utun（经网关加路由时优先落在它上面）
 }
 
 // NewSimRunner 建一个底下是 f 的模拟器。
@@ -123,11 +124,27 @@ func (s *SimRunner) dispatch(ctx context.Context, path string, args []string, st
 		if len(args) == 7 && ValidUtun(args[0]) == nil && args[1] == "inet" && args[4] == "mtu" && args[6] == "up" {
 			s.mu.Lock()
 			s.ifcfg[args[0]] = slices.Clone(args)
+			s.lastCfg = args[0]
 			s.mu.Unlock()
 			return nil, nil, nil
 		}
 	}
 	return nil, nil, fmt.Errorf("%w：%s %v", ErrSimUnknown, path, args)
+}
+
+// ifaceForPeer 返回 ifconfig 配了对端地址 gw 的 utun（没有时为空）。
+func (s *SimRunner) ifaceForPeer(gw netip.Addr) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if a := s.ifcfg[s.lastCfg]; len(a) == 7 && a[3] == gw.String() {
+		return s.lastCfg
+	}
+	for name, a := range s.ifcfg {
+		if len(a) == 7 && a[3] == gw.String() {
+			return name
+		}
+	}
+	return ""
 }
 
 func (s *SimRunner) route(ctx context.Context, args []string, stdin []byte) ([]byte, []byte, error) {
@@ -155,6 +172,17 @@ func (s *SimRunner) route(ctx context.Context, args []string, stdin []byte) ([]b
 			return nil, []byte("route: " + err.Error() + "\n"), errExit1
 		}
 		return []byte(fmt.Sprintf("   route to: %s\ndestination: default\n       mask: default\n    gateway: 192.0.2.1\n  interface: %s\n      flags: <UP,GATEWAY,DONE,STATIC,PRCLONING>\n recvpipe  sendpipe  ssthresh  rtt,msec    rttvar  hopcount      mtu     expire\n       0         0         0         0         0         0      1500         0 \n", a, via)), nil, nil
+	case (args[1] == "add" || args[1] == "change") && len(args) == 5 && args[2] == "-net":
+		// 经网关的写法：网关是哪块 utun 的对端地址，路由就落在那块 utun 上（和真实系统一样，按 ifconfig 配的地址找）。
+		gw, err := netip.ParseAddr(args[4])
+		if err != nil {
+			return nil, nil, fmt.Errorf("%w：route %v", ErrSimUnknown, args)
+		}
+		ifName := s.ifaceForPeer(gw)
+		if ifName == "" {
+			return nil, []byte("route: writing to routing socket: Network is unreachable\n"), errExit1
+		}
+		return s.route(ctx, []string{"-n", args[1], "-net", args[3], "-interface", ifName}, nil)
 	case (args[1] == "add" || args[1] == "change") && len(args) == 6 && args[2] == "-net" && args[4] == "-interface":
 		dst, err := netip.ParsePrefix(args[3])
 		if err != nil {

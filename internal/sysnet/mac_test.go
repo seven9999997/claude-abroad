@@ -485,3 +485,53 @@ func TestMacInterfaces(t *testing.T) {
 		t.Fatalf("LANPrefixes 应丢掉公网网段：%v", lan)
 	}
 }
+
+// 2026-11-27 真机：-interface 写法的 0/1、128/1 让绑物理网卡的拨号不可达。设了 Gateway 时添加和改写都用经网关的写法。
+func TestMacRoutesGateway(t *testing.T) {
+	gw := netip.MustParseAddr("198.18.0.1")
+	r := &recRunner{}
+	if err := (MacRoutes{R: r, Gateway: gw}).Add(ctx, net01, "utun7"); err != nil {
+		t.Fatal(err)
+	}
+	want(t, r.calls, rcall{PathRoute, []string{"-n", "add", "-net", "0.0.0.0/1", "198.18.0.1"}, ""})
+
+	r = &recRunner{resp: func(c rcall) ([]byte, []byte, error) {
+		switch c.args[1] {
+		case "add":
+			return nil, []byte("route: writing to routing socket: File exists\n"), errExit
+		case "get":
+			return sample(t, "route-get-utun.txt"), nil, nil // 现在经 utun1024（别人的）
+		}
+		return nil, nil, nil
+	}}
+	if err := (MacRoutes{R: r, Gateway: gw}).Add(ctx, net01, "utun7"); err != nil {
+		t.Fatal(err)
+	}
+	want(t, r.calls,
+		rcall{PathRoute, []string{"-n", "add", "-net", "0.0.0.0/1", "198.18.0.1"}, ""},
+		rcall{PathRoute, []string{"-n", "get", "0.0.0.1"}, ""},
+		rcall{PathRoute, []string{"-n", "change", "-net", "0.0.0.0/1", "198.18.0.1"}, ""})
+}
+
+// 模拟器认经网关的写法：网关是哪块 utun 的对端地址，路由就落在那块 utun 上；没有这块 utun 时失败。
+func TestSimRouteViaGateway(t *testing.T) {
+	f := NewFake(FakeState{})
+	s := NewSimRunner(f)
+	m := MacRoutes{R: s, Gateway: netip.MustParseAddr("198.18.0.1")}
+	if err := m.Add(ctx, net01, "utun7"); err == nil {
+		t.Fatal("还没配 utun 时经网关添加应失败")
+	}
+	path, args, err := UtunConfigArgs("utun7", netip.MustParseAddr("198.18.0.1"), netip.MustParseAddr("198.18.0.1"), 1500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Run(ctx, path, args, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Add(ctx, net01, "utun7"); err != nil {
+		t.Fatal(err)
+	}
+	if via, err := m.Via(ctx, netip.MustParseAddr("1.2.3.4")); err != nil || via != "utun7" {
+		t.Fatalf("经网关添加后应落在 utun7：%q %v", via, err)
+	}
+}

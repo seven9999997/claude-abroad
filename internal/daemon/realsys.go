@@ -142,7 +142,7 @@ func NewRealSystem(p RealParams) (System, error) {
 		extra = dp.StackAlive
 		teardown = dp
 	}
-	routes := sysnet.MacRoutes{R: p.Net, Iface: h.name}
+	routes := sysnet.MacRoutes{R: p.Net, Iface: h.name, Gateway: UtunPeer} // 经网关添加：-interface 写法会让绑物理网卡的拨号不可达
 	chk := &preflight.Checker{R: p.Net, Root: p.RootFS, Home: p.HomeFS, OurUtun: h.name, FirstHop: p.FirstHop}
 	if lk := p.ResolverLock; lk != nil {
 		chk.ResolverConflicts = func() []string { return lk.Check().Conflicts }
