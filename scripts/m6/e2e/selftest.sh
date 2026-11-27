@@ -42,6 +42,16 @@ grep -v '^CHANGE: kill <死人开关的 PID>$' "${TMP}/e1" >"${TMP}/n6"; neg "�
 awk '/^CHANGE: launchctl bootout / { hold = $0; next } { print } /bin\/abroad-rescue$/ && hold { print hold; hold = "" }' "${TMP}/e2" >"${TMP}/n7"
 neg "应急程序早于停掉后台服务" "${TMP}/e1" "${TMP}/n7"
 grep -v 'bin/abroad-rescue$' "${TMP}/e2" >"${TMP}/n8"; neg "第二段没有应急演练" "${TMP}/e1" "${TMP}/n8"
+# R23（2026-11-27 从第四层挪来）：本机代理端口的核对在启用之后、回国之前；不写托管设置
+awk '/^STEP: 核对 CC1/ { next } { print } /^STEP: 检查点 P1/ { print "STEP: 核对 CC1：本机代理端口认出对端进程（R23）" }' "${TMP}/e1" >"${TMP}/n12"
+neg "本机代理端口的核对早于启用" "${TMP}/n12" "${TMP}/e2"
+grep -v '^STEP: 核对 CC1' "${TMP}/e1" >"${TMP}/n13"; neg "第一段没有本机代理端口的核对" "${TMP}/n13" "${TMP}/e2"
+if cat scripts/m6/e2e/run.sh scripts/m6/e2e/lib.sh "${TMP}/e1" "${TMP}/e2" "${TMP}/e3" | grep -vE '^[[:space:]]*#' | grep -qE 'managed-settings|ClaudeCode/|claude-settings'; then
+  bad "b. 端到端里出现了 Claude Code 托管设置的目录或写入命令"
+else
+  ok "b. 端到端不写 Claude Code 的托管设置（脚本和三段空跑里没有托管设置的目录）"
+fi
+grep -q '^PROBE: sudo -u <你> /usr/bin/curl -x http://127.0.0.1:47821 ' "${TMP}/e1" && ok "b. 第一段空跑里有经本机代理端口的那一次请求" || bad "b. 第一段空跑里没有经本机代理端口的请求"
 
 # ---- c. 前提检查 ----
 env -u M6E_M5_PASSED -u M6E_NODES scripts/m6/e2e/run.sh --check-only >/dev/null 2>"${TMP}/c1"; rc=$?

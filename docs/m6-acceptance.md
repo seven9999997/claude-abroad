@@ -46,7 +46,7 @@
 | G7 | Mac 应用和命令行 | **达到替代程度** + **待真机** | 应用临时签名、开发安装（S1）；M5 走查 |
 | G8 | 出国后的环境检测 17 项 | **达到** + **待真机** | M4、M5 第二级 |
 | G9 | 启动管控：回国后 Claude 连不上、不允许启动，只有卸载才解除 | 同第 1 节第 2、3 行 | 第 4 节 |
-| G9.1 | 回国后没被拦住的 Claude Code 流量不从本机 IP 出去 | **达到** + **待真机** | 第四道：托管设置指向本机代理端口，回国时一律 403 `go:internal/daemon#TestClaudeProxyStateTable`；真机：`script:scripts/m6/layer4/run.sh#T2a`（R21、R22） |
+| G9.1 | 回国后没被拦住的 Claude Code 流量不从本机 IP 出去 | **达到**（机制，只有自动测试）；**真实效果暂不测（用户 2026-11-27 决定）** | 第四道：托管设置指向本机代理端口，回国时一律 403 `go:internal/daemon#TestClaudeProxyStateTable`。依赖两个没有在真机上验证过的前提（都来自 Claude Code 官方文档的描述）：① Claude Code 会采用托管设置里的代理变量（R21）；② 代理不通或被拒时它不回退直连（R22）。补测时用 `script:scripts/m6/layer4/run.sh#T2a` |
 | G9.2 | 回国后按 Anthropic 地址段拦截 | **达到**（机制）+ **待真机** | 第五道：`go:internal/state#TestCrashExhaustiveReturnBlock`、`go:internal/daemon#TestReturnBlockGuardAdoptedAfterReboot`；开发构建只拦测试段 `go:internal/daemon#TestReturnBlockSetFromPrepare`；真机（测试段）：`script:scripts/m6/e2e/run.sh#RB1`、`script:scripts/m6/e2e/run.sh#RB3` |
 | G10 | 一键卸载 | 同第 1 节第 4 行 | — |
 
@@ -69,7 +69,7 @@
 | 一 解析锁 | `/etc/resolver` 下的文件把内置的 Claude 域名（`claude.ai`、`claude.com`、`anthropic.com`、`claudeusercontent.com`、`claudemcpcontent.com`）交给一个不应答的解析地址（解析失败）；首次准备写入，只有卸载删除 | 用系统解析器的程序 | 自带加密 DNS 的浏览器；开着别的代理软件（R9、R18）；用户追加的置顶域名不在锁里 | 只锁测试域名 `lock-test.claude-abroad.invalid` | `go:internal/resolverlock#TestDomainsFromBuiltinPinned`、`go:internal/resolverlock#TestBackfill` | `scripts/m6/resolver` |
 | 二 启动拦截（Endpoint Security） | 程序运行之前拒绝 | — | 没有这一道 | — | — | 这一版不做（P5，没有付费账号） |
 | 三 发现即结束 | 每 200 毫秒扫描，只结束签名确认过的 Claude（口径 A–D） | Claude 桌面版、原生安装的 Claude Code | 运行零点几秒内；npm、Homebrew 装的 Claude Code；扫描失败时不结束 | 只结束安装目录 `fake-claude` 里的测试进程 | `go:internal/daemon#TestLaunchGuardRuleB`、`go:internal/claudeproc#TestCoverage`；拦下时的通知 `swift:launchBlockedNotifications`；“打开 Claude”只在已启用且检测通过时可点 `swift:openClaudeConditions` | 端到端 L1 |
-| 四 Claude Code 的本机代理 | 托管设置把 Claude Code 指向 `127.0.0.1:47821`；已启用时按规则转发，其余一律 403，不回退直连 | Claude Code（读托管设置的版本） | Claude 桌面版和浏览器；Claude Code 不读托管设置或绕开代理时（R21、R22） | 不写托管设置 | `go:internal/daemon#TestClaudeProxyRules`、`go:internal/claudecfg#TestWriteRemove` | `scripts/m6/layer4`（T0–T5） |
+| 四 Claude Code 的本机代理 | 托管设置把 Claude Code 指向 `127.0.0.1:47821`；已启用时按规则转发，其余一律 403，不回退直连 | Claude Code（读托管设置的版本） | Claude 桌面版和浏览器；Claude Code 不读托管设置或绕开代理时（R21、R22）。这两个前提有任何一个不成立，这一道对相应的情况就不起作用，那时靠第一、三、五道；两条暂不测（用户 2026-11-27 决定） | 不写托管设置 | `go:internal/daemon#TestClaudeProxyRules`、`go:internal/claudecfg#TestWriteRemove` | `scripts/m6/layer4`（T0–T5，暂不测）；R23 在端到端 CC1 |
 | 五 回国拦截 | 回国后 pf 锚点里只留“立即拒绝到 Anthropic 登记地址段”的两行，留一个 pf 启用引用；装上即生效，只有卸载才解除 | 本机任何程序（包括浏览器）直连这些地址 | 本机另有代理软件接管时（出口是那个代理）；Anthropic 新增地址段；共用 CDN 的域名（不和域名名单联动） | 只拦测试段 `192.0.2.0/24`、`2001:db8:abd::/48`（文档保留地址）；选择文件读不出时不加载 | `go:internal/guard#TestRestoredReturnBlockTable`、`go:internal/rescue#TestReturnBlockKept`、`go:internal/pf#TestPatrolRestoredVerifyNoReloadLoop`、`go:internal/srccheck#TestReturnBlockTestNetsDevOnly`；界面 `swift:returnBlockInSettings`、`swift:returnBlockConfirmAndHome`、`swift:returnBlockTestTag` | 端到端 RB1、RB2、B3、RB3、K1 |
 
 **没打开管控时**（abroadd 不带 `--launch-control`，M2–M5 的真机脚本就是这样）：不做首次准备，不写解析锁和托管设置，不接第三道，不监听本机代理端口，回国拦截不生效；回国就是清空锚点、释放全部启用引用（`go:internal/daemon#TestLaunchControlOff`、`go:internal/daemon#TestPrepareOffByDefault`、`go:internal/state#TestReturnBlockOffUnchanged`；应用设置页显示“未启用” `swift:settingsLaunchControlOff`）。卸载第 2 步写“这次安装没有打开启动管控，不需要解除”（`go:internal/daemon#TestUninstallWithoutLaunchControl`）。
@@ -105,9 +105,9 @@
 | R18 | 有别的代理软件时解析锁失效 | **待真机** | `scripts/m6/resolver` 里有 Clash 时多看一步 |
 | R19 | 纯 Go 镜像构建是否够用 | **有结论：够用**（M4-1，会话里构建镜像并起虚拟机） | 发版物料存档了 24 个 Alpine 软件包和 4 个上游文件，SHA-256 核对一致（M6-8c） |
 | R20 | 引擎在出口不可用时退回直连 | **有结论，已修复**（M1-6c-2：会话里用开发脚本在这台 Mac 上起真实虚拟机复现了 mihomo 的 UDP 隐式直连并修复；出站收紧到路线第一跳兜底）；**用户的真机脚本尚未执行** | M2、M4 的真机脚本里经出口发 UDP 再核对；每次升级引擎版本、新增出口类型时重跑 |
-| R21 | 托管设置的代理变量能否盖过启动环境 | **待真机** | `script:scripts/m6/layer4/run.sh#T1a` |
-| R22 | 代理端口不通或 403 时 Claude Code 是否回退直连 | **待真机** | `script:scripts/m6/layer4/run.sh#T2b` |
-| R23 | 回环连接能否按本地端口找到对端进程 | **待真机** | `script:scripts/m6/layer4/run.sh#T5` |
+| R21 | 托管设置的代理变量能否盖过启动环境 | **暂不测（用户 2026-11-27 决定）** | 只能通过写入真实的托管设置来验证，写入期间这台 Mac 上所有 Claude Code 都改连本机代理端口，会影响平时的用法，所以推后；收尾时由用户决定补测还是定为不测。补测用 `script:scripts/m6/layer4/run.sh#T1a` |
+| R22 | 代理端口不通或 403 时 Claude Code 是否回退直连 | **暂不测（用户 2026-11-27 决定）** | 同 R21。补测用 `script:scripts/m6/layer4/run.sh#T2b` |
+| R23 | 回环连接能否按本地端口找到对端进程 | **待真机** | 端到端 `script:scripts/m6/e2e/run.sh#CC1`（启用后用 curl 经本机代理端口，不需要托管设置；2026-11-27 从第四层挪来） |
 
 另外两项待真机：装上即启用 pf 对这台 Mac 上别的用 pf 的软件有没有影响（只取一个引用、只写自己的锚点，按设计没有影响；端到端的快照对照确认）；回国拦截的定向清理连接状态（`script:scripts/m6/e2e/run.sh#K1`）。
 
@@ -189,8 +189,8 @@
 | 1b | 系统授权探查 E1、E2 | 这台 Mac | `scripts/m5/probe/run-e1e2.sh`（见 `scripts/m5/probe/README.md`） | 约 3 分钟 | 不断网 | 按 README | 按 README | 输出 |
 | 1c | 解析锁实测（R9、R18） | 这台或另一台 Mac | `sudo scripts/m6/resolver/run.sh`（可先 `--dry-run`） | 约 10–15 分钟（估计） | 不断网，要 sudo；锁真实域名期间本机 Claude 可能连不上 | 每种程序都得到“锁有效”或“锁无效”的结论（无效本身是合法的结果，不是你做错了；按 README） | `sudo scripts/m6/resolver/restore.sh` | `scripts/m6/resolver/out/` |
 | 2 | R1 → R2 → M2 → R3 → M3 → M4 → M5 第二级走查 | 这台 Mac | 各自 README；用最新代码重新编译 | R1 3–5 分钟；R2 断网 1–2 分钟；M2 5–8 分钟；M3 10–12 分钟；M4 15–20 分钟；M5 第二级 30–45 分钟 | 会断网，要 sudo，会话会断开；前提检查会要求先关掉别的代理软件的隧道（TUN、VPN）和系统代理 | 各脚本的结果文件里全部通过 | 各自的 `restore.sh`；仍不行重启电脑 | 各脚本 README 指定的文件 |
-| 3 | 端到端（第一、二、三段） | 这台 Mac | `sudo -E scripts/m6/e2e/run.sh`，重启后 `--after-reboot`，再重启后 `--after-reboot-2` | 第一段 20–30 分钟，第二段 15–20 分钟，第三段约 10 分钟（估计），中间重启两次 | 启用期间和第一次重启后一两分钟断网，要 sudo；第二次重启是已回国状态、不断网 | `scripts/m6/e2e/out/m6e-results.txt` 里 I1、P1–P5、RB1–RB3、L1、B1–B3、E1–E3、U1、R1 都“通过”（RB 的连通性一项可以是“无法区分”，以锚点和状态为准），K1 记下 pfctl 的输出 | `sudo scripts/m6/e2e/restore.sh`（不需要网络）；死人开关默认 3600 秒后自动执行 | 结果文件和 `scripts/m6/e2e/out/`、`scripts/m6/install/out/` 的日志 |
-| 4 | 第四层实测（R21、R22、R23）；排在端到端之后 | 这台 Mac（用户 2026-11-27 答复）。做之前关掉所有 Claude Code 会话；期间 Claude Code 的出口是 Claude 出国的主代理；T 步里有两步故意连不上；做完回国、卸载、确认分片目录里没有我们的文件再恢复平时用法（见 `file:scripts/m6/layer4/README.md`） | 开发安装 → 应用里启用 → `sudo -E scripts/m6/layer4/run.sh` → 回国 → 卸载脚本 | 约 15–20 分钟（估计），加安装和卸载 | 在已启用状态下做；写入托管设置期间那台 Mac 上的 Claude Code 都经本机代理端口 | 结果文件里 T0–T5 的判定（按 README） | `sudo scripts/m6/layer4/restore.sh`；之后卸载脚本 | `scripts/m6/layer4/out/` |
+| 3 | 端到端（第一、二、三段） | 这台 Mac | `sudo -E scripts/m6/e2e/run.sh`，重启后 `--after-reboot`，再重启后 `--after-reboot-2` | 第一段 20–30 分钟，第二段 15–20 分钟，第三段约 10 分钟（估计），中间重启两次 | 启用期间和第一次重启后一两分钟断网，要 sudo；第二次重启是已回国状态、不断网 | `scripts/m6/e2e/out/m6e-results.txt` 里 I1、P1–P5、CC1、RB1–RB3、L1、B1–B3、E1–E3、U1、R1 都“通过”（RB 的连通性一项可以是“无法区分”，以锚点和状态为准），K1 记下 pfctl 的输出 | `sudo scripts/m6/e2e/restore.sh`（不需要网络）；死人开关默认 3600 秒后自动执行 | 结果文件和 `scripts/m6/e2e/out/`、`scripts/m6/install/out/` 的日志 |
+| 4 | 第四层实测（R21、R22）：**暂不测（用户 2026-11-27 决定**：写入托管设置期间所有 Claude Code 改连本机代理端口，影响平时的用法；收尾时再决定补测还是定为不测；R23 已挪进端到端 CC1）。以下保留供补测：排在端到端之后 | 这台 Mac（用户 2026-11-27 答复）。做之前关掉所有 Claude Code 会话；期间 Claude Code 的出口是 Claude 出国的主代理；T 步里有两步故意连不上；做完回国、卸载、确认分片目录里没有我们的文件再恢复平时用法（见 `file:scripts/m6/layer4/README.md`） | 开发安装 → 应用里启用 → `sudo -E scripts/m6/layer4/run.sh` → 回国 → 卸载脚本 | 约 15–20 分钟（估计），加安装和卸载 | 在已启用状态下做；写入托管设置期间那台 Mac 上的 Claude Code 都经本机代理端口 | 结果文件里 T0–T5 的判定（按 README） | `sudo scripts/m6/layer4/restore.sh`；之后卸载脚本 | `scripts/m6/layer4/out/` |
 | 5 | 决定：要不要用发布构建验证真实效果（是否购买付费开发者账号：2026-11-27 已决定不购买） | — | — | — | — | — | — | 你的决定 |
 
 ## 9. 回填
@@ -208,7 +208,7 @@
 | M4 | | | | |
 | M5 第二级走查 | | | | |
 | 端到端（含 B1、B3、RB1–RB3、K1、U1） | | | | |
-| 第四层实测（R21、R22、R23） | | | | |
+| 第四层实测（R21、R22） | 暂不测（用户 2026-11-27 决定） | | | |
 | 发布构建验证（如果做） | | | | |
 
 用户贴回各脚本的结果后，由 architect 逐条判定，把第 1、2、5 节的“待真机”改成实测结论。在真机结果回来之前，项目的状态是“会话里能做的都做完了，等用户的真机验证和几项决定”。

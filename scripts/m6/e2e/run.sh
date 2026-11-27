@@ -188,6 +188,24 @@ if [ "${PHASE}" = 1 ]; then
   m6e_log "现在以你自己的身份（不要 sudo）在另一个终端执行：open /Applications/ClaudeAbroad.app"
   checkpoint P1 "在安装引导里添加来源（本地配置文件选 M6E_NODES 那份）→ 选节点 → 应用主代理（按提示在终端执行 sudo abroad …）→ 完成" c_mainproxy "从引导里配好主代理"
   checkpoint P2 "点“启用”（地区会变时确认框等 3 秒再确认）。这一步会接管本机网络" c_enabled "启用"
+  # R23（architect 2026-11-27：第四层实测暂不测，R23 不需要托管设置，挪到这里）：已启用时以你自己的身份用 curl 经本机代理端口
+  # 发一次请求，核对状态里“最近的连接”认出的程序是 curl 这一类（不是 unknown、不按 Claude 处理）。不写任何托管设置：
+  # 开发安装本来就打开了管控，端口在监听；只有显式带代理参数的这一个 curl 经过它。判断用的字段另存一份，不含目的域名。
+  CC_PORT=47821
+  step "核对 CC1：本机代理端口认出对端进程（R23）"
+  if [ "$DRY_RUN" = 1 ]; then printf 'PROBE: sudo -u <你> /usr/bin/curl -x http://127.0.0.1:%s https://www.gstatic.com/generate_204\n' "${CC_PORT}" >&3; res CC1 跳过 "空跑"; else
+    cst=$(get /v1/status); ca0=$(jget "$cst" claude_code.accepted)
+    ccode=$(sudo -u "${SUDO_USER}" /usr/bin/curl -sS -m 20 -x "http://127.0.0.1:${CC_PORT}" -o /dev/null -w '%{http_code}' https://www.gstatic.com/generate_204 2>/dev/null)
+    cst=$(get /v1/status)
+    ca1=$(jget "$cst" claude_code.accepted); capp=$(jget "$cst" claude_code.recent.0.app); ccl=$(jget "$cst" claude_code.recent.0.claude)
+    cfields="listening=$(jget "$cst" claude_code.listening) port=$(jget "$cst" claude_code.port) accepted=${ca0:-无}→${ca1:-无} app=${capp:-无} claude=${ccl:-无} action=$(jget "$cst" claude_code.recent.0.action) exit=$(jget "$cst" claude_code.recent.0.exit) ok=$(jget "$cst" claude_code.recent.0.ok) http=${ccode:-无}"
+    printf '%s\n' "${cfields}" >"${OUT}/m6e-cc1-${TS}.txt"
+    if [ "${ca1:-0}" -gt "${ca0:-0}" ] 2>/dev/null && [ -n "${capp}" ] && [ "${capp}" != unknown ] && [ "${ccl}" = false ]; then
+      res CC1 通过 "本机代理端口认出 ${capp}（不按 Claude 处理）：${cfields}"
+    else
+      res CC1 不通过 "认不出对端进程或没有新连接（识别不出时一律按 Claude 处理，设计 R23 的备选）：${cfields}"
+    fi
+  fi
   # 补齐三：“允许局域网”开关（已启用时）。M6E_LAN_PROBE=<局域网里一台设备的 地址:端口>（如打印机 192.168.1.20:631）；没给时跳过。
   step "允许局域网：关掉后连局域网设备失败，打开后恢复"
   if [ -z "${M6E_LAN_PROBE:-}" ]; then res LAN1 跳过 "没有设 M6E_LAN_PROBE"; elif [ "$DRY_RUN" = 1 ]; then
