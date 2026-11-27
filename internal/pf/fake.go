@@ -16,7 +16,7 @@ import (
 //   - 记录调用序列；
 //   - Eval(pkt)：pf 启用且主规则集引用了锚点时，用 pf.Eval 对当前锚点求值，否则放行。给 6c、M2-7 断言泄漏用。
 //
-// 操作名：load、flush、enable、release、kill、info、mainrules、anchorrules、table。
+// 操作名：load、flush、enable、release、kill、info、mainrules、anchorrules、anchorcounters、table。
 type FakePF struct {
 	UIDs map[string]string // 用户名 → UID（打印 user 时用；没有就打印用户名）
 
@@ -29,8 +29,12 @@ type FakePF struct {
 	failNext   map[string]error
 	calls      []string
 	kills      int
-	afterLoad  func() // 只给测试：下一次加载完成后调用一次（不持锁），模拟别人刚好在加载和复核之间写了别的内容
+	counters   map[int][4]int64 // 只给测试：-v -s rules 打印的第几条规则的计数（Evaluations、Packets、Bytes、States）
+	afterLoad  func()           // 只给测试：下一次加载完成后调用一次（不持锁），模拟别人刚好在加载和复核之间写了别的内容
 }
+
+// SetRuleCounters 设置 -v -s rules 打印的计数（下标从 0 起，对应打印出来的第几条规则；没给的打 0）。
+func (f *FakePF) SetRuleCounters(c map[int][4]int64) { f.mu.Lock(); f.counters = c; f.mu.Unlock() }
 
 // AfterNextLoad 设置下一次加载完成后要做的事（只调用一次）。
 func (f *FakePF) AfterNextLoad(fn func()) { f.mu.Lock(); f.afterLoad = fn; f.mu.Unlock() }
@@ -238,6 +242,20 @@ func (f *FakePF) run(_ context.Context, args []string, stdin []byte) ([]byte, []
 			return nil, nil, nil
 		}
 		return f.print(a), nil, nil
+	case "-v -s rules":
+		if err := f.op("anchorcounters"); err != nil {
+			return nil, nil, err
+		}
+		a := f.anchors[anchor]
+		if a == nil {
+			return nil, nil, nil
+		}
+		var b strings.Builder
+		for i, l := range strings.Split(strings.TrimSuffix(string(f.print(a)), "\n"), "\n") {
+			c := f.counters[i]
+			fmt.Fprintf(&b, "%s\n  [ Evaluations: %-8d  Packets: %-8d  Bytes: %-10d  States: %-6d ]\n", l, c[0], c[1], c[2], c[3])
+		}
+		return []byte(b.String()), nil, nil
 	case "-t abroad_lan -T show":
 		if err := f.op("table"); err != nil {
 			return nil, nil, err

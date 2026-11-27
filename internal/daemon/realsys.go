@@ -188,7 +188,7 @@ func NewRealSystem(p RealParams) (System, error) {
 		},
 		VM: p.VM, Exit: p.Exit, Baseline: p.Baseline, Teardown: teardown, Killer: p.Killer, Claude: p.Claude, Locale: locale, VMRegion: p.VMRegion, Env: p.Env,
 		ExitVM: p.ExitVM, CheckExit: p.CheckExit,
-		MainProfile: p.MainProfile, MainVM: p.MainVM, FetchSource: p.FetchSource,
+		MainProfile: p.MainProfile, MainVM: p.MainVM, FetchSource: p.FetchSource, FirstHop: p.FirstHop,
 		Preflight: realPreflight{PreflightHints{C: chk}, p.FirstHop != nil},
 		Data:      p.Data, ResolverLock: p.ResolverLock, ClaudeSettings: p.ClaudeSettings, LaunchGuard: p.LaunchGuard,
 		DeviceRoot: p.RootFS, DeviceHome: p.HomeFS, // 设备体检读字体目录（M6-6a）

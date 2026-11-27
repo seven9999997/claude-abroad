@@ -138,6 +138,10 @@ type Daemon struct {
 	corrupt atomic.Bool
 	// confirms 是两步确认的确认码（只在内存里，重启后全部失效）。
 	confirms *confirms
+	// pfctl 是只读查询也用的 pf 控制器（启用失败的现场快照读规则计数）。
+	pfctl *pf.Controller
+	// enableSnap 是最近一次启用失败的现场快照（只在内存里，进诊断包）。
+	enableSnap atomic.Pointer[EnableSnapshot]
 	// regions 是锁定的目标地区（M4-5）；drift 是最近一次出口漂移的种类（只在变化时发事件）。
 	regions *Regions
 	drift   atomic.Pointer[string]
@@ -248,6 +252,7 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	s := o.Sys
 	d.tun = s.NewTun()
 	ctl := &pf.Controller{R: s.PFRunner, Matcher: pf.PrintMatcher{User: s.PFUser, UID: s.PFUID}}
+	d.pfctl = ctl
 	d.allowLAN.Store(d.loadAllowLAN()) // 补齐三：“允许局域网”开关
 	d.ppf = state.NewPatrolPF(ctl, d.store, &netWatch{inner: sysnet.NetSource(s.Ifaces), d: d}, s.PFUser, d.allowLAN.Load, d.stateEvent("pf"))
 	d.ppf.P.OnEvent = func(e pf.Event) { d.events.Add("patrol", string(e.Kind), e.Detail) }
@@ -265,7 +270,7 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	d.re.OnEvent = func(kind, detail string) { d.events.Add("recheck", kind, detail) }
 	d.m = &state.Machine{Store: d.store, D: state.Deps{
 		PF: d.ppf, Tun: d.tun, Routes: s.Routes, DNS: s.DNS, IPv6: s.IPv6,
-		VM: mainPushVM{inner: s.VM, d: d}, Check: s.Exit, Gate: d.gate, Recheck: d.re, Teardown: s.Teardown, Killer: s.Killer, Preflight: s.Preflight,
+		VM: mainPushVM{inner: s.VM, d: d}, Check: enableCheck(s.Exit, d), Gate: d.gate, Recheck: d.re, Teardown: s.Teardown, Killer: s.Killer, Preflight: s.Preflight,
 		ReturnBlock: d.returnBlockOn,
 	}, OnEvent: d.stateEvent("state")}
 	if o.Clock != nil {

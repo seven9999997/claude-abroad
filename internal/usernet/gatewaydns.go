@@ -23,6 +23,8 @@ const MaxGatewayAnswers = 16
 type GatewayDNS struct {
 	Out     *Outbound
 	Resolve func(ctx context.Context, name string) ([]netip.Addr, time.Duration, error)
+	// OnFailed 在登记过的域名的 A 查询回 SERVFAIL 时调用（解析失败或没有可用的公网地址；诊断用，可为 nil）。
+	OnFailed func(name string)
 
 	answered, refused, failed, hopPrivate atomic.Int64
 }
@@ -65,12 +67,12 @@ func (g *GatewayDNS) Exchange(ctx context.Context, q *dns.Msg) (*dns.Msg, error)
 		return reply(q, dns.RcodeSuccess), nil
 	}
 	if g.Resolve == nil {
-		g.failed.Add(1)
+		g.fail(name)
 		return reply(q, dns.RcodeServerFailure), nil
 	}
 	addrs, ttl, err := g.Resolve(ctx, name)
 	if err != nil {
-		g.failed.Add(1)
+		g.fail(name)
 		return reply(q, dns.RcodeServerFailure), nil
 	}
 	var keep []netip.Addr
@@ -83,7 +85,7 @@ func (g *GatewayDNS) Exchange(ctx context.Context, q *dns.Msg) (*dns.Msg, error)
 		if len(addrs) > 0 && allPrivate(addrs) && g.Out.IsMainHopDomain(name) {
 			g.hopPrivate.Add(1)
 		}
-		g.failed.Add(1)
+		g.fail(name)
 		return reply(q, dns.RcodeServerFailure), nil
 	}
 	g.Out.Learn(name, keep)
@@ -97,6 +99,14 @@ func (g *GatewayDNS) Exchange(ctx context.Context, q *dns.Msg) (*dns.Msg, error)
 	}
 	g.answered.Add(1)
 	return m, nil
+}
+
+// fail 计一次 SERVFAIL 并调用 OnFailed。
+func (g *GatewayDNS) fail(name string) {
+	g.failed.Add(1)
+	if g.OnFailed != nil {
+		g.OnFailed(name)
+	}
 }
 
 // allPrivate 报告 addrs 是否全是局域网 IPv4（10/8、172.16/12、192.168/16、100.64/10）。

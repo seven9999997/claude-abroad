@@ -113,3 +113,33 @@ func (o *Outbound) IsMainHopDomain(name string) bool {
 	_, ok := o.main.Load().byDom[name]
 	return ok
 }
+
+// HopIndex 返回 dst 是主代理的第几个第一跳（从 1 起；IP 字面量的第一跳按地址和端口，域名第一跳按网关答过的地址），
+// 不是主代理的第一跳（分流出口端点、白名单、局域网节点）时返回 0。只给诊断用：调用方只记序号，不记地址。
+func (o *Outbound) HopIndex(dst netip.AddrPort) int {
+	a, p := dst.Addr().Unmap(), dst.Port()
+	ms := o.main.Load()
+	for i, h := range ms.hops {
+		if ha, isIP := h.Addr(); isIP && ha == a && h.HasPort(p) {
+			return i + 1
+		}
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for name, m := range o.answered {
+		if i, ok := ms.byDom[name]; ok && ms.hops[i].HasPort(p) {
+			if _, ok := m[a]; ok {
+				return i + 1
+			}
+		}
+	}
+	return 0
+}
+
+// HopIndexByName 返回域名 name 是主代理的第几个第一跳（从 1 起），不是时返回 0。
+func (o *Outbound) HopIndexByName(name string) int {
+	if i, ok := o.main.Load().byDom[name]; ok {
+		return i + 1
+	}
+	return 0
+}

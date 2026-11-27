@@ -36,6 +36,8 @@ type Diagnostics struct {
 	ClaudeDomains DiagnosticDomains `json:"claude_domains"`
 	// EnvHistory 是环境检测的历史（补齐四：只有时间、总判定、各项的标识和结果）。
 	EnvHistory []envcheck.RunEntry `json:"envcheck_history,omitempty"`
+	// EnableFailure 是最近一次启用失败（出口检查没通过、回滚之前）的现场快照（只在内存里；只有接口名和计数）。
+	EnableFailure *EnableSnapshot `json:"enable_failure_snapshot,omitempty"`
 }
 
 // DiagnosticDomains 是诊断包里的 Claude 访问域名。
@@ -74,6 +76,7 @@ func (d *Daemon) diagnostics(includeDomains bool) Diagnostics {
 		}
 	}
 	dg.EnvHistory = d.envHist.List()
+	dg.EnableFailure = d.enableSnap.Load()
 	cd := d.claudeDomainsView()
 	dg.ClaudeDomains.Count = cd.Count
 	if includeDomains {

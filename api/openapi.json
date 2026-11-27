@@ -682,6 +682,9 @@
           "claude_domains": {
             "$ref": "#/components/schemas/DaemonDiagnosticDomains"
           },
+          "enable_failure_snapshot": {
+            "$ref": "#/components/schemas/DaemonEnableSnapshot"
+          },
           "envcheck": {
             "$ref": "#/components/schemas/EnvcheckReport"
           },
@@ -756,6 +759,57 @@
         "required": [
           "can_enable",
           "note"
+        ],
+        "type": "object"
+      },
+      "DaemonEnableSnapshot": {
+        "properties": {
+          "dial_bound_iface": {
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "first_hop_kind": {
+            "type": "string"
+          },
+          "first_hop_route_iface": {
+            "type": "string"
+          },
+          "foreign_tunnels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "half_route_ifaces": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "our_utun": {
+            "type": "string"
+          },
+          "pf": {
+            "$ref": "#/components/schemas/PfCounters"
+          },
+          "time": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "vm_netstats": {
+            "additionalProperties": {},
+            "type": "object"
+          }
+        },
+        "required": [
+          "first_hop_kind",
+          "our_utun",
+          "time"
         ],
         "type": "object"
       },
@@ -2100,6 +2154,58 @@
         "required": [
           "checked",
           "ok"
+        ],
+        "type": "object"
+      },
+      "PfCounters": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "referenced": {
+            "type": "boolean"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/PfRuleCounter"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "referenced"
+        ],
+        "type": "object"
+      },
+      "PfRuleCounter": {
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "evaluations": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "packets": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "rule": {
+            "type": "string"
+          },
+          "states": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bytes",
+          "evaluations",
+          "packets",
+          "rule",
+          "states"
         ],
         "type": "object"
       },

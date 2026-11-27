@@ -82,11 +82,38 @@ func (f FullExitCheck) Check(ctx context.Context) error {
 	if rep.Verdict == exitcheck.Pass {
 		return nil
 	}
-	err := fmt.Errorf("出口检查%s：%s", map[exitcheck.Result]string{exitcheck.Fail: "不通过", exitcheck.Unknown: "无法判断"}[rep.Verdict], failedItems(rep))
+	reason := checkFailReason(rep)
+	err := fmt.Errorf("出口检查%s：%s", map[exitcheck.Result]string{exitcheck.Fail: "不通过", exitcheck.Unknown: "无法判断"}[rep.Verdict], reason)
 	if rep.Verdict == exitcheck.Fail {
-		err = fmt.Errorf("%w：%s", ErrExitCheckFailed, failedItems(rep))
+		err = fmt.Errorf("%w：%s", ErrExitCheckFailed, reason)
 	}
-	return usererror.New("出口检查", usererror.Reason(err), "请确认主代理可用、出口不在大陆且符合出口变化规则，再试一次。", err)
+	// 原因直接用检查结果的文字（2026-11-27 真机：原来取 usererror.Reason(err)，对这种普通错误取到空串，
+	// 用户看到“启用失败：出口检查失败：。”）。
+	return usererror.New("出口检查", reason, "请确认主代理可用、出口不在大陆且符合出口变化规则，再试一次。", err)
+}
+
+// AllConnectFailedReason 是出口检查各项都连接失败时的原因（启用失败的提示）。
+const AllConnectFailedReason = "经主代理连不上（各项都连接失败）：请看事件里的网络计数和现场快照"
+
+// checkFailReason 是没有明确通过时给人看的原因：各项（不算 udp、geo）都是连接失败时给 AllConnectFailedReason，
+// 否则列出没通过的项（failedItems）；万一什么都列不出来，也不留空。
+func checkFailReason(rep exitcheck.Report) string {
+	n, connect := 0, 0
+	for _, it := range rep.Items {
+		if it.Result != exitcheck.Pass && it.Name != "udp" && it.Name != "geo" {
+			n++
+			if it.Cause == exitcheck.CauseConnect {
+				connect++
+			}
+		}
+	}
+	if n > 0 && connect == n {
+		return AllConnectFailedReason
+	}
+	if s := failedItems(rep); s != "" {
+		return s
+	}
+	return "检查没有给出明确结果"
 }
 
 // CheckResultGeo 实现 GeoTriChecker。

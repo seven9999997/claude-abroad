@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,7 +40,14 @@ type userNet struct {
 	direct *directdial.Server // 直连拨号模块（诊断计数用；可为 nil）
 	// exitLoopback：分流出口端点允许回环（只给开发构建的开发标记，同机对端）。
 	exitLoopback bool
+	// failLog 给第一跳拨号失败的事件限流（同一类别、同一个第一跳 failLogEvery 内只记一条）。
+	failMu  sync.Mutex
+	failLog map[string]time.Time
+	now     func() time.Time // 测试注入；nil 用 time.Now
 }
+
+// failLogEvery 是同一类别、同一个第一跳的拨号失败事件的最短间隔（计数照常累加）。
+const failLogEvery = 30 * time.Second
 
 // InterfaceFresh 是物理网卡查询结果的新鲜期。
 const InterfaceFresh = 2 * time.Second
@@ -56,6 +65,7 @@ func newUserNet(o options, logf func(format string, a ...any)) (*userNet, error)
 	w := physif.NewWatcher(physif.Query, InterfaceFresh)
 	d := &usernet.Dialer{Rules: ref, Interface: w.Current, OnBindFailed: w.Invalidate}
 	u := &userNet{dialer: d, ref: ref, mode: outboundOpen, logf: logf, exitLoopback: o.devAgent}
+	d.OnDialFailed = u.dialFailed
 	var dnsx func(context.Context, *dns.Msg) (*dns.Msg, error) // nil：一律 REFUSED
 	if !o.outboundOpen {
 		u.mode = outboundFirstHop
@@ -65,7 +75,7 @@ func newUserNet(o options, logf func(format string, a ...any)) (*userNet, error)
 		doh := &usernet.DoH{Endpoints: eps, Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return d.DialResolver(ctx, network, addr, eps)
 		}}
-		u.gwdns = &usernet.GatewayDNS{Out: u.out, Resolve: doh.Lookup}
+		u.gwdns = &usernet.GatewayDNS{Out: u.out, Resolve: doh.Lookup, OnFailed: u.resolveFailed}
 		dnsx = u.gwdns.Exchange
 	}
 	cfg, err := usernet.NewConfiguration(d, ref, dnsx)
@@ -135,9 +145,73 @@ func (u *userNet) close() {
 func (u *userNet) logStats() {
 	if u.logf != nil {
 		st := u.stats()
-		u.logf("网络计数（%s）：policy_denied=%d hop_denied=%d bind_failed=%d dial_ok=%d dial_ok_loopback=%d resolver_dial_ok=%d dns_answered=%d dns_refused=%d dns_failed=%d",
-			st.OutboundMode, st.PolicyDenied, st.HopDenied, st.BindFailed, st.DialOK, st.DialOKLoopback, st.ResolverDialOK, st.Answered, st.Refused, st.Failed)
+		u.logf("网络计数（%s）：policy_denied=%d hop_denied=%d bind_failed=%d dial_ok=%d dial_ok_loopback=%d resolver_dial_ok=%d dns_answered=%d dns_refused=%d dns_failed=%d %s",
+			st.OutboundMode, st.PolicyDenied, st.HopDenied, st.BindFailed, st.DialOK, st.DialOKLoopback, st.ResolverDialOK, st.Answered, st.Refused, st.Failed,
+			dialFailText(st.DialFail))
 	}
+}
+
+// dialFailText 是拨号失败各类别的计数（固定顺序，键是 dial_fail_类别）。
+func dialFailText(m map[string]int64) string {
+	parts := make([]string, 0, len(usernet.DialFailClasses))
+	for _, c := range usernet.DialFailClasses {
+		parts = append(parts, fmt.Sprintf("dial_fail_%s=%d", c, m[c]))
+	}
+	return strings.Join(parts, " ")
+}
+
+// hopLabel 是“第几个第一跳”的说法（不含地址）。
+func (u *userNet) hopLabel(idx int) string {
+	if idx > 0 {
+		return fmt.Sprintf("第 %d 个第一跳", idx)
+	}
+	return "不是主代理的第一跳（分流出口端点、局域网节点或白名单）"
+}
+
+// dialFailed 是拨号器的 OnDialFailed：只记类别和第几个第一跳，限流。
+func (u *userNet) dialFailed(network string, dst netip.AddrPort, class string) {
+	idx := 0
+	if u.out != nil {
+		idx = u.out.HopIndex(dst)
+	}
+	u.logFail(idx, network, class)
+}
+
+// resolveFailed 是网关 DNS 的 OnFailed：第一跳域名解析失败算作这个第一跳的一次拨号失败（类别 dns）。
+func (u *userNet) resolveFailed(name string) {
+	idx := 0
+	if u.out != nil {
+		idx = u.out.HopIndexByName(name)
+	}
+	if idx == 0 {
+		return // 分流出口端点的域名：只在 dns_failed 里计数
+	}
+	u.dialer.NoteResolveFailed()
+	u.logFail(idx, "dns", usernet.DialFailDNS)
+}
+
+func (u *userNet) logFail(idx int, network, class string) {
+	if u.logf == nil {
+		return
+	}
+	now := time.Now
+	if u.now != nil {
+		now = u.now
+	}
+	key := fmt.Sprintf("%d/%s/%s", idx, network, class)
+	t := now()
+	u.failMu.Lock()
+	if u.failLog == nil {
+		u.failLog = map[string]time.Time{}
+	}
+	last, seen := u.failLog[key]
+	if seen && t.Sub(last) < failLogEvery {
+		u.failMu.Unlock()
+		return
+	}
+	u.failLog[key] = t
+	u.failMu.Unlock()
+	u.logf("第一跳拨号失败：%s，%s，%s（同类 %s 内不再重复记）", u.hopLabel(idx), network, usernet.DialFailLabel(class), failLogEvery)
 }
 
 // hostHandler 是 host.sock 上的诊断接口（只接受 abroad-vm 自己的用户和 root，见 peerListener）：

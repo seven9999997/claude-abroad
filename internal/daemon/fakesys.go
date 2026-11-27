@@ -77,6 +77,8 @@ type System struct {
 	MainProfile string
 	MainVM      MainProxyVM
 	FetchSource func(ctx context.Context, url string, viaHost bool) ([]byte, error)
+	// FirstHop 返回主代理的第一跳主机（启用失败的现场快照查去第一跳的路由用；nil 时不查）。
+	FirstHop func() (string, error)
 }
 
 // Hint 是一条冲突检查的提示项。

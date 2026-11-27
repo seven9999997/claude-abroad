@@ -420,6 +420,7 @@ public struct DaemonDiagnostics: Codable, Sendable {
     public var launchguard: DaemonLaunchGuardView
     public var claudeDomains: DaemonDiagnosticDomains
     public var envcheckHistory: [EnvcheckRunEntry]?
+    public var enableFailureSnapshot: DaemonEnableSnapshot?
     enum CodingKeys: String, CodingKey {
         case generatedAt = "generated_at"
         case version = "version"
@@ -428,6 +429,7 @@ public struct DaemonDiagnostics: Codable, Sendable {
         case launchguard = "launchguard"
         case claudeDomains = "claude_domains"
         case envcheckHistory = "envcheck_history"
+        case enableFailureSnapshot = "enable_failure_snapshot"
     }
 }
 
@@ -456,6 +458,31 @@ public struct DaemonEnablePreview: Codable, Sendable {
         case region = "region"
         case preview = "preview"
         case note = "note"
+    }
+}
+
+public struct DaemonEnableSnapshot: Codable, Sendable {
+    public var time: String
+    public var pf: PfCounters?
+    public var ourUtun: String
+    public var firstHopKind: String
+    public var firstHopRouteIface: String?
+    public var halfRouteIfaces: [String: String]?
+    public var foreignTunnels: [String]?
+    public var dialBoundIface: String?
+    public var vmNetstats: [String: JSONValue]?
+    public var errors: [String]?
+    enum CodingKeys: String, CodingKey {
+        case time = "time"
+        case pf = "pf"
+        case ourUtun = "our_utun"
+        case firstHopKind = "first_hop_kind"
+        case firstHopRouteIface = "first_hop_route_iface"
+        case halfRouteIfaces = "half_route_ifaces"
+        case foreignTunnels = "foreign_tunnels"
+        case dialBoundIface = "dial_bound_iface"
+        case vmNetstats = "vm_netstats"
+        case errors = "errors"
     }
 }
 
@@ -1205,6 +1232,32 @@ public struct IntegrityResult: Codable, Sendable {
         case ok = "ok"
         case note = "note"
         case problems = "problems"
+    }
+}
+
+public struct PfCounters: Codable, Sendable {
+    public var enabled: Bool
+    public var referenced: Bool
+    public var rules: [PfRuleCounter]?
+    enum CodingKeys: String, CodingKey {
+        case enabled = "enabled"
+        case referenced = "referenced"
+        case rules = "rules"
+    }
+}
+
+public struct PfRuleCounter: Codable, Sendable {
+    public var rule: String
+    public var evaluations: Int64
+    public var packets: Int64
+    public var bytes: Int64
+    public var states: Int64
+    enum CodingKeys: String, CodingKey {
+        case rule = "rule"
+        case evaluations = "evaluations"
+        case packets = "packets"
+        case bytes = "bytes"
+        case states = "states"
     }
 }
 
