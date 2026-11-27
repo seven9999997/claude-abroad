@@ -86,7 +86,7 @@ payload_check() {
   fi
   # 2026-11-27 真机：构建时漏开 cgo，编出了起不了虚拟机的 abroad-vm。只用 grep 核对它链接了虚拟化框架（动态链接的框架路径
   # 明文写在 Mach-O 的加载命令里），不依赖 go 和 otool（经管理员授权运行时 PATH 里没有 go；没装命令行工具时 otool 会弹安装框）。
-  if [ -f "${SRC}/bin/abroad-vm" ] && ! grep -q "${M6I_VZ_MARK}" "${SRC}/bin/abroad-vm"; then
+  if [ -f "${SRC}/bin/abroad-vm" ] && ! /usr/bin/grep -q "${M6I_VZ_MARK}" "${SRC}/bin/abroad-vm"; then
     reasons+=("${SRC}/bin/abroad-vm 没有链接虚拟化框架（构建时没开 cgo）：请装好 Xcode 命令行工具后重新构建（scripts/dev/integrity-build.sh --dev）")
   fi
   if [ -x "${SRC}/bin/abroadd" ] && [ "${M6I_MODE}" != test ]; then

@@ -38,7 +38,7 @@ for f in "${FILES[@]}"; do
 done
 [[ "${miss}" = 0 ]] || exit 1
 # abroad-vm 必须链接虚拟化框架（构建时开了 cgo）；没有就停在组装这一步（2026-11-27 真机）
-grep -q '/System/Library/Frameworks/Virtualization.framework' "${SRC}/bin/abroad-vm" ||
+/usr/bin/grep -q '/System/Library/Frameworks/Virtualization.framework' "${SRC}/bin/abroad-vm" ||
   { echo "✗ ${SRC}/bin/abroad-vm 没有链接虚拟化框架（构建时没开 cgo）：请装好 Xcode 命令行工具后重新执行 scripts/dev/integrity-build.sh --dev" >&2; exit 1; }
 
 rm -rf "${OUT}"
