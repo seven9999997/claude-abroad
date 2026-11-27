@@ -7,20 +7,20 @@
 结论的五种写法：
 
 - **达到**：已实现，会话里的自动测试覆盖了。
-- **达到替代程度**：没有付费开发者账号，用替代做法实现；写明弱在哪里、什么时候补齐。
+- **达到替代程度**：用户决定不购买付费开发者账号（2026-11-27），用替代做法实现，这是这一版的最终状态；写明弱在哪里、以后如果购买账号从哪里接上。
 - **待真机**：已实现，但是否有效只能在真机上确认；写明哪个脚本的哪一步、贴回什么。
-- **推迟**：这一版不做；写明去向。
-- **没有做**：这一版没有做，也不在推迟清单里；写明原因。
+- **这一版不做**：写明原因（因为没有付费开发者账号，或别的原因）和去向。
+- **没有做**：这一版没有做，也不在 P1–P8 里；写明原因。
 
 引用的写法：`go:<包目录>#<测试名>`、`swift:<测试函数名>`、`script:<脚本路径>#<步骤编号>`、`file:<路径>`。
 
 ## 1. 设计第 14 节 M6 的完成标准
 
-| # | 完成标准 | 结论 | 依据 | 弱在哪里、什么时候补齐 |
+| # | 完成标准 | 结论 | 依据 | 弱在哪里；这一版到此为止（以后如果购买账号从哪里接上） |
 |---|---|---|---|---|
-| 1 | 在全新的机器上拖入“应用程序”即可安装、使用 | **达到替代程度** + **待真机** | 开发安装脚本代替 DMG 和 SMAppService：`script:scripts/m6/install/install.sh#M6-11b`（安装后只读核对首次准备、完整性、回国拦截），`script:scripts/m6/install/selftest.sh#M6-11b`（在临时目录里真装真卸）；端到端 `script:scripts/m6/e2e/run.sh#I1` | 要从源码构建、要 sudo 执行脚本，非开发者用不了；只能装在执行脚本的那台 Mac 上；没有签名的更新通道（重装即升级）。有付费账号后按 P1–P3 补齐 |
+| 1 | 在全新的机器上拖入“应用程序”即可安装、使用 | **达到替代程度** + **待真机** | 开发安装脚本代替 DMG 和 SMAppService：`script:scripts/m6/install/install.sh#M6-11b`（安装后只读核对首次准备、完整性、回国拦截），`script:scripts/m6/install/selftest.sh#M6-11b`（在临时目录里真装真卸）；端到端 `script:scripts/m6/e2e/run.sh#I1` | 要从源码构建、要 sudo 执行脚本，非开发者用不了；只能装在执行脚本的那台 Mac 上；没有签名的更新通道（重装即升级）。这一版到此为止；以后如果购买账号，按 P1–P3 接上（安装位置和后台服务注册的接口见 m6-plan 第 8 节） |
 | 2 | 回国后 Claude 连不上 | **达到**（机制；每一道各自拦不住什么见第 4 节）+ **待真机**（对各程序是否有效） | 五道管控见第 4 节。第一道 `go:internal/resolverlock#TestWriteIdempotent`；第四道 `go:internal/daemon#TestClaudeProxyStateTable`；第五道 `go:internal/state#TestReturnBlockNoGap`、`go:internal/daemon#TestReturnBlockSwitch`；启用、停用、回国全流程不碰解析锁 `go:internal/daemon#TestResolverLockInDaemon`；回国时结束不了 Claude 就中止、什么都不改 `go:internal/daemon#TestRestoreLeftovers` | 解析锁对自带加密 DNS 的程序、开着别的代理软件时无效（R9、R18，`scripts/m6/resolver`）；第五道本机另有代理软件接管时拦不住；Anthropic 新增地址段要等新版本。对真实地址段的效果只能用发布构建验证（第 7 节“没有做”） |
-| 3 | 回国后 Claude 被打开后马上结束 | **达到替代程度** + **待真机** | 第三道：`go:internal/daemon#TestLaunchGuardRuleA`、`go:internal/claudeproc#TestGuardTermThenKill`；开发构建只针对测试目录 `go:internal/claudeproc#TestFakeDirGuard`；端到端 `script:scripts/m6/e2e/run.sh#L1` | 没有 Endpoint Security（P5），不能在程序运行之前拒绝：每 200 毫秒扫描、发现即结束，Claude 可能已经运行零点几秒；只结束签名确认过的进程，npm、Homebrew 装的 Claude Code 第三道不覆盖（靠第一、四、五道）。端到端的开发构建只验证机制，对真实 Claude 的效果要发布构建（第 7 节） |
+| 3 | 回国后 Claude 被打开后马上结束 | **达到替代程度** + **待真机** | 第三道：`go:internal/daemon#TestLaunchGuardRuleA`、`go:internal/claudeproc#TestGuardTermThenKill`；开发构建只针对测试目录 `go:internal/claudeproc#TestFakeDirGuard`；端到端 `script:scripts/m6/e2e/run.sh#L1` | 没有 Endpoint Security（P5），不能在程序运行之前拒绝：每 200 毫秒扫描、发现即结束，Claude 可能已经运行零点几秒（这一版的最终状态：Endpoint Security 要付费账号，这一版不做）；只结束签名确认过的进程，npm、Homebrew 装的 Claude Code 第三道不覆盖（靠第一、四、五道）。端到端的开发构建只验证机制，对真实 Claude 的效果要发布构建（第 7 节） |
 | 4 | 一键卸载后恢复正常并完全清理 | **达到** + **待真机** | `go:internal/daemon#TestUninstallRestoresEverything`、`go:internal/daemon#TestUninstallFromEachState`、`go:internal/daemon#TestReturnBlockUninstall`（三种起点卸载后锚点空、引用全部释放、pf 回到安装前）、`go:internal/daemon#TestUninstalledRejectsChanges`；命令行 `go:cmd/abroad#TestCLIUninstall`；开发安装的卸载和快照对照 `script:scripts/m6/e2e/run.sh#U1` | 第 3 步“注销后台服务、删除专用用户和数据”由安装器完成（现在是开发安装的卸载脚本）；快照对照里 pf 是否启用那一行的格式没在真机核对过，认不出时记“无法判断”、不参与对照 |
 | 5 | 未签名的脚本调用回国接口被拒绝 | **达到替代程度** | `go:internal/api#TestClassifyAndAllowed`、`go:internal/daemon#TestSocketSecurity`；三句话见下 | 见下 |
 
@@ -28,9 +28,9 @@
 
 - **达到的**：回国是“敏感”级别。控制台用户以及它运行的任何脚本（包括 npm 包、Claude Code 自己）调用回国接口一律被拒（403），要本人授权：应用里目前给出一条要在终端执行的命令、由你自己去执行（系统授权等 M5-3 的 E1、E2 结论，见第 6 节），命令行必须 `sudo`。卸载同样是敏感级别。
 - **没达到的**：没有“签名”这个维度，调用方签名校验现在是明确标着“未启用”的实现；以 root 运行的脚本可以直接调用。普通级别的操作（启用、停用、重新检测）本机控制台用户的任何程序都能做，这一点写在 status 的 `security` 字段、应用“设置 → 高级”和 `abroad status` 里。
-- **什么时候补齐**：有付费开发者账号后启用调用方签名校验（P4），同时决定推迟期间临时加严的操作是否放回普通级。
+- **这一版到此为止**：用户决定不购买付费开发者账号（2026-11-27），调用方签名校验（P4）这一版不做，“未启用”的实现和接口保留；临时加严成敏感级的操作保持敏感级。以后如果购买账号，从调用方校验的接口接上，再决定这些操作是否放回普通级。
 
-第 14 节 M6 一行里的打包内容：`.app` 打包（达到，`file:scripts/dev/app-bundle.sh`，临时签名）；Developer ID 签名与公证、DMG、SMAppService（推迟 P1–P3）；Claude 域名解析锁、启动管控、一键卸载、另存的应急命令行、应急恢复文档（达到，见第 4 节和 `file:docs/emergency.md`）；Endpoint Security（推迟 P5）。
+第 14 节 M6 一行里的打包内容：`.app` 打包（达到，`file:scripts/dev/app-bundle.sh`，临时签名）；Developer ID 签名与公证、DMG、SMAppService（这一版不做 P1–P3，因为没有付费账号）；Claude 域名解析锁、启动管控、一键卸载、另存的应急命令行、应急恢复文档（达到，见第 4 节和 `file:docs/emergency.md`）；Endpoint Security（这一版不做 P5，因为没有付费账号）。
 
 ## 2. 设计第 1 节的目标
 
@@ -39,7 +39,7 @@
 | G1 | 本机所有流量经 Claude 出国，没有绕过的直连 | **达到** + **待真机** | pf 默认拦截全部出站 `go:internal/pf#TestRenderGolden`；状态机全程不泄漏的不变量 `go:internal/state#TestCrashExhaustive`；真机：M2、M3 脚本 |
 | G2 | 服务停止、崩溃、停用后断网，只有“恢复本机网络”才回到直连 | **达到** + **待真机** | `go:internal/state#TestRebootExhaustive`、开机时的 guard `go:internal/guard#TestLoadForActiveStates`；真机：M2 脚本、端到端 `script:scripts/m6/e2e/run.sh#B1` |
 | G3 | 主代理（订阅、本地配置、手动节点、链式） | **达到** + **待真机** | M5 走查 `file:docs/m5-walkthrough.md`；真机：M2、M5 第二级 |
-| G4 | 分流出口（OpenVPN、WireGuard、mihomo、分享链接） | **达到**（内置引擎）+ **待真机**；引擎的安装与回滚**推迟**（P7） | 分享链接 `go:internal/exitconf#TestShareLinksUnknownParams`（不认识的参数一律拒绝）；真机：M4 脚本。六种分享链接的字段映射待真机（第 7 节） |
+| G4 | 分流出口（OpenVPN、WireGuard、mihomo、分享链接） | **达到**（内置引擎）+ **待真机**；引擎的安装与回滚**这一版不做**（P7：没有可信的更新通道） | 分享链接 `go:internal/exitconf#TestShareLinksUnknownParams`（不认识的参数一律拒绝）；真机：M4 脚本。六种分享链接的字段映射待真机（第 7 节） |
 | G4.1 | 按应用分流；Anthropic 域名永远不走本机网络 | **达到** + **待真机** | 置顶规则 `go:internal/rules#TestPinnedBuiltin`；真机：M3 脚本 |
 | G5 | 出口检查通过才放行；时区和语言跟随出口，回国还原 | **达到** + **待真机** | `go:internal/gatesm#TestGateProperty`；真机：M4 脚本、端到端 `script:scripts/m6/e2e/run.sh#R1` |
 | G6 | 一键启用、停用、回国、切换地区；回国二次确认并先结束 Claude | **达到**（流程和顺序）+ **待真机**（真实结束 Claude） | `go:internal/daemon#TestRestoreTwoStep`、`go:internal/state#TestRestoreKillFails`（会话里一律是假的进程表和信号发送器）。真实的信号发送器从来没有运行过：用户的脚本默认只预览、不发信号；只有 M4 脚本显式设 `M4_REAL_KILL=1`，或者用发布构建时，才会真的结束本机的 Claude（第 7 节“没有做”） |
@@ -67,7 +67,7 @@
 | 道 | 做什么 | 覆盖 | 已知拦不住 | 开发构建下针对什么 | 自动测试 | 真机 |
 |---|---|---|---|---|---|---|
 | 一 解析锁 | `/etc/resolver` 下的文件把内置的 Claude 域名（`claude.ai`、`claude.com`、`anthropic.com`、`claudeusercontent.com`、`claudemcpcontent.com`）交给一个不应答的解析地址（解析失败）；首次准备写入，只有卸载删除 | 用系统解析器的程序 | 自带加密 DNS 的浏览器；开着别的代理软件（R9、R18）；用户追加的置顶域名不在锁里 | 只锁测试域名 `lock-test.claude-abroad.invalid` | `go:internal/resolverlock#TestDomainsFromBuiltinPinned`、`go:internal/resolverlock#TestBackfill` | `scripts/m6/resolver` |
-| 二 启动拦截（Endpoint Security） | 程序运行之前拒绝 | — | 没有这一道 | — | — | 推迟 P5 |
+| 二 启动拦截（Endpoint Security） | 程序运行之前拒绝 | — | 没有这一道 | — | — | 这一版不做（P5，没有付费账号） |
 | 三 发现即结束 | 每 200 毫秒扫描，只结束签名确认过的 Claude（口径 A–D） | Claude 桌面版、原生安装的 Claude Code | 运行零点几秒内；npm、Homebrew 装的 Claude Code；扫描失败时不结束 | 只结束安装目录 `fake-claude` 里的测试进程 | `go:internal/daemon#TestLaunchGuardRuleB`、`go:internal/claudeproc#TestCoverage`；拦下时的通知 `swift:launchBlockedNotifications`；“打开 Claude”只在已启用且检测通过时可点 `swift:openClaudeConditions` | 端到端 L1 |
 | 四 Claude Code 的本机代理 | 托管设置把 Claude Code 指向 `127.0.0.1:47821`；已启用时按规则转发，其余一律 403，不回退直连 | Claude Code（读托管设置的版本） | Claude 桌面版和浏览器；Claude Code 不读托管设置或绕开代理时（R21、R22） | 不写托管设置 | `go:internal/daemon#TestClaudeProxyRules`、`go:internal/claudecfg#TestWriteRemove` | `scripts/m6/layer4`（T0–T5） |
 | 五 回国拦截 | 回国后 pf 锚点里只留“立即拒绝到 Anthropic 登记地址段”的两行，留一个 pf 启用引用；装上即生效，只有卸载才解除 | 本机任何程序（包括浏览器）直连这些地址 | 本机另有代理软件接管时（出口是那个代理）；Anthropic 新增地址段；共用 CDN 的域名（不和域名名单联动） | 只拦测试段 `192.0.2.0/24`、`2001:db8:abd::/48`（文档保留地址）；选择文件读不出时不加载 | `go:internal/guard#TestRestoredReturnBlockTable`、`go:internal/rescue#TestReturnBlockKept`、`go:internal/pf#TestPatrolRestoredVerifyNoReloadLoop`、`go:internal/srccheck#TestReturnBlockTestNetsDevOnly`；界面 `swift:returnBlockInSettings`、`swift:returnBlockConfirmAndHome`、`swift:returnBlockTestTag` | 端到端 RB1、RB2、B3、RB3、K1 |
@@ -91,13 +91,13 @@
 | R5 | OpenVPN 改写配置后在 netns 里运行 | **有结论：可行**（M4-1，会话里在虚拟机内验证） | 真实服务商配置的效果待 M4 脚本 |
 | R6 | 全链路的吞吐、延迟、CPU | **待真机** | M2 的分段测量 |
 | R7 | 系统服务在断网规则下的表现 | **待真机** | 启用期间看系统日志；“系统服务直连”预设没有做（第 7 节） |
-| R8 | 后台服务的开机时机 | SMAppService **推迟**；开发用 LaunchDaemon 的开机时机 **待真机** | 端到端 B1（启用状态重启）、B3（已回国状态重启） |
+| R8 | 后台服务的开机时机 | SMAppService **不适用：这一版不做**（没有付费账号）；开发用 LaunchDaemon 的开机时机 **待真机** | 端到端 B1（启用状态重启）、B3（已回国状态重启） |
 | R9 | 解析锁对桌面版、Claude Code、浏览器是否有效 | **待真机** | `scripts/m6/resolver`；拦不住的由第五道补（本机另有代理软件时除外） |
-| R9.1 | 能否拿到 Endpoint Security 授权 | **推迟** | 要付费账号才能申请 |
+| R9.1 | 能否拿到 Endpoint Security 授权 | **不适用：这一版不做** | 要付费账号才能申请；用户 2026-11-27 决定不购买 |
 | R10 | 桌面版界面语言存在哪里 | **有调查结论**（2026-11-20，会话里只读查看本机文件） | 设计第 15 节 R10 行 |
 | R11 | 是否改用 Network Extension | **书面对比，维持现方案** | 没有授权，未实测 |
 | R12 | 程序被替换 | **达到替代程度** | SHA-256 清单（`go:internal/integrity#TestCheckProblems`）；abroadd、guard 自己不在清单里；运行中被替换不会发现。有签名后改用系统校验（P6） |
-| R13 | 名称带“Claude”对公证的影响 | **推迟** | 提交公证时观察 |
+| R13 | 名称带“Claude”对公证的影响 | **不适用：这一版不做** | 不公证（用户 2026-11-27 决定不购买付费账号）；以后如果公证，提交时观察 |
 | R14 | Anthropic 是否使用专用 IP 段 | **有结论**（单一观测点，会话里查询解析结果和 ARIN 登记） | 置顶规则以域名为主；第五道按 ARIN 登记的两段拦（2026-11-26 查询），新增地址段要等新版本 |
 | R15 | Docker、OrbStack、Parallels、UTM 的流量 | **待真机** | 没有专门的脚本，启用后在各软件里访问外网，结果写进已知限制 |
 | R16 | 公共 Wi-Fi 认证页 | **待真机** | “仅认证”模式没有做（第 7 节：先一键回国完成认证再启用） |
@@ -120,22 +120,22 @@
 | M5 | 第一级（假系统）和第二级（真机）走查，`file:docs/m5-walkthrough.md` | 待用户 |
 | M5-3 系统授权 | E1、E2 探查 `file:scripts/m5/probe/run-e1e2.sh`；结论决定应用里的本人授权走系统授权还是一直用终端退路 | 遗留项，待用户 |
 
-## 7. 推迟、没有做、替代做法
+## 7. 这一版不做、没有做、替代做法
 
-**推迟项**（等付费开发者账号，接口位置见 m6-plan 第 8 节）：
+**这一版不做的项**（用户 2026-11-27 决定不购买付费开发者账号；每项的原因写在“原因”一栏；代码里留的接口和“未启用”的实现不动，位置见 m6-plan 第 8 节）：
 
-| # | 推迟项 | 现在的做法 |
-|---|---|---|
-| P1 | Developer ID 签名、公证 | 临时签名 |
-| P2 | DMG | 开发安装脚本 |
-| P3 | SMAppService | 开发用的 LaunchDaemon |
-| P4 | 调用方签名校验 | “未启用”的实现；状态和设置里写明 |
-| P5 | Endpoint Security（第二道） | 没有这一道 |
-| P6 | 系统的代码签名校验 | SHA-256 清单 |
-| P7 | Sparkle 更新；引擎的联网下载；**引擎的安装与回滚**（M6-6b，这一版不做） | 重新构建镜像并重新执行开发安装；引擎只随镜像内置 |
-| P8 | 系统授权（M5-3，不是付费项） | 终端退路 |
+| # | 项 | 原因 | 现在的做法 |
+|---|---|---|---|
+| P1 | Developer ID 签名、公证 | 没有付费账号 | 临时签名 |
+| P2 | DMG | 没有付费账号（未签名的安装包会被系统拦下） | 开发安装脚本 |
+| P3 | SMAppService | 没有付费账号 | 开发用的 LaunchDaemon |
+| P4 | 调用方签名校验 | 没有付费账号（没有稳定的签名身份可校验） | “未启用”的实现；状态和设置里写明 |
+| P5 | Endpoint Security（第二道） | 没有付费账号（授权要申请） | 没有这一道 |
+| P6 | 系统的代码签名校验 | 没有付费账号 | SHA-256 清单 |
+| P7 | Sparkle 更新；引擎的联网下载；**引擎的安装与回滚**（M6-6b） | 自动更新：没有付费账号；引擎的安装与回滚、联网下载：**不因为账号**，没有可信的更新通道（M6-6b 已定这一版不做） | 重新构建镜像并重新执行开发安装；引擎只随镜像内置 |
+| P8 | 系统授权（M5-3） | **不因为账号，仍然要做**：等 E1、E2 的结果 | 终端退路 |
 
-**替代做法**（m6-plan 第 2 节 S1–S7）：开发安装代替 DMG 和 SMAppService（S1）；只有第一、三、四、五道（S2）；SHA-256 清单（S3）；对端 uid 三级权限（S4、S5）；手动重装代替自动更新（S6）；不分发、自行构建（S7）。**没有付费账号时，第 1 节完成标准里第 1、5 两条只能达到替代程度**，第 3 条同样是替代程度（没有第二道）。
+**替代做法**（m6-plan 第 2 节 S1–S7）：开发安装代替 DMG 和 SMAppService（S1）；只有第一、三、四、五道（S2）；SHA-256 清单（S3）；对端 uid 三级权限（S4、S5）；手动重装代替自动更新（S6）；不分发、自行构建（S7）。**用户决定不购买付费开发者账号，第 1 节完成标准里第 1、5 两条以替代做法为最终状态**，第 3 条同样以替代做法为最终状态（没有第二道）。
 
 **设计里写了、这一版没有或换了做法的功能**（2026-11-27 对照设计第 4、5、7、8、9、10、11 节逐节核对，并略读第 1、2、3、6、12 节、m5 走查清单的“与原型不同”、m6-plan 第 1、2、8、10 节；每一项都在代码里查过。P1–P8 不重复列）：
 
@@ -163,10 +163,10 @@
 | 9.3：“重启这些应用”按钮、“需要重启 Mac”窗口、“待重启”提醒、浏览器语言和定位的提示 | 应用里都没有 | 没有做 | — | 改了语言后，要自己知道得重新登录或重启，访达和菜单栏才变成新语言 |
 | 10.2：检测通过时通知“可以打开 Claude 了” | 只有地区同步完成那一次带“打开 Claude”按钮 | 部分做了 | — | Claude 被拦下后、地区没变时检测通过，没有通知，要自己去点 |
 | 10.2：解析锁的备选写法（回环地址加端口）可选 | 只实现了生成，不能选 | 没有做（等 R18） | R18 没有结论 | 回国后本机开着 TUN 劫持 DNS 时这道锁失效（第五道仍有效，除非那个代理接管了出口） |
-| 10.3：应用里的卸载入口、代为把应用移到废纸篓、卸载后引导重启 | 设置里写“在正式安装包里提供”；只能 `sudo abroad uninstall` 或开发安装的卸载脚本（卸载是敏感操作，应用里的入口等 M5-3 的系统授权，M5-3 等 E1、E2 的结果） | 改了做法 | 没有正式安装包（P2、P3）；系统授权等 E1、E2 | 只能在终端里卸载，应用要自己删 |
+| 10.3：应用里的卸载入口、代为把应用移到废纸篓、卸载后引导重启 | 设置里写“应用里的卸载入口还没有提供（要等系统授权）”和终端命令；只能 `sudo abroad uninstall` 或开发安装的卸载脚本（卸载是敏感操作，应用里的入口等 M5-3 的系统授权，M5-3 等 E1、E2 的结果） | 改了做法 | 正式安装包这一版不做（P2、P3，没有付费账号）；应用里的入口等 E1、E2 | 只能在终端里卸载，应用要自己删 |
 | 11.2：设置里生成诊断包 | **已补**（2026-11-27，补齐五）：设置“高级”里“导出诊断包…”，默认不带域名清单（勾选才带），用户在保存面板里选位置，内容是后台原样；终端命令 `abroad diagnostics` 仍写在说明里。测试 `swift:diagnosticsExportIsVerbatim`、`swift:diagnosticsExportOutcomes`、`swift:diagnosticsExportKeepsNoContent`、`swift:diagnosticsHelpText` | 已补 | — | — |
 | 10.4：系统代理“帮我关闭”；启用前提示本机 DNS 有问题 | 冲突检查里没有这两项；本机 DNS 只在启用时读不出来才记一条事件 | 没有做 | 设计本来写的是 M2 不做 | 要自己去关系统代理；本机 DNS 配错时事先没有提示 |
-| 11.1：应用用系统签名校验确认连的是真的 abroadd | 没有 | 推迟（同 P4，要签名） | 没有付费账号 | 应用不能确认自己连的后台是真的（本机 socket 的属主和权限仍限制了谁能冒充） |
+| 11.1：应用用系统签名校验确认连的是真的 abroadd | 没有 | 这一版不做（同 P4） | 没有付费账号（用户 2026-11-27 决定不购买） | 应用不能确认自己连的后台是真的（本机 socket 的属主和权限仍限制了谁能冒充） |
 | 10.1：两次确认（确认对话框加警告框） | 合成一个确认框，“确认”3 秒后才能点 | 改了做法 | m5-plan v2.9 决定 2 | 只点一次确认 |
 
 **没有做**（其余）：
@@ -190,8 +190,8 @@
 | 1c | 解析锁实测（R9、R18） | 这台或另一台 Mac | `sudo scripts/m6/resolver/run.sh`（可先 `--dry-run`） | 约 10–15 分钟（估计） | 不断网，要 sudo；锁真实域名期间本机 Claude 可能连不上 | 每种程序都得到“锁有效”或“锁无效”的结论（无效本身是合法的结果，不是你做错了；按 README） | `sudo scripts/m6/resolver/restore.sh` | `scripts/m6/resolver/out/` |
 | 2 | R1 → R2 → M2 → R3 → M3 → M4 → M5 第二级走查 | 这台 Mac | 各自 README；用最新代码重新编译 | R1 3–5 分钟；R2 断网 1–2 分钟；M2 5–8 分钟；M3 10–12 分钟；M4 15–20 分钟；M5 第二级 30–45 分钟 | 会断网，要 sudo，会话会断开；前提检查会要求先关掉别的代理软件的隧道（TUN、VPN）和系统代理 | 各脚本的结果文件里全部通过 | 各自的 `restore.sh`；仍不行重启电脑 | 各脚本 README 指定的文件 |
 | 3 | 端到端（第一、二、三段） | 这台 Mac | `sudo -E scripts/m6/e2e/run.sh`，重启后 `--after-reboot`，再重启后 `--after-reboot-2` | 第一段 20–30 分钟，第二段 15–20 分钟，第三段约 10 分钟（估计），中间重启两次 | 启用期间和第一次重启后一两分钟断网，要 sudo；第二次重启是已回国状态、不断网 | `scripts/m6/e2e/out/m6e-results.txt` 里 I1、P1–P5、RB1–RB3、L1、B1–B3、E1–E3、U1、R1 都“通过”（RB 的连通性一项可以是“无法区分”，以锚点和状态为准），K1 记下 pfctl 的输出 | `sudo scripts/m6/e2e/restore.sh`（不需要网络）；死人开关默认 3600 秒后自动执行 | 结果文件和 `scripts/m6/e2e/out/`、`scripts/m6/install/out/` 的日志 |
-| 4 | 第四层实测（R21、R22、R23） | 你选定的那台 Mac（待答复） | 开发安装 → 应用里启用 → `sudo -E scripts/m6/layer4/run.sh` → 回国 → 卸载脚本 | 约 15–20 分钟（估计），加安装和卸载 | 在已启用状态下做；写入托管设置期间那台 Mac 上的 Claude Code 都经本机代理端口 | 结果文件里 T0–T5 的判定（按 README） | `sudo scripts/m6/layer4/restore.sh`；之后卸载脚本 | `scripts/m6/layer4/out/` |
-| 5 | 决定：要不要用发布构建验证真实效果；是否购买付费开发者账号 | — | — | — | — | — | — | 你的决定 |
+| 4 | 第四层实测（R21、R22、R23）；排在端到端之后 | 这台 Mac（用户 2026-11-27 答复）。做之前关掉所有 Claude Code 会话；期间 Claude Code 的出口是 Claude 出国的主代理；T 步里有两步故意连不上；做完回国、卸载、确认分片目录里没有我们的文件再恢复平时用法（见 `file:scripts/m6/layer4/README.md`） | 开发安装 → 应用里启用 → `sudo -E scripts/m6/layer4/run.sh` → 回国 → 卸载脚本 | 约 15–20 分钟（估计），加安装和卸载 | 在已启用状态下做；写入托管设置期间那台 Mac 上的 Claude Code 都经本机代理端口 | 结果文件里 T0–T5 的判定（按 README） | `sudo scripts/m6/layer4/restore.sh`；之后卸载脚本 | `scripts/m6/layer4/out/` |
+| 5 | 决定：要不要用发布构建验证真实效果（是否购买付费开发者账号：2026-11-27 已决定不购买） | — | — | — | — | — | — | 你的决定 |
 
 ## 9. 回填
 

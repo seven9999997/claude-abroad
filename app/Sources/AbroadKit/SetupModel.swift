@@ -54,7 +54,7 @@ public final class SetupModel: ObservableObject {
         }
     }
 
-    /// “后台服务”一步要用户执行的命令（付费项推迟期间的临时做法：手动加载）。
+    /// “后台服务”一步要用户执行的命令（这一版没有开发者签名、没有正式安装包：开发安装脚本注册或手动加载）。
     public var serviceCommand: String { L10n.setupServiceCommand }
 
     /// 读一次进度。

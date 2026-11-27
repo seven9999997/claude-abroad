@@ -53,7 +53,7 @@ public enum L10n {
     public static let setupMainProxy = "配置主代理"
     public static let setupDone = "完成"
     public static let setupWelcomeText = "Claude 出国让 Claude 的流量只经你选的主代理出去；主代理不可用时断网，而不是走本机网络。接下来三步：确认后台服务在运行、配置主代理、完成。"
-    public static let setupServiceText = "后台服务还没有连上。签名和公证推迟期间，后台服务需要手动加载（临时做法，正式安装包会自动注册）。请在“终端”里执行："
+    public static let setupServiceText = "后台服务还没有连上。这一版没有开发者签名，不提供正式安装包，后台服务要用开发安装脚本（sudo scripts/m6/install/install.sh）注册，或者手动加载。请在“终端”里执行："
     public static let setupServiceOK = "后台服务已经连上。"
     public static let setupServiceCommand = "sudo launchctl bootstrap system /Library/LaunchDaemons/com.claude-abroad.abroadd.plist"
     public static let setupTemporary = "这是临时做法"
@@ -229,7 +229,7 @@ public enum L10n {
     public static let settingsAdvanced = "高级"
     public static let signatureDisabled = "调用方签名校验：未启用"
     public static let cliTitle = "命令行工具"
-    public static let cliPath = "/usr/local/bin/abroad（正式安装包会放到这里；开发时在仓库里 go build ./cmd/abroad）"
+    public static let cliPath = "/usr/local/bin/abroad（开发安装脚本会放到这里；没装时在仓库里 go build ./cmd/abroad）"
     public static let cliUsage = "abroad status 查看状态；sudo abroad restore 一键回国；abroad --help 看全部用法"
     public static let processList = "进程清单"
     public static let processListLater = "要结束的 Claude 进程清单在一键回国的确认框里列出；单独查看的页面在以后的版本提供"
@@ -333,7 +333,7 @@ public enum L10n {
     public static let claudeCodeScope = "只覆盖 Claude Code，不覆盖 Claude 桌面版和浏览器"
     public static func resolverLockConflicts(_ doms: [String]) -> String { "有别的软件写的同名文件：" + doms.joined(separator: "、") + "（这些域名不受锁保护）" }
     public static let uninstall = "卸载"
-    public static let uninstallInInstaller = "在正式安装包里提供"
+    public static let uninstallInInstaller = "应用里的卸载入口还没有提供（要等系统授权）；现在请在终端里执行 sudo abroad uninstall，或开发安装的卸载脚本 sudo scripts/m6/install/uninstall.sh"
     public static let diagnostics = "诊断包"
     // 补齐五：应用里导出诊断包。
     public static let diagnosticsExport = "导出诊断包…"
