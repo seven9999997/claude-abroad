@@ -159,6 +159,7 @@ func TestCrashWithPending(t *testing.T) {
 	for k := 1; k <= len(names); k++ {
 		for _, reboot := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%02d %s/重启=%v", k, names[k-1], reboot), func(t *testing.T) {
+				t.Parallel() // 每例一个独立的测试台
 				b := newBed(t)
 				mustOK(t, b.m.Enable(bg))
 				b.net.FailNext(sysnet.OpLocaleTZ, errBoom)

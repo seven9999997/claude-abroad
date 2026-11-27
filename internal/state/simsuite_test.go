@@ -16,6 +16,8 @@ func TestSimBackendSuite(t *testing.T) {
 	if testing.Short() {
 		t.Skip("-short")
 	}
+	// 子进程自成一体（自己的临时目录、假系统），和本进程里的测试没有共享状态：并行跑，不再排在所有并行测试前面独占一段时间。
+	t.Parallel()
 	cmd := exec.Command(os.Args[0], "-test.run=^Test", "-test.skip=^TestSimBackendSuite$", "-test.count=1")
 	cmd.Env = append(os.Environ(), "STATE_BACKEND=sim")
 	out, err := cmd.CombinedOutput()
