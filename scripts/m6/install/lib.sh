@@ -12,6 +12,8 @@
 # （首次准备只锁测试域名、不写 Claude Code 的托管设置），本机真实的 Claude、Claude Code 不受影响。
 
 M6I_INSTALL="/Library/Application Support/claude-abroad"
+# abroad-vm 必须链接的虚拟化框架（安装和 payload 组装时用 grep 核对；只有 abroad-vm 运行时需要 cgo）
+M6I_VZ_MARK="/System/Library/Frameworks/Virtualization.framework"
 M6I_SNAP="/Library/Application Support/claude-abroad-install-snap"
 M6I_SOCK=/var/run/claude-abroad
 M6I_LOGDIR=/var/log/claude-abroad

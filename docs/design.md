@@ -1210,6 +1210,8 @@ abroad engine ls | install <name> [--version] | rollback <name>
 
 **M6-2a、M6-2b、M6-3、M6-3b 新增**：`internal/claudecfg`（Claude Code 的托管设置分片）、`internal/daemon/claudeproxy.go` 和 `internal/stack/proxyflow.go`（第四层的本机代理端口，复用网络栈的判定和拨号）、`internal/resolverlock`（Claude 域名解析锁的生成、写入、删除、自检；真实目录只在真实模式入口接上）、`scripts/m6/resolver`（R9、R18 的真机脚本）、`cmd/abroad-guard`（开机时的 guard 入口，真实的 pfctl 执行器只在这里和 `internal/daemon/realexec.go` 取得）、`internal/guard`（guard 的逻辑和与 abroadd 共用的三个文件）、`internal/vmmgr`（abroadd 管理 abroad-vm 进程）。**M6-5b 新增**：`cmd/abroad-rescue`（应急程序入口，组装真实的系统操作）、`internal/rescue`（应急恢复的逻辑，只依赖注入的接口）。
 
+- **构建和安装时核对 cgo**（2026-11-27 真机）：只有 abroad-vm 运行时需要 cgo（调 Virtualization.framework；abroad、abroadd 虽然间接引用了虚拟化库，但以 CGO_ENABLED=0 编出来也照常运行，abroad-guard、abroad-rescue 不依赖 cgo）。integrity-build.sh 编 abroad-vm 时强制 `CGO_ENABLED=1`、用 `/usr/bin/clang`，编完用 `go version -m` 核对；payload.sh 组装和 install.sh 的前提检查（全新安装、`--upgrade`、`--from`）都用 grep 核对 abroad-vm 链接了 `/System/Library/Frameworks/Virtualization.framework`，不通过就拒绝、什么都不改。起因：用户在终端的 conda 环境里构建，Go 找不到 C 编译器，静默以 CGO_ENABLED=0 编出了起不了虚拟机的 abroad-vm。
+
 ### 12.1 平台接口（2026-11-20，Windows 版加入后）
 
 - **共用**（与平台无关，两个平台直接用）：rules、gatesm、exitcheck、exitpolicy、envcheck（检查项的判定）、stack（gVisor 网络栈）、fakedns、wire、guestabi、mihomocfg、sniff、redact、usererror、state（状态机；状态文件的打开和属主校验按平台实现）、imagebuild，以及虚拟机里的 agent、kmod。

@@ -42,6 +42,7 @@ SNAP="/Library/Application Support/claude-abroad-install-snap"
 SRC="${TMP}/src"
 mkdir -p "${SRC}/bin" "${SRC}/image" "${TMP}/App.app/Contents/MacOS"
 for f in abroad abroad-rescue abroadd abroad-guard abroad-vm; do printf '#!/bin/sh\n# %s\n' "$f" >"${SRC}/bin/$f"; chmod +x "${SRC}/bin/$f"; done
+printf '# links /System/Library/Frameworks/Virtualization.framework\n' >>"${SRC}/bin/abroad-vm" # 假的“链接了虚拟化框架”
 for f in Image initramfs.gz modloop rootfs.img; do printf 'img %s\n' "$f" >"${SRC}/image/$f"; done
 echo '{"version":1,"files":{}}' >"${SRC}/integrity.json"
 echo '{"commit":"1111111aaaaa","build_time":"20261101T000000Z","dirty":false,"state_format":1}' >"${SRC}/build.json"
@@ -276,6 +277,7 @@ mkpayload() {
   local d=$1 f
   mkdir -p "$d/bin" "$d/image"
   for f in abroad abroad-rescue abroadd abroad-guard abroad-vm; do printf '#!/bin/sh\n# %s %s\n' "$f" "$2" >"$d/bin/$f"; chmod +x "$d/bin/$f"; done
+  printf '# links /System/Library/Frameworks/Virtualization.framework\n' >>"$d/bin/abroad-vm"
   for f in Image initramfs.gz modloop rootfs.img; do printf 'img %s %s\n' "$f" "$2" >"$d/image/$f"; done
   printf '{"version":1,"files":{},"v":"%s"}\n' "$2" >"$d/integrity.json"
   printf '{"commit":"%s","build_time":"%s","dirty":false,"state_format":%s}\n' "$2" "$3" "${4:-1}" >"$d/build.json"
@@ -636,6 +638,26 @@ done
 grep -v 'launchctl bootstrap system .*abroadd.plist' "${TMP}/up.dry" | awk '{ print } /^CHANGE: launchctl bootout system\/com.claude-abroad.dev.abroadd$/ { print "CHANGE: launchctl bootstrap system /Library/LaunchDaemons/com.claude-abroad.dev.abroadd.plist" }' >"${TMP}/nu"
 negu "放新文件之前就启动 abroadd" "${TMP}/nu"
 grep -v 'launchctl bootout system/com.claude-abroad.dev.abroadd' "${TMP}/up.dry" >"${TMP}/nu"; negu "没停 abroadd 就搬旧版" "${TMP}/nu"
+
+# ---- 2026-11-27 真机：abroad-vm 必须链接虚拟化框架（构建时没开 cgo 的产物，安装和升级都拒绝、什么都不改）----
+NV=$(mkcase); cp -R "${SRC}" "${TMP}/src-nocgo"; printf '#!/bin/sh\n# abroad-vm built without cgo\n' >"${TMP}/src-nocgo/bin/abroad-vm"
+tree "$NV" >"$NV/before.tree"
+if M6I_TEST_DIR="$NV" M6I_TEST_SRC="${TMP}/src-nocgo" M6I_YES=1 bash "${INSTALL}" >/dev/null 2>"$NV/err"; then bad "vz. 没链接虚拟化框架的 abroad-vm 也装上了"; else
+  tree "$NV" >"$NV/after.tree"
+  grep -q '没有链接虚拟化框架' "$NV/err" && cmp -s "$NV/before.tree" "$NV/after.tree" && ok "vz. 全新安装：拒绝没链接虚拟化框架的 abroad-vm，什么都没改" || bad "vz. 全新安装的拒绝不对：$(tail -2 "$NV/err")"
+fi
+PV="${TMP}/p-nocgo"; cp -R "$P2" "$PV"; printf '#!/bin/sh\n# abroad-vm built without cgo\n' >"$PV/bin/abroad-vm"
+UV=$(mkcase); setup_old "$UV" && {
+  upgset "$UV" >"$UV/set.before"; hashes "$UV" "$I/state" >"$UV/state.before"
+  if upg "$UV" "$PV" "$ST_R"; then bad "vz. 升级用了没链接虚拟化框架的 abroad-vm"; else
+    upgset "$UV" >"$UV/set.after"; hashes "$UV" "$I/state" >"$UV/state.after"
+    grep -q '没有链接虚拟化框架' "$UV/up.err" && cmp -s "$UV/set.before" "$UV/set.after" && cmp -s "$UV/state.before" "$UV/state.after" &&
+      ok "vz. 原地升级：拒绝没链接虚拟化框架的 abroad-vm，什么都没改" || bad "vz. 升级的拒绝不对：$(tail -2 "$UV/up.err")"
+  fi
+}
+if scripts/dev/payload.sh --src "$PV" --out "${TMP}/pl-nocgo" >/dev/null 2>"${TMP}/pl-nocgo.err"; then bad "vz. payload.sh 组装了没链接虚拟化框架的 abroad-vm"; else
+  grep -q '没有链接虚拟化框架' "${TMP}/pl-nocgo.err" && ok "vz. payload.sh 遇到没链接虚拟化框架的 abroad-vm 就失败" || bad "vz. payload.sh 的提示不对：$(cat "${TMP}/pl-nocgo.err")"
+fi
 
 # 2026-11-27：真机路径上“是不是开发构建”的判断（测试模式跳过它），由公共函数的自测覆盖
 scripts/lib/buildcheck-selftest.sh >"${TMP}/bc" 2>&1 && ok "“是不是开发构建”的判断（$(grep -c '^✓' "${TMP}/bc") 项，含退出码 2 的假程序）" || bad "“是不是开发构建”的判断：$(grep '^✗' "${TMP}/bc" | head -3)"

@@ -124,3 +124,8 @@ scripts/m6/install/selftest.sh             # 自测：在临时目录里真的�
 | 端到端 | 连测试段的探测、LAN1、K1、L1、CC1 | 只能真机 |
 | 第四层 | 分片的写入、删除、被改过时不删 | 自测 c1–c4（测试目录） |
 | 第四层 | 启动 Claude Code、诱饵端口、T0–T5 的判定 | 只能真机（暂不测） |
+
+
+## abroad-vm 必须带 cgo（2026-11-27）
+
+只有 abroad-vm 运行时需要 cgo。`scripts/dev/integrity-build.sh` 编它时强制 cgo、编完核对；`scripts/dev/payload.sh` 和安装、升级的前提检查都用 grep 核对它链接了 `/System/Library/Frameworks/Virtualization.framework`，没有就拒绝、什么都不改（自测 vz）。
