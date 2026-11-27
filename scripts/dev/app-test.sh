@@ -36,15 +36,26 @@ for _ in $(seq 1 100); do [[ -S "${SOCK}" ]] && break; sleep 0.1; done
 echo "abroadd 已启动（pid ${PID}，--fake-system --fake-main-proxy）"
 
 cd app
-swift build
-# Command Line Tools 里的 swift-build 偶尔编测试时找不到 swift-testing 的宏插件（“plugin for module 'TestingMacros'
-# not found”，同样的源码重跑就过）。只对这一种错误重跑，最多 5 次，并在最后打印一共重跑了几次（看它是不是在变严重）；
+# swift-testing 的宏插件偶发“plugin for module 'TestingMacros' not found”（2026-11-27 排查）：swift-build 默认用显式
+# 模块构建，依赖扫描给编译任务算出要加载的宏插件（-load-resolved-plugin）；偶发时测试目标的所有编译任务都缺了
+# TestingMacros 这一项（它只在工具链的 host/plugins/testing 子目录里，靠 -plugin-path 找），整个测试目标就编不过。
+# 把这个插件经 -load-plugin-library 显式交给编译器后，扫描结果里每次都有它（改为进程内加载）。调低并行数不管用（-j 2 更糟）。
+# build 和 test 用同一组参数，免得两步之间来回整体重编。插件不在这个位置（换了工具链布局）时不加，照旧靠下面的重跑兜底。
+SWIFT_FLAGS=() # 空数组展开写成 ${SWIFT_FLAGS[@]+...}：macOS 自带的 bash 3.2 在 set -u 下展开空数组会报错
+TESTING_MACROS="$(dirname "$(xcrun --find swift)")/../lib/swift/host/plugins/testing/libTestingMacros.dylib"
+if [[ -f "${TESTING_MACROS}" ]]; then
+  SWIFT_FLAGS=(-Xswiftc -load-plugin-library -Xswiftc "${TESTING_MACROS}")
+else
+  echo "（没找到 swift-testing 的宏插件 ${TESTING_MACROS}，不显式加载）"
+fi
+swift build ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
+# 兜底：仍出现上面那种错误时只对这一种错误重跑，最多 5 次，并在最后打印一共重跑了几次（看它是不是在变严重）；
 # 其他失败照常失败。
 MAX=5
 retries=0
 for try in $(seq 1 ${MAX}); do
   set +e
-  ABROAD_SOCKET="${SOCK}" swift test >"${TMP}/swift-test.txt" 2>&1
+  ABROAD_SOCKET="${SOCK}" swift test ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"} >"${TMP}/swift-test.txt" 2>&1
   rc=$?
   set -e
   if [[ ${rc} -ne 0 ]] && grep -q "plugin for module 'TestingMacros' not found" "${TMP}/swift-test.txt" && [[ ${try} -lt ${MAX} ]]; then

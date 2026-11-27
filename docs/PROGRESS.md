@@ -49,6 +49,11 @@
   - 用户的真机验证（阶段 A）：见计划 2.7——一次原地升级且主代理配置还在；一次“借用虚拟机进行中被拒绝”（`sudo abroad main check` 进行时另开终端执行 `--upgrade`）。
 - **2026-11-27 阶段 B（应用里安装、升级、卸载后台服务，v0.71c）：开发完成，待顾问验收**（在 worktree `.claude/worktrees/stage-b`、分支 stage-b 上做，没有合并：用户在主工作目录做真机验证）。复用 B0 的提权层；只读卸载预览 `GET /v1/uninstall/preview`；`scripts/dev/build-app.sh`（会话里实测：payload 放 `Contents/Resources/payload/`，签名后 `codesign --verify --strict` 通过）；B0 建议改⑤（确认框里的“现在：…”）一并补了。
   - **另记（顾问 2026-11-27）**：`scripts/dev/app-test.sh` 的测试宏插件偶发错误，B0 时重跑了 3 次（上限 4 次），属偶发、在增多；下次 3 次以上单独排查，先看并行编译占资源，不要提高上限。阶段 B 开发中单独跑 `swift test` 也碰到过一次（“plugin for module 'TestingMacros' not found”），重跑即过。
+  - **测试宏插件偶发错误的排查（2026-11-27，顾问交办，待顾问验收）**：
+    - 复现（每次先 touch 全部测试源码强制重编测试目标，8 核，负载 10–33）：改前 10 次重跑 0、1、1、4、0、3、0、0、2、1 次，合计 12 次；报错原文 `external macro implementation type 'TestingMacros.TestDeclarationMacro' could not be found for macro 'Test'; plugin for module 'TestingMacros' not found`（ExpectMacro、SourceLocationMacro 同样）。
+    - 原因：swift-build 默认用显式模块构建，依赖扫描给每个编译任务算出 `-load-resolved-plugin` 清单。成功时清单里有 `…/host/plugins/testing/libTestingMacros.dylib#…/swift-plugin-server#TestingMacros`（插件只在 CLT 的 `plugins/testing` 子目录，靠 `-plugin-path` 找到，经外部 swift-plugin-server 加载）；失败时测试目标**所有**编译任务的命令行里都没有这一项（ps 抓到的命令行对比）。不是插件文件被删或重新生成（它在 CLT 里，不在 .build），也不是资源不够：`-j 2` 反而 6 次失败 5 次；和 @MainActor 那批测试文件无关（报错总落在含 test_entry_point.swift 的第一批，只是因为第一个失败的任务让其余任务被取消）。
+    - 办法：`app-test.sh` 给 swift build 和 swift test 都加 `-Xswiftc -load-plugin-library -Xswiftc <工具链>/lib/swift/host/plugins/testing/libTestingMacros.dylib`（路径由 `xcrun --find swift` 推出，不存在时不加）。加上后扫描结果每次都有 `…libTestingMacros.dylib##TestingMacros`（进程内加载）。改后 10 次 app-test 合计重跑 0 次（180 项）；另外单独 `swift build --build-tests` 改后 10 次 0 失败，同一时段不加参数 6 次失败 2 次。重跑兜底和上限（4 次）不变。
+    - 另见（与宏插件无关、未处理）：改后 10 次里有 2 次集成测试 `IntegrationTests.diagnosticsExport()` 失败（一次“诊断包不是 JSON”、一次“取诊断包失败”，即经 socket 取 `/v1/diagnostics` 偶发不成功），改前 10 次没出现；交顾问定是否单独排查。
 - **2026-11-27 B0（应用里直接执行敏感操作）：开发完成，待顾问验收**。用户原话“添加代理节点又需要执行这个，可以直接执行吗，不需要用户再执行”。计划 docs/app-privileged-plan.md v2（顾问必须改：只读的启用预览 `GET /v1/enable/preview`；裁定：CryptoKit 只在 InputFiles.swift、版本 v0.71b、第四道开关进白名单）；设计 v0.71b。M5-3 以此收口，E1、E2 撤掉。阶段 B（应用里的安装、升级、卸载，v0.71c）接着做。
 - **借用虚拟机修复的验收标准（前任 architect 2026-11-27 原文）**：
   ```

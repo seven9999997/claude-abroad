@@ -139,6 +139,13 @@ ABROAD_FULL_EXHAUSTIVE=1 go test -timeout 30m -race -tags abroaddev ./internal/.
 
 默认命令（CLAUDE.md 里的 `go test ./internal/...`）不带开关，状态机包要在默认的 10 分钟时限内跑完。以后再往这个包里加穷举，先量耗时。
 
+## Mac 应用的测试（app-test.sh）
+
+`scripts/dev/app-test.sh`：编出开发构建的 abroadd，以 `--fake-system --fake-main-proxy` 起在临时目录，再 `cd app && swift build && swift test`（集成测试经 `ABROAD_SOCKET` 连它），跑完停掉 abroadd、删临时目录。
+
+- swift build 和 swift test 都带 `-Xswiftc -load-plugin-library -Xswiftc <工具链>/lib/swift/host/plugins/testing/libTestingMacros.dylib`（路径由 `xcrun --find swift` 推出，文件不在时不加）。原因：只有 Command Line Tools 时，swift-build 的显式模块依赖扫描偶尔漏掉 swift-testing 的宏插件，测试编译报 “plugin for module 'TestingMacros' not found”（2026-11-27 排查：改前 10 次合计重跑 12 次，改后 0 次）。自己在 `app/` 里手动跑 `swift test` 时如遇到这个错误，也加上这组参数。
+- 仍对这一种错误重跑兜底，上限 4 次，最后打印重跑了几次。
+
 ## 手动运行虚拟机
 
 ```sh
