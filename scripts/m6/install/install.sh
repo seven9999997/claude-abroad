@@ -356,12 +356,26 @@ do_upgrade() {
     fi
   done
 
-  # ---- 7. 应用（过渡，风险 8）：老安装脚本以 root 身份放进“应用程序”的那份（记录里有 app）换成仓库里的新应用包 ----
+  # ---- 7. 应用的交接（过渡，风险 8；顾问 2026-11-27 定）：老安装脚本以 root 身份放进“应用程序”的那份（记录里有 app）
+  # 换成仓库里的新应用包，属主改成执行 sudo 的用户，升级成功后从安装记录里删掉 app——之后应用归用户管：卸载不删它、
+  # 快照对照不管它。拿不到执行 sudo 的用户（没有或是 root）时不替换应用，只提示。
+  APP_HANDOVER=0
   if [ "${M6I_FROM}" != 1 ] && [ -d "${APPSRC}/Contents/MacOS" ] &&
     { [ "${M6I_MODE}" = dry ] || { [ -n "$(m6i_rec_get app)" ] && [ -d "$(P "${M6I_APP}")" ]; }; }; then
-    UPG_STEP="换应用"
-    m6i_do mv "$(P "${M6I_APP}")" "$(P "${PREV}")/app.app" || m6i_die "搬旧应用失败"
-    m6i_do cp -R "${APPSRC}" "$(P "${M6I_APP}")" || m6i_die "复制应用失败"
+    case "${M6I_MODE}" in
+      real) owner=${SUDO_USER:-} ;;
+      test) owner=${M6I_TEST_SUDO_USER:-} ;;
+      dry) owner="<SUDO_USER>" ;;
+    esac
+    if [ -z "${owner}" ] || [ "${owner}" = root ]; then
+      m6i_log "注意：${M6I_APP} 是以前的安装脚本以管理员身份放的；这次拿不到执行 sudo 的用户（请用 sudo 从你自己的账号运行），应用没有替换，也没有交给你。"
+    else
+      UPG_STEP="换应用"
+      m6i_do mv "$(P "${M6I_APP}")" "$(P "${PREV}")/app.app" || m6i_die "搬旧应用失败"
+      m6i_do cp -R "${APPSRC}" "$(P "${M6I_APP}")" || m6i_die "复制应用失败"
+      m6i_do chown -R "${owner}" "$(P "${M6I_APP}")" || m6i_die "把应用交给 ${owner} 失败"
+      APP_HANDOVER=1
+    fi
   fi
 
   # ---- 8. 启动服务，核对 ----
@@ -381,6 +395,10 @@ do_upgrade() {
 
   # ---- 9. 完成 ----
   m6i_do rm -rf "$(P "${PREV}")"
+  if [ "${APP_HANDOVER}" = 1 ]; then
+    m6i_do rm -f "$(P "${M6I_SNAP}")/app"
+    m6i_log "应用 ${M6I_APP} 已换成新的并交给 ${owner}：之后归你管，卸载不会删它。"
+  fi
   m6i_do rm -f "$(P "${M6I_SNAP}")/${UPG_MARK}"
   trap - EXIT
   m6i_log "升级完成：${U_OLD} → ${U_NEW}，主代理和设置已保留。"

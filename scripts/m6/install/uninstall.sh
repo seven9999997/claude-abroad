@@ -200,4 +200,8 @@ fi
 m6i_do rm -rf "${SNAPD:?}"
 if [ "${fails}" != 0 ]; then m6i_log "卸载完成，但有 ${fails} 处要注意（见上）"; exit 1; fi
 m6i_log "卸载完成：和安装前的快照逐项一致"
+# 应用不在安装记录里（用户自己放的，或升级时交给了用户）：卸载不删它
+if [ "${APP_REC}" = 0 ] && [ -d "$(P "${M6I_APP}")" ]; then
+  m6i_log "应用 ${M6I_APP} 留着，不需要的话可以自己移到废纸篓。"
+fi
 exit 0

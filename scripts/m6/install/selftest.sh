@@ -21,7 +21,8 @@
 #   o. 每一步注入失败、重启后应答不对：退回旧版本（20），和升级前逐字节一样；
 #   p. 退回也失败（21，prev 和标记留着）；再运行 --upgrade 接着退回；标记在时卸载照常；
 #   q. 中断后退回；  r. 升级后卸载和安装前一致；应用不在安装记录里时不参与卸载对照；
-#   s. payload.sh 的布局、--from 安装和升级、摘要对不上拒绝、--check-only --upgrade 只读；升级的空跑和命令核对及反例。
+#   s. payload.sh 的布局、--from 安装和升级、摘要对不上拒绝、--check-only --upgrade 只读；升级的空跑和命令核对及反例；
+#   t. 应用的交接：老安装记录里有 app 时，升级后属主改成执行 sudo 的用户、记录里删掉 app；再卸载时对照一致、应用留着。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "${ROOT}" || exit 1
@@ -504,6 +505,29 @@ S=$(mkcase); setup_old "$S"; upgset "$S" >"$S/set.before"; cp "$S/sys.log" "$S/s
 M6I_TEST_DIR="$S" M6I_TEST_SRC="$P2" M6I_TEST_STATUS="$ST_R" bash "${INSTALL}" --check-only --upgrade >/dev/null 2>"$S/c.err"; rc=$?
 upgset "$S" >"$S/set.after"
 [ $rc = 0 ] && grep -q '可以升级' "$S/c.err" && cmp -s "$S/set.before" "$S/set.after" && cmp -s "$S/sys.log" "$S/sys.log.0" && ok "s. --check-only --upgrade：报告可以升级，什么都没改" || bad "s. --check-only --upgrade：rc=$rc"
+
+# ---- t. /Applications 应用的交接（顾问 2026-11-27）：老安装记录里有 app → 升级后属主是执行 sudo 的用户、记录里没有 app；
+#      再卸载时快照对照一致、应用留着。拿不到用户时不替换、只提示。失败时旧应用放回、记录还在。----
+T=$(mkcase); tree "$T" >"$T/before.tree"; setup_old "$T"
+[ -n "$(cat "$T$SNAP/app" 2>/dev/null)" ] || bad "t. 准备：安装记录里应有 app"
+echo old >"$T/Applications/ClaudeAbroad.app/old-marker"
+M6I_TEST_SUDO_USER=alice M6I_TEST_DIR="$T" M6I_TEST_SRC="$P2" M6I_TEST_STATUS="$ST_R" bash "${INSTALL}" --upgrade --yes >/dev/null 2>"$T/up.err"; rc=$?
+[ $rc = 0 ] && grep -qx "SYS: chown -R alice $T/Applications/ClaudeAbroad.app" "$T/sys.log" && [ ! -e "$T$SNAP/app" ] &&
+  [ ! -e "$T/Applications/ClaudeAbroad.app/old-marker" ] && [ -f "$T/Applications/ClaudeAbroad.app/Contents/Info.plist" ] && grep -q '交给 alice' "$T/up.err" &&
+  ok "t. 升级：应用换成新的，属主改成执行 sudo 的用户（alice），安装记录里没有 app 了" || bad "t. 应用交接：rc=$rc $(grep -c chown "$T/sys.log") $(tail -2 "$T/up.err")"
+uninst "$T"; rc=$?
+tree "$T" >"$T/after.tree"
+[ $rc = 0 ] && [ -f "$T/Applications/ClaudeAbroad.app/Contents/Info.plist" ] && grep -q '应用 /Applications/ClaudeAbroad.app 留着，不需要的话可以自己移到废纸篓。' "$T/uninstall.err" &&
+  [ "$(diff "$T/before.tree" "$T/after.tree" | grep '^[<>]' | grep -v 'Applications/ClaudeAbroad.app')" = "" ] &&
+  ok "t. 交接后卸载：快照对照一致，应用留着，并提示可以自己移到废纸篓" || bad "t. 交接后卸载：rc=$rc $(cat "$T/uninstall.err") $(diff "$T/before.tree" "$T/after.tree" | head -5)"
+T=$(mkcase); setup_old "$T"; echo old >"$T/Applications/ClaudeAbroad.app/old-marker"
+upg "$T" "$P2" "$ST_R"; rc=$?
+[ $rc = 0 ] && [ -f "$T/Applications/ClaudeAbroad.app/old-marker" ] && [ -n "$(cat "$T$SNAP/app" 2>/dev/null)" ] && ! grep -q 'chown -R .*Applications' "$T/sys.log" && grep -q '拿不到执行 sudo 的用户' "$T/up.err" &&
+  ok "t. 拿不到执行 sudo 的用户：应用不替换、记录不变，只提示" || bad "t. 拿不到用户：rc=$rc"
+T=$(mkcase); setup_old "$T"; echo old >"$T/Applications/ClaudeAbroad.app/old-marker"; upgset "$T" >"$T/set.before"
+M6I_TEST_SUDO_USER=alice M6I_TEST_FAIL_AT=verify M6I_TEST_DIR="$T" M6I_TEST_SRC="$P2" M6I_TEST_STATUS="$ST_R" bash "${INSTALL}" --upgrade --yes >/dev/null 2>&1; rc=$?
+upgset "$T" >"$T/set.after"
+[ $rc = 20 ] && cmp -s "$T/set.before" "$T/set.after" && [ -n "$(cat "$T$SNAP/app" 2>/dev/null)" ] && ok "t. 交接之后升级失败：旧应用放回，安装记录里的 app 还在" || bad "t. 交接后失败：rc=$rc"
 
 # ---- 升级的空跑和命令核对 ----
 plain DRY_RUN=1 bash "${INSTALL}" --upgrade >"${TMP}/up.dry" 2>/dev/null && ok "升级空跑退出码 0" || bad "升级空跑退出码非零"

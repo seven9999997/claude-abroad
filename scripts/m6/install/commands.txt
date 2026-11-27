@@ -54,6 +54,7 @@ CHANGE ^mv /Library/Application Support/claude-abroad/(bin|image|integrity\.json
 CHANGE ^chown -R root:wheel /Library/Application Support/claude-abroad/(bin|image|integrity\.json|build\.json|scripts)$
 CHANGE ^chmod -R go-w /Library/Application Support/claude-abroad/(bin|image|integrity\.json|build\.json|scripts)$
 CHANGE ^mv /Applications/ClaudeAbroad\.app /Library/Application Support/claude-abroad/prev/app\.app$
+CHANGE ^chown -R [^ /]+ /Applications/ClaudeAbroad\.app$
 CHANGE ^rm -rf /Library/Application Support/claude-abroad/prev$
 CHANGE ^rm -f /Library/Application Support/claude-abroad-install-snap/upgrading$
 # 退回旧版本时（空跑里不出现；写在这里备查）：删新放的、把 prev 里的放回、放回 plist 和应用、重新注册服务。
