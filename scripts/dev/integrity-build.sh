@@ -32,7 +32,11 @@ BI="-X claude-abroad/internal/buildinfo.Commit=${COMMIT} -X claude-abroad/intern
 
 go build ${TAGS[@]+"${TAGS[@]}"} -trimpath -ldflags "${BI}" -o "${OUT}/bin/abroad" ./cmd/abroad
 go build -trimpath -ldflags "${BI}" -o "${OUT}/bin/abroad-rescue" ./cmd/abroad-rescue # 应急程序没有开发构建（M6-5b）
-go build ${TAGS[@]+"${TAGS[@]}"} -trimpath -ldflags "${BI}" -o "${OUT}/bin/abroad-vm" ./cmd/abroad-vm
+# abroad-vm 要用 cgo 调 Virtualization.framework：强制打开 cgo、用系统自带的编译器（2026-11-27 真机：用户终端里的 conda
+# 环境让 Go 找不到 C 编译器，悄悄以 CGO_ENABLED=0 编出了一个起不了虚拟机的 abroad-vm），编完核对，没带上 cgo 就失败。
+env CGO_ENABLED=1 CC=/usr/bin/clang CXX=/usr/bin/clang++ go build ${TAGS[@]+"${TAGS[@]}"} -trimpath -ldflags "${BI}" -o "${OUT}/bin/abroad-vm" ./cmd/abroad-vm
+go version -m "${OUT}/bin/abroad-vm" | grep -q 'CGO_ENABLED=1' ||
+  { echo "abroad-vm 没有用 cgo 编出来，起不了虚拟机：请确认装了 Xcode 命令行工具（xcode-select --install）" >&2; exit 1; }
 scripts/dev/sign.sh "${OUT}/bin/abroad-vm" >/dev/null # 虚拟化授权（ad-hoc）：要在生成清单之前，签名会改文件内容
 go build -o "${OUT}/abroad-dev" ./cmd/abroad-dev
 
