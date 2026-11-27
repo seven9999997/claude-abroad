@@ -7,27 +7,55 @@ struct EnginesPage: View {
     var body: some View {
         LoadStateView(state: model.state, retry: { Task { await model.load() } }) {
             PageScroll {
-                CardSection(L10n.vmSection) {
+                CardSection(L10n.vmSection, icon: "desktopcomputer") {
                     if let m = model.view?.vmManager {
-                        CardRow { Text(L10n.vmManagerLine(m.phase, m.restarts)) }
+                        CardRow {
+                            IconBadge(symbol: "desktopcomputer", tone: vmTone(m.phase), size: 32)
+                            RowLabel(title: L10n.vmManagerLine(m.phase, m.restarts))
+                            StatusBadge(tone: vmTone(m.phase), text: L10n.vmPhaseName(m.phase))
+                        }
                         if m.borrowed == true {
                             RowSeparator()
                             CardRow { ToneNote(tone: .attention, text: L10n.vmBorrowed, symbol: "clock") }
                         }
                         if let e = m.lastError, !e.isEmpty {
                             RowSeparator()
-                            CardRow { RowLabel(title: L10n.vmLastError); Text(e).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+                            CardRow(alignment: .top) {
+                                RowLabel(title: L10n.vmLastError, bold: true)
+                                Text(e)
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                         RowSeparator()
                     }
                     if let t = model.vmText {
-                        CardRow { Text(t).foregroundStyle(.secondary) }
+                        CardRow {
+                            IconBadge(symbol: "bolt.slash", tone: .local, size: 28)
+                            Text(t).foregroundStyle(.secondary)
+                        }
                     } else if let v = model.view {
-                        CardRow { RowLabel(title: L10n.vmVersion); Text(v.version ?? "").foregroundStyle(.secondary).textSelection(.enabled) }
+                        CardRow {
+                            RowLabel(title: L10n.vmVersion)
+                            Text(v.version ?? "")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
                         RowSeparator()
-                        CardRow { RowLabel(title: L10n.vmKernel); Text(v.kernel ?? "").foregroundStyle(.secondary).textSelection(.enabled) }
+                        CardRow {
+                            RowLabel(title: L10n.vmKernel)
+                            Text(v.kernel ?? "")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
                         RowSeparator()
-                        CardRow { RowLabel(title: L10n.vmUptime); Text(L10n.seconds(v.uptimeS ?? 0)).foregroundStyle(.secondary) }
+                        CardRow {
+                            RowLabel(title: L10n.vmUptime)
+                            InfoPill(text: L10n.seconds(v.uptimeS ?? 0), monospaced: true)
+                        }
                         if v.bootChanged {
                             RowSeparator()
                             CardRow { ToneNote(tone: .attention, text: L10n.vmBootChanged, symbol: "arrow.clockwise") }
@@ -35,12 +63,13 @@ struct EnginesPage: View {
                     }
                 }
                 if model.vmText == nil, let engines = model.view?.engines, !engines.isEmpty {
-                    CardSection(L10n.enginesSection) {
+                    CardSection(L10n.enginesSection, icon: "cpu") {
                         ForEach(Array(engines.enumerated()), id: \.element.name) { i, e in
                             if i > 0 { RowSeparator() }
                             CardRow {
-                                Image(systemName: "cpu").foregroundStyle(Palette.accent).accessibilityHidden(true)
-                                Text(L10n.engineLine(e.name, e.state, e.restarts))
+                                IconBadge(symbol: "cpu", tone: engineTone(e.state), size: 30)
+                                RowLabel(title: e.name, detail: L10n.engineLine(e.name, e.state, e.restarts))
+                                StatusBadge(tone: engineTone(e.state), text: e.state)
                             }
                         }
                     }
@@ -48,5 +77,22 @@ struct EnginesPage: View {
             }
         }
         .task { await model.load() }
+    }
+
+    private func vmTone(_ phase: String) -> StatusTone {
+        switch phase {
+        case "running": return .pass
+        case "starting", "stopping", "backoff": return .checking
+        case "unhealthy", "failed", "stuck": return .blocked
+        default: return .local
+        }
+    }
+
+    private func engineTone(_ state: String) -> StatusTone {
+        let s = state.lowercased()
+        if s.contains("run") || s == "up" || s == "ok" { return .pass }
+        if s.contains("start") || s.contains("wait") { return .checking }
+        if s.contains("fail") || s.contains("err") || s.contains("down") { return .blocked }
+        return .local
     }
 }

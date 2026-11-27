@@ -34,7 +34,7 @@ struct ClaudeAbroadApp: App {
         // 主窗口放在第一个：启动时自动打开（第一级走查 L1-01）。只放在菜单栏时，刘海屏上图标可能被挡住，打开后什么都看不到。
         Window(L10n.appName, id: "main") {
             MainWindow(ui: ui, status: model, setup: setup, main: main, exits: exits, apps: apps, env: env, region: region, engines: engines, flow: ClaudeAbroadApp.flow, privileged: ClaudeAbroadApp.privileged, service: service)
-                .frame(minWidth: 780, minHeight: 560)
+                .frame(minWidth: 820, idealWidth: 980, minHeight: 580, idealHeight: 680)
                 .tint(Palette.accent)
                 .task {
                     model.start()
@@ -76,14 +76,19 @@ struct MainWindow: View {
             .safeAreaInset(edge: .top) {
                 if service.showsUpgrade && !(setup.shouldShow && setup.step != .done) { // 阶段 B：后台服务可以（或要）升级
                     HStack(spacing: 10) {
-                        Image(systemName: "arrow.up.circle").foregroundStyle(Palette.tone(.attention))
-                        Text(service.text).fixedSize(horizontal: false, vertical: true)
+                        IconBadge(symbol: "arrow.up.circle", tone: .attention, size: 26)
+                        Text(service.text)
+                            .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
                         Spacer()
-                        Button(L10n.serviceUpgradeButton) { Task { await service.userTappedUpgrade() } }.disabled(!service.upgradeEnabled)
+                        Button(L10n.serviceUpgradeButton) { Task { await service.userTappedUpgrade() } }
+                            .buttonStyle(SecondaryButtonStyle(compact: true, tone: .attention))
+                            .disabled(!service.upgradeEnabled)
                     }
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Palette.toneSoft(.attention))
+                    .padding(.vertical, 9)
+                    .background(Palette.box.overlay(Palette.toneSoft(.attention)))
+                    .overlay(alignment: .bottom) { Rectangle().fill(Palette.toneLine(.attention)).frame(height: 1) }
                 }
             }
             .sheet(isPresented: Binding(get: { flow.isActive }, set: { if !$0, flow.isActive { flow.cancel() } })) {
@@ -96,14 +101,16 @@ struct MainWindow: View {
             .safeAreaInset(edge: .top) {
                 if let note = flow.completedNote {
                     HStack(spacing: 10) {
-                        Image(systemName: "checkmark.circle.fill").foregroundStyle(Palette.tone(.success))
-                        Text(note)
+                        IconBadge(symbol: "checkmark.circle.fill", tone: .success, size: 26)
+                        Text(note).font(.callout)
                         Spacer()
                         Button(L10n.close) { flow.dismissCompletedNote() }
+                            .buttonStyle(SecondaryButtonStyle(compact: true))
                     }
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Palette.toneSoft(.success))
+                    .padding(.vertical, 9)
+                    .background(Palette.box.overlay(Palette.toneSoft(.success)))
+                    .overlay(alignment: .bottom) { Rectangle().fill(Palette.toneLine(.success)).frame(height: 1) }
                 }
             }
     }
@@ -120,40 +127,74 @@ struct MainWindow: View {
         }
     }
 
-    /// 半透明侧边栏：分组导航（方向键、Tab 可以操作），底部是当前状态（圆点加文字）。
+    /// 半透明侧边栏：分组导航（方向键、Tab 可以操作），底部是当前状态卡片。
     private var sidebar: some View {
         List(selection: $ui.selection) {
             ForEach(SidebarItem.groups, id: \.title) { group in
-                Section(group.title) {
+                Section {
                     ForEach(group.items) { item in
                         Label {
                             Text(item.title)
+                                .font(.system(size: 13, weight: ui.selection == item ? .semibold : .regular))
                         } icon: {
-                            Image(systemName: item.symbol).foregroundStyle(Palette.accent)
+                            Image(systemName: item.symbol)
+                                .foregroundStyle(Palette.accent)
                         }
+                        .padding(.vertical, 2)
                         .tag(item)
                     }
+                } header: {
+                    Text(group.title)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 }
             }
         }
         .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
+        .navigationSplitViewColumnWidth(min: 196, ideal: 216, max: 260)
         .safeAreaInset(edge: .bottom) { sidebarStatus }
     }
 
     private var sidebarStatus: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Divider()
-            HStack(spacing: 7) {
-                Circle().fill(Palette.tone(status.phase.tone)).frame(width: 7, height: 7)
+        let tone = status.phase.tone
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle().fill(Palette.toneSoft(tone)).frame(width: 14, height: 14)
+                    Circle().fill(Palette.tone(tone)).frame(width: 7, height: 7)
+                }
                 Text(status.phase.title)
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer(minLength: 4)
+                Image(systemName: status.phase.symbol)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Palette.tone(tone))
+                    .accessibilityHidden(true)
             }
             .accessibilityElement(children: .combine)
-            Text(status.reachable ? L10n.backendRunning : (status.connectionText ?? L10n.backendDown)).foregroundStyle(.secondary).lineLimit(2)
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(status.reachable ? Palette.tone(.pass) : Palette.tone(.blocked))
+                    .frame(width: 5, height: 5)
+                Text(status.reachable ? L10n.backendRunning : (status.connectionText ?? L10n.backendDown))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
         }
-        .font(.system(size: 11))
-        .padding(.horizontal, 14)
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Palette.boxElevated)
+                .shadow(color: Palette.cardShadow, radius: 4, x: 0, y: 1)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Palette.boxLine, lineWidth: 1)
+        )
+        .padding(.horizontal, 10)
         .padding(.bottom, 10)
+        .padding(.top, 4)
     }
 
     @ViewBuilder private func detail(_ item: SidebarItem) -> some View {

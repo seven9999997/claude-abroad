@@ -9,28 +9,48 @@ struct AppsPage: View {
     var body: some View {
         LoadStateView(state: model.state, retry: { Task { await model.load() } }) {
             PageScroll {
-                CardSection(nil, footer: nil) {
+                CardSection(L10n.liveApps, icon: "square.grid.2x2") {
                     ForEach(Array(model.appRows.enumerated()), id: \.element.id) { i, r in
                         if i > 0 { RowSeparator() }
                         appRow(r)
                     }
                     if !model.systemRows.isEmpty { // 补齐四：系统进程单列在后面，默认折叠
                         if !model.appRows.isEmpty { RowSeparator() }
-                        DisclosureGroup(L10n.appsSystemSection) {
-                            ForEach(model.systemRows) { r in
-                                RowSeparator()
-                                appRow(r)
+                        DisclosureGroup {
+                            VStack(spacing: 0) {
+                                ForEach(model.systemRows) { r in
+                                    RowSeparator(inset: 0)
+                                    appRow(r)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "gearshape.2")
+                                    .foregroundStyle(.secondary)
+                                Text(L10n.appsSystemSection)
+                                    .fontWeight(.medium)
+                                InfoPill(text: "\(model.systemRows.count)", monospaced: true)
                             }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
                     }
                     if !model.appRows.isEmpty || !model.systemRows.isEmpty { RowSeparator() }
-                    HStack {
-                        Spacer()
-                        Label(L10n.dropAppHint, systemImage: "square.and.arrow.down").font(.caption).foregroundStyle(.secondary)
-                        Spacer()
+                    HStack(spacing: 8) {
+                        Image(systemName: "square.and.arrow.down")
+                            .foregroundStyle(Palette.accent)
+                        Text(L10n.dropAppHint)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .padding(.horizontal, 16)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.graySoft))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(Palette.controlLine, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                    )
                     .padding(12)
                 }
                 .onDrop(of: [UTType.fileURL], isTargeted: nil) { providers in
@@ -41,23 +61,38 @@ struct AppsPage: View {
                     }
                     return true
                 }
+
                 CardSection(nil) {
-                    CardRow { Toggle(L10n.dropAffected, isOn: $model.dropAffected) }
+                    CardRow {
+                        RowLabel(title: L10n.dropAffected)
+                        Toggle(L10n.dropAffected, isOn: $model.dropAffected)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                    }
                 }
+
                 if let r = model.authorizationReason {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(L10n.authorizationReason).bold()
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L10n.authorizationReason).font(.system(size: 13, weight: .semibold)).padding(.horizontal, 4)
                         ErrorBlock(text: r)
                     }
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(L10n.directClaudeDomains)
-                    Text(L10n.claudeNoDirect)
-                    Text(L10n.proxyNoDirect)
+
+                CardSection(nil) {
+                    CardRow(alignment: .top) {
+                        IconBadge(symbol: "info.circle", size: 26)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(L10n.directClaudeDomains)
+                            Text(L10n.claudeNoDirect)
+                            Text(L10n.proxyNoDirect)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 4)
+
                 RuleListsSection(model: model)
             }
             .alert(L10n.sharedRuleWarnTitle, isPresented: Binding(get: { model.sharedPrompt != nil }, set: { if !$0 { model.cancelShared() } })) {
@@ -74,18 +109,52 @@ struct AppsPage: View {
     func appRow(_ r: AppRow) -> some View {
         CardRow(alignment: .top) {
             AppIcon(app: r.app)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(r.name).fontWeight(.semibold)
-                Text(r.app).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                if let s = r.shared { Text(s).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) } // 补齐四：共用的系统进程
-                if let f = r.fallback { ToneNote(tone: .attention, text: f, symbol: "arrow.uturn.backward.circle") } // 补齐二
+            VStack(alignment: .leading, spacing: 3) {
+                Text(r.name).font(.system(size: 13, weight: .semibold))
+                Text(r.app)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let s = r.shared {
+                    Text(s)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let f = r.fallback {
+                    ToneNote(tone: .attention, text: f, symbol: "arrow.uturn.backward.circle")
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if r.conns > 0 { Text("\(r.conns)").font(.caption.monospacedDigit()).foregroundStyle(.secondary).padding(.top, 3) }
-            Menu(Self.title(r.action)) {
-                ForEach(model.actions, id: \.self) { a in Button(Self.title(a)) { Task { await model.requestRule(app: r.app, action: a) } } }
-                if r.action != nil { Divider(); Button(L10n.delete) { Task { await model.requestRule(app: r.app, action: nil) } } }
+
+            if r.conns > 0 {
+                InfoPill(text: "\(r.conns)", monospaced: true)
+                    .padding(.top, 2)
             }
+
+            Menu {
+                ForEach(model.actions, id: \.self) { a in
+                    Button(Self.title(a)) { Task { await model.requestRule(app: r.app, action: a) } }
+                }
+                if r.action != nil {
+                    Divider()
+                    Button(L10n.delete) { Task { await model.requestRule(app: r.app, action: nil) } }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Text(Self.title(r.action))
+                        .font(.system(size: 12, weight: .medium))
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Palette.control))
+                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Palette.controlLine, lineWidth: 1))
+            }
+            .menuStyle(.borderlessButton)
             .fixedSize()
         }
     }
@@ -109,37 +178,55 @@ struct RuleListsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(L10n.rulesListsTitle).font(.system(size: 15, weight: .bold)).padding(.horizontal, 4).padding(.top, 6)
-                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 8) {
+                IconBadge(symbol: "list.bullet.rectangle", size: 26)
+                Text(L10n.rulesListsTitle)
+                    .font(.system(size: 15, weight: .bold))
+                    .accessibilityAddTraits(.isHeader)
+            }
+            .padding(.horizontal, 4)
+            .padding(.top, 8)
+
             ForEach(AppsModel.RuleList.allCases, id: \.self) { l in
-                CardSection(AppsModel.title(l), footer: AppsModel.help(l)) {
+                CardSection(AppsModel.title(l), icon: listSymbol(l), footer: AppsModel.help(l)) {
                     if l == .pinned {
                         CardRow {
                             Text(L10n.rulesPinnedBuiltin + "：" + model.builtinPinned.joined(separator: L10n.listSeparator))
-                                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineSpacing(1.5)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         RowSeparator()
                     }
                     ForEach(model.items(l), id: \.self) { item in
-                        CardRow {
-                            Text(item).font(.callout.monospaced())
+                        CardRow(verticalPadding: 8) {
+                            Text(item)
+                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .textSelection(.enabled)
                             Spacer()
-                            Button(L10n.delete) { Task { await model.deleteListItem(l, item) } }.disabled(model.busy)
+                            Button(L10n.delete) { Task { await model.deleteListItem(l, item) } }
+                                .buttonStyle(SecondaryButtonStyle(compact: true, tone: .blocked))
+                                .disabled(model.busy)
                         }
                         RowSeparator()
                     }
                     CardRow {
-                        TextField(L10n.rulesAddPlaceholder, text: Binding(get: { model.drafts[l] ?? "" }, set: { model.drafts[l] = $0 }))
-                            .labelsHidden()
+                        StyledTextField(
+                            placeholder: L10n.rulesAddPlaceholder,
+                            text: Binding(get: { model.drafts[l] ?? "" }, set: { model.drafts[l] = $0 }),
+                            monospaced: true
+                        )
                         Button(L10n.rulesAddPlaceholder) { Task { await model.addDraft(l) } }
+                            .buttonStyle(SecondaryButtonStyle(compact: true))
                             .disabled(model.busy || (model.drafts[l] ?? "").trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
             }
+
             CardSection(nil, footer: L10n.rulesUDP443Help) {
                 CardRow {
-                    Text(L10n.rulesUDP443Title)
-                    Spacer()
+                    RowLabel(title: L10n.rulesUDP443Title)
                     Toggle(L10n.rulesUDP443Title, isOn: Binding(get: { model.rules?.blockUDP443 ?? false },
                                                                   set: { v in Task { await model.setBlockUDP443(v) } }))
                         .toggleStyle(.switch)
@@ -147,6 +234,15 @@ struct RuleListsSection: View {
                         .disabled(model.busy || model.rules == nil)
                 }
             }
+        }
+    }
+
+    private func listSymbol(_ l: AppsModel.RuleList) -> String {
+        switch l {
+        case .local: return "house"
+        case .pinned: return "pin"
+        case .nofake: return "network"
+        case .offline: return "shield.checkered"
         }
     }
 }
@@ -159,10 +255,14 @@ struct AppIcon: View {
             if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app) {
                 Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable()
             } else {
-                Image(systemName: "app.dashed").font(.system(size: 18)).foregroundStyle(.secondary)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Palette.graySoft)
+                    Image(systemName: "app.dashed").font(.system(size: 16)).foregroundStyle(.secondary)
+                }
             }
         }
-        .frame(width: 24, height: 24)
+        .frame(width: 30, height: 30)
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .accessibilityHidden(true)
     }
 }

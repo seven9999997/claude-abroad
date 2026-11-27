@@ -12,14 +12,29 @@ struct LoadStateView<Content: View>: View {
 
     var body: some View {
         switch state {
-        case .loading: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .loaded: content()
-        case .unreachable: message(L10n.unreachableTitle, L10n.backendDownDetail)
-        case .unsupported(let t): message(L10n.unsupportedTitle, t.raw)
+        case .loading:
+            VStack(spacing: 12) {
+                ProgressView()
+                    .controlSize(.regular)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Palette.window)
+        case .loaded:
+            content()
+        case .unreachable:
+            message(L10n.unreachableTitle, L10n.backendDownDetail)
+        case .unsupported(let t):
+            message(L10n.unsupportedTitle, t.raw)
         case .failed(let t):
             PageScroll {
                 ErrorBlock(text: t)
-                Button(L10n.retry, action: retry)
+                HStack {
+                    Button(action: retry) {
+                        Label(L10n.retry, systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                    Spacer()
+                }
             }
         }
     }
@@ -27,7 +42,13 @@ struct LoadStateView<Content: View>: View {
     private func message(_ title: String, _ detail: String) -> some View {
         PageScroll {
             Banner(title: title, detail: detail, symbol: "exclamationmark.circle")
-            Button(L10n.retry, action: retry)
+            HStack {
+                Button(action: retry) {
+                    Label(L10n.retry, systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                Spacer()
+            }
         }
     }
 }
@@ -38,7 +59,12 @@ struct PageChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
             .safeAreaInset(edge: .bottom) {
-                if let n = model.notice { ErrorBlock(text: n.text).padding(.horizontal, 24).padding(.bottom, 12) }
+                if let n = model.notice {
+                    ErrorBlock(text: n.text)
+                        .frame(maxWidth: 860)
+                        .padding(.horizontal, 28)
+                        .padding(.bottom, 14)
+                }
             }
             .sheet(isPresented: Binding(get: { model.terminal != nil }, set: { if !$0 { Task { await model.dismissTerminal() } } })) {
                 if let t = model.terminal { TerminalSheet(prompt: t) { Task { await model.dismissTerminal() } } }

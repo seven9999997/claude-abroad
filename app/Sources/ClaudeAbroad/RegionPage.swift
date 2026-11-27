@@ -7,38 +7,66 @@ struct RegionPage: View {
     var body: some View {
         LoadStateView(state: model.state, retry: { Task { await model.load() } }) {
             PageScroll {
-                CardSection(L10n.regionTitle) {
+                CardSection(L10n.regionTitle, icon: "globe") {
                     if let t = model.targetText {
-                        CardRow { Text(t).fixedSize(horizontal: false, vertical: true) }
-                        if let s = model.sourceText {
-                            RowSeparator()
-                            CardRow { RowLabel(title: L10n.regionSource); Text(s).foregroundStyle(.secondary) }
+                        CardRow(alignment: .top) {
+                            IconBadge(symbol: "globe.americas.fill", tone: .pass, size: 32)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(t)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if let s = model.sourceText {
+                                    HStack(spacing: 6) {
+                                        Text(L10n.regionSource).font(.caption).foregroundStyle(.secondary)
+                                        InfoPill(text: s)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     } else {
-                        CardRow { Text(L10n.regionNone).foregroundStyle(.secondary) }
+                        CardRow {
+                            IconBadge(symbol: "globe", tone: .local, size: 32)
+                            Text(L10n.regionNone).foregroundStyle(.secondary)
+                        }
                     }
                 }
                 if !model.pending.isEmpty {
-                    CardSection(L10n.regionPending) {
+                    CardSection(L10n.regionPending, icon: "clock.arrow.circlepath") {
                         ForEach(Array(model.pending.enumerated()), id: \.offset) { i, p in
                             if i > 0 { RowSeparator() }
                             CardRow {
-                                Image(systemName: "clock.arrow.circlepath").foregroundStyle(Palette.tone(.attention)).accessibilityHidden(true)
+                                IconBadge(symbol: "clock.arrow.circlepath", tone: .attention, size: 26)
                                 Text(p)
                             }
                         }
                     }
                 }
-                CardSection(L10n.regionManualSection) {
-                    CardRow { TextField(L10n.regionTimezone, text: $model.formTimezone) }
-                    RowSeparator()
-                    CardRow { TextField(L10n.regionLang, text: $model.formLang) }
+                CardSection(L10n.regionManualSection, icon: "slider.horizontal.3") {
+                    CardRow {
+                        fieldLabel(L10n.regionTimezone)
+                        StyledTextField(placeholder: L10n.regionTimezone, text: $model.formTimezone, monospaced: true)
+                    }
                     RowSeparator()
                     CardRow {
-                        if model.switched { ToneNote(tone: .success, text: L10n.regionSwitched, symbol: "checkmark.circle") }
+                        fieldLabel(L10n.regionLang)
+                        StyledTextField(placeholder: L10n.regionLang, text: $model.formLang, monospaced: true)
+                    }
+                    RowSeparator()
+                    CardRow {
+                        if model.switched {
+                            ToneNote(tone: .success, text: L10n.regionSwitched, symbol: "checkmark.circle")
+                        }
                         Spacer()
-                        Button(L10n.regionFollowExit) { Task { await model.followExit() } }
-                        Button(L10n.regionSet) { Task { await model.setManual() } }.buttonStyle(.borderedProminent)
+                        Button { Task { await model.followExit() } } label: {
+                            Label(L10n.regionFollowExit, systemImage: "location")
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+
+                        Button { Task { await model.setManual() } } label: {
+                            Label(L10n.regionSet, systemImage: "checkmark")
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
                     }
                     .disabled(model.busy)
                 }
@@ -46,5 +74,12 @@ struct RegionPage: View {
         }
         .modifier(PageChrome(model: model))
         .task { await model.load() }
+    }
+
+    private func fieldLabel(_ t: String) -> some View {
+        Text(t)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.secondary)
+            .frame(width: 190, alignment: .leading)
     }
 }
