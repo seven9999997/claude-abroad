@@ -21,7 +21,7 @@
 | 1 | 在全新的机器上拖入“应用程序”即可安装、使用 | **达到替代程度** + **待真机** | 开发安装脚本代替 DMG 和 SMAppService：`script:scripts/m6/install/install.sh#M6-11b`（安装后只读核对首次准备、完整性、回国拦截），`script:scripts/m6/install/selftest.sh#M6-11b`（在临时目录里真装真卸）；端到端 `script:scripts/m6/e2e/run.sh#I1` | 要从源码构建、要 sudo 执行脚本，非开发者用不了；只能装在执行脚本的那台 Mac 上；没有签名的更新通道（重装即升级）。这一版到此为止；以后如果购买账号，按 P1–P3 接上（安装位置和后台服务注册的接口见 m6-plan 第 8 节） |
 | 2 | 回国后 Claude 连不上 | **达到**（机制；每一道各自拦不住什么见第 4 节）+ **待真机**（对各程序是否有效） | 五道管控见第 4 节。第一道 `go:internal/resolverlock#TestWriteIdempotent`；第四道（v0.68 起可选、默认关，打开之后）`go:internal/daemon#TestClaudeProxyStateTable`；第五道 `go:internal/state#TestReturnBlockNoGap`、`go:internal/daemon#TestReturnBlockSwitch`；启用、停用、回国全流程不碰解析锁 `go:internal/daemon#TestResolverLockInDaemon`；回国时结束不了 Claude 就中止、什么都不改 `go:internal/daemon#TestRestoreLeftovers` | 解析锁对自带加密 DNS 的程序、开着别的代理软件时无效（R9、R18，`scripts/m6/resolver`）；第五道本机另有代理软件接管时拦不住；Anthropic 新增地址段要等新版本。对真实地址段的效果只能用发布构建验证（第 7 节“没有做”） |
 | 3 | 回国后 Claude 被打开后马上结束 | **达到替代程度** + **待真机** | 第三道：`go:internal/daemon#TestLaunchGuardRuleA`、`go:internal/claudeproc#TestGuardTermThenKill`；开发构建只针对测试目录 `go:internal/claudeproc#TestFakeDirGuard`；端到端 `script:scripts/m6/e2e/run.sh#L1` | 没有 Endpoint Security（P5），不能在程序运行之前拒绝：每 200 毫秒扫描、发现即结束，Claude 可能已经运行零点几秒（这一版的最终状态：Endpoint Security 要付费账号，这一版不做）；只结束签名确认过的进程，npm、Homebrew 装的 Claude Code 第三道不覆盖（靠第一、五道，第四道打开时还有第四道；v0.68 起第四道默认关）。端到端的开发构建只验证机制，对真实 Claude 的效果要发布构建（第 7 节） |
-| 4 | 一键卸载后恢复正常并完全清理 | **达到** + **待真机** | `go:internal/daemon#TestUninstallRestoresEverything`、`go:internal/daemon#TestUninstallFromEachState`、`go:internal/daemon#TestReturnBlockUninstall`（三种起点卸载后锚点空、引用全部释放、pf 回到安装前）、`go:internal/daemon#TestUninstalledRejectsChanges`；命令行 `go:cmd/abroad#TestCLIUninstall`；开发安装的卸载和快照对照 `script:scripts/m6/e2e/run.sh#U1` | 第 3 步“注销后台服务、删除专用用户和数据”由安装器完成（现在是开发安装的卸载脚本）；快照对照里 pf 是否启用那一行的格式没在真机核对过，认不出时记“无法判断”、不参与对照 |
+| 4 | 一键卸载后恢复正常并完全清理 | **达到** + **待真机** | `go:internal/daemon#TestUninstallRestoresEverything`、`go:internal/daemon#TestUninstallFromEachState`、`go:internal/daemon#TestReturnBlockUninstall`（三种起点卸载后锚点空、引用全部释放、pf 回到安装前）、`go:internal/daemon#TestUninstalledRejectsChanges`；命令行 `go:cmd/abroad#TestCLIUninstall`；开发安装的卸载和快照对照 `script:scripts/m6/e2e/run.sh#U1` | 第 3 步“注销后台服务、删除专用用户和数据”由安装器完成（现在是开发安装的卸载脚本）；快照对照里 pf 是否启用那一行的格式没在真机核对过，认不出时记“无法判断”、不参与对照；卸载后，Claude 出国的 pf 启用引用和锚点规则都不留下；pf 是否启用还受系统和别的软件持有的引用影响。卸载对照时，如果安装前没启用、卸载后启用，而启用引用都属于别的程序、我们的锚点是空的，这不算不一致，会写一条说明（2026-11-27 真机，设计 v0.70a） |
 | 5 | 未签名的脚本调用回国接口被拒绝 | **达到替代程度** | `go:internal/api#TestClassifyAndAllowed`、`go:internal/daemon#TestSocketSecurity`；三句话见下 | 见下 |
 
 **“未签名的脚本调用回国接口被拒绝”**（三句话）：
@@ -200,6 +200,7 @@
 | M5 第一级走查 | | | | |
 | E1、E2（M5-3） | | | | |
 | 解析锁实测（R9、R18） | | | | |
+| 开发版第一次重装的卸载（真机，2026-11-27） | 2026-11-27 | 对照只差 pf.enabled（安装前 Disabled、卸载后 Enabled）；启用引用里只有系统的 pfd，我们的锚点空 | 不是我们的残留；卸载对照改为接受别的程序持有的引用（设计 v0.70a） | — |
 | 开发版安装后“应用主代理”（真机，2026-11-27） | 2026-11-27 | 五项出口检查都是 channel_down，虚拟机管理器 idle | 缺口（回国状态不拉起虚拟机（M6-2a）而应用主代理要经虚拟机（M5-4））。**已修，待用户重装后再做一次应用主代理**（借用虚拟机，设计 v0.70，计划 docs/vm-borrow-plan.md v2；测试 `go:internal/daemon#TestBorrowApplyMainRestored`、`go:internal/daemon#TestEnableFromRestoredManagedPushesAfterStart`） | — |
 | R1 | 暂不测（用户 2026-11-27 决定） | | | |
 | R2 | 暂不测（用户 2026-11-27 决定） | | | |

@@ -174,7 +174,7 @@ plain bash "${INSTALL}" >/dev/null 2>"${TMP}/g5" && bad "g. 不用 sudo 的真�
 # M6I_SELFTEST_INSTALLED_PATH 只给自测的自测用：换成一个不存在的路径，验证“没装过”的分支照常执行。
 SYSP=("$I" "$SNAP" /var/run/claude-abroad /Library/LaunchDaemons/com.claude-abroad.dev.abroadd.plist)
 INSTALLED=0
-[ -e "${M6I_SELFTEST_INSTALLED_PATH:-$I}" ] && INSTALLED=1
+{ [ -e "${M6I_SELFTEST_INSTALLED_PATH:-$I}" ] || { [ -z "${M6I_SELFTEST_INSTALLED_PATH:-}" ] && [ -e "$SNAP" ]; }; } && INSTALLED=1
 skips=0
 skip() { echo "- 跳过：$*"; skips=$((skips + 1)); }
 syssnap() { local p; for p in "${SYSP[@]}"; do
@@ -222,6 +222,37 @@ grep -qF "pf.enabled" scripts/m6/install/lib.sh && ok "M6-11b. 快照里有 pf �
 printf 'user\tno\npf.enabled\tDisabled\n' >"${TMP}/sa"; printf 'user\tno\npf.enabled.unknown\tStatus: ???\n' >"${TMP}/sb"; printf 'user\tno\npf.enabled\tEnabled\n' >"${TMP}/sc"
 env -u M6I_TEST_SRC -u M6I_TEST_APP -u M6I_TEST_DIR bash -c ". scripts/m6/install/lib.sh; m6i_sys_cmp '${TMP}/sa' '${TMP}/sb'" >/dev/null 2>&1 && ok "M6-11b. pf 是否启用无法判断时不算不一致" || bad "M6-11b. pf 是否启用无法判断时被当成不一致"
 env -u M6I_TEST_SRC -u M6I_TEST_APP -u M6I_TEST_DIR bash -c ". scripts/m6/install/lib.sh; m6i_sys_cmp '${TMP}/sa' '${TMP}/sc'" >/dev/null 2>&1 && bad "M6-11b. pf 启用状态变了没被发现" || ok "M6-11b. pf 启用状态变了会被发现"
+
+# ---- 2026-11-27 真机：卸载对照接受“别人持有的 pf 引用”（architect）----
+REFS_PFD="${TMP}/refs.pfd"; printf 'No ALTQ support in kernel\nTOKENS:\nPID      Process Name                 TOKEN                    TIMESTAMP\n34183    pfd                          7864932399086914672      0 days 00:02:27\n' >"${REFS_PFD}"
+REFS_OURS="${TMP}/refs.ours"; printf 'TOKENS:\nPID      Process Name                 TOKEN                    TIMESTAMP\n34183    pfd                          1      0 days 00:02:27\n501      pfctl                        2      0 days 01:00:00\n' >"${REFS_OURS}"
+REFS_BAD="${TMP}/refs.bad"; printf 'pfctl: something went wrong\n' >"${REFS_BAD}"
+printf 'user\tno\npf.anchor\t0\npf.enabled\tDisabled\n' >"${TMP}/sys.off"
+printf 'user\tno\npf.anchor\t0\npf.enabled\tEnabled\n' >"${TMP}/sys.on"
+cmpcase() { # cmpcase <说明> <期望 pass|fail> <安装前> <卸载后> <References 文件> [锚点规则数]
+  local what=$1 want=$2 out rc
+  out=$( export M6I_TEST_DIR="${TMP}" M6I_TEST_PF_REFS="$5" M6I_TEST_PF_ANCHOR="${6:-0}"; . scripts/m6/install/lib.sh; m6i_pf_info "${TMP}/pfinfo"; m6i_sys_cmp "$3" "$4" "${TMP}/pfinfo" 2>"${TMP}/cmp.err"; )
+  rc=$?
+  if { [ "$want" = pass ] && [ -z "$out" ]; } || { [ "$want" = fail ] && [ -n "$out" ]; }; then ok "syscmp. ${what}"; else bad "syscmp. ${what}：输出 ${out}"; fi
+}
+cmpcase "别人（pfd）持有引用、我们的锚点空：通过" pass "${TMP}/sys.off" "${TMP}/sys.on" "${REFS_PFD}"
+( export M6I_TEST_DIR="${TMP}" M6I_TEST_PF_REFS="${REFS_PFD}"; . scripts/m6/install/lib.sh; m6i_pf_info "${TMP}/pfinfo"; m6i_sys_cmp "${TMP}/sys.off" "${TMP}/sys.on" "${TMP}/pfinfo" ) 2>&1 >/dev/null | grep -q '由别的程序持有引用（进程名：pfd）' && ok "syscmp. 通过时记一条说明，写出持有者 pfd" || bad "syscmp. 通过时没有说明"
+cmpcase "有 pfctl 名下的 token：失败" fail "${TMP}/sys.off" "${TMP}/sys.on" "${REFS_OURS}"
+cmpcase "锚点里还有规则：失败" fail "${TMP}/sys.off" "${TMP}/sys.on" "${REFS_PFD}" 2
+cmpcase "References 读不出：严格对照、失败" fail "${TMP}/sys.off" "${TMP}/sys.on" "${REFS_BAD}"
+cmpcase "安装前开着、卸载后关了：失败" fail "${TMP}/sys.on" "${TMP}/sys.off" "${REFS_PFD}"
+cmpcase "安装前后一样：通过" pass "${TMP}/sys.off" "${TMP}/sys.off" "${REFS_PFD}"
+( export M6I_TEST_DIR="${TMP}" M6I_TEST_PF_REFS="${REFS_PFD}"; . scripts/m6/install/lib.sh; m6i_pf_info "${TMP}/pfinfo"; m6i_sys_cmp "${TMP}/sys.off" "${TMP}/sys.off" "${TMP}/pfinfo" ) 2>&1 >/dev/null | grep -q '持有引用' && bad "syscmp. 前后一样时不该有说明" || ok "syscmp. 前后一样时没有说明"
+# 真实场景：卸载做完、只是 pf 对照没过（有 pfctl 的 token）→ 快照留着、安装目录已删；之后 pf 只被 pfd 持有，再卸载：只重做对照、删快照、退出码 0
+S=$(mkcase)
+M6I_TEST_SYS_SNAP="${TMP}/sys.off" inst "$S" || bad "only-snap. 安装失败：$(cat "$S/install.err")"
+if M6I_TEST_SYS_SNAP="${TMP}/sys.on" M6I_TEST_PF_REFS="${REFS_OURS}" uninst "$S"; then bad "only-snap. 第一次卸载应因 pf 对照不一致而失败"; else ok "only-snap. 第一次卸载：有我们名下的 token 时对照不过、退出码非零"; fi
+[ -d "$S$SNAP" ] && [ ! -e "$S$I" ] && ok "only-snap. 快照留着、安装目录已删（复现真机状态）" || bad "only-snap. 没有复现出“只剩快照”"
+cp "$S/sys.log" "$S/sys.log.1" 2>/dev/null || : >"$S/sys.log.1"
+if M6I_TEST_SYS_SNAP="${TMP}/sys.on" M6I_TEST_PF_REFS="${REFS_PFD}" uninst "$S"; then ok "only-snap. 再卸载：退出码 0"; else bad "only-snap. 再卸载失败：$(cat "$S/uninstall.err")"; fi
+[ ! -e "$S$SNAP" ] && ok "only-snap. 快照被删" || bad "only-snap. 快照没删"
+grep -q '只剩安装前的快照' "$S/uninstall.err" && grep -q '进程名：pfd' "$S/uninstall.err" && ok "only-snap. 只重做对照，并说明 pf 由 pfd 持有" || bad "only-snap. 输出不对：$(cat "$S/uninstall.err")"
+cmp -s "$S/sys.log" "$S/sys.log.1" && ok "only-snap. 再卸载没有执行任何系统命令" || bad "only-snap. 再卸载执行了系统命令：$(diff "$S/sys.log.1" "$S/sys.log")"
 
 # 2026-11-27：真机路径上“是不是开发构建”的判断（测试模式跳过它），由公共函数的自测覆盖
 scripts/lib/buildcheck-selftest.sh >"${TMP}/bc" 2>&1 && ok "“是不是开发构建”的判断（$(grep -c '^✓' "${TMP}/bc") 项，含退出码 2 的假程序）" || bad "“是不是开发构建”的判断：$(grep '^✗' "${TMP}/bc" | head -3)"

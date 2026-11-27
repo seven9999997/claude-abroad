@@ -148,19 +148,58 @@ m6i_snap_files() {
     printf '%s\t%s\t%s\n' "$p" "$kind" "$sum" >>"$out"
   done < <(m6i_snap_paths)
 }
-# m6i_sys_cmp <安装前> <卸载后>：系统快照的对照。pf 是否启用有一边无法判断时，这一项不参与对照，另记一条说明。
+# m6i_sys_cmp <安装前> <卸载后> [pf 引用信息]：系统快照的对照。pf 是否启用有一边无法判断时，这一项不参与对照，另记一条说明。
+# 2026-11-27 真机（architect）：卸载期间系统的 pfd 取得了一个 pf 启用引用，安装前 Disabled、卸载后 Enabled。下面四条都成立时
+# pf.enabled 这一项不算不一致，另记说明：①安装前 Disabled、卸载后 Enabled；②我们的锚点规则和 nat 都空；③References 读得出，
+# 且没有进程名是 pfctl（我们用 pfctl -E 取引用，记的名字就是 pfctl）、abroadd、abroad-guard、abroad-rescue 的 token；
+# 其余情况（含 References 读不出、格式认不出）照严格对照。
 m6i_sys_cmp() {
   if grep -q '^pf\.enabled\.unknown' "$1" "$2"; then
     m6i_log "pf 是否启用：无法判断（pfctl -s info 第一行认不出，原样：$(grep -h '^pf\.enabled' "$1" "$2" | tr '\t\n' '  ')），不参与对照"
     diff <(grep -v '^pf\.enabled' "$1") <(grep -v '^pf\.enabled' "$2")
-  else
-    diff "$1" "$2"
+    return
   fi
+  local info=${3:-} holders
+  if [ -n "${info}" ] && [ -f "${info}" ] &&
+    grep -qx $'pf.enabled\tDisabled' "$1" && grep -qx $'pf.enabled\tEnabled' "$2" &&
+    grep -qx $'anchor.rules\t0' "${info}" && grep -qx $'anchor.nat\t0' "${info}" && grep -qx $'refs.ok\tyes' "${info}" &&
+    ! grep -qE $'^ref\t(pfctl|abroadd|abroad-guard|abroad-rescue)$' "${info}"; then
+    holders=$(sed -n $'s/^ref\t//p' "${info}" | sort -u | tr '\n' ' ')
+    m6i_log "pf 仍启用：由别的程序持有引用（进程名：${holders% }），不是 Claude 出国留下的；我们的锚点和引用都已清除"
+    diff <(grep -v '^pf\.enabled' "$1") <(grep -v '^pf\.enabled' "$2")
+    return
+  fi
+  diff "$1" "$2"
+}
+# m6i_pf_refs_parse：把 pfctl -s References 的输出（标准输入）转成 refs.ok 和每个 token 的进程名（ref 行）。
+# 认得出 TOKENS 表头才算读得出；进程名取 PID 之后的那一列。
+m6i_pf_refs_parse() {
+  awk -F'[ \t]+' '
+    /^TOKENS:/ { t = 1; next }
+    t && /^PID[ \t]/ { h = 1; next }
+    h && $1 ~ /^[0-9]+$/ && NF >= 3 { print "ref\t" $2 }
+    END { print "refs.ok\t" (h ? "yes" : "no") }'
+}
+# m6i_pf_info <输出文件>：卸载对照用的只读 pf 信息（真实模式）：我们锚点的规则数、nat 数、References 里每个 token 的进程名。
+m6i_pf_info() {
+  local out=$1
+  [ "${M6I_MODE}" = test ] && [ -n "${M6I_TEST_PF_REFS:-}" ] && {
+    { printf 'anchor.rules\t%s\nanchor.nat\t%s\n' "${M6I_TEST_PF_ANCHOR:-0}" "${M6I_TEST_PF_ANCHOR:-0}"; m6i_pf_refs_parse <"${M6I_TEST_PF_REFS}"; } >"$out"
+    return 0
+  }
+  [ "${M6I_MODE}" = real ] || { : >"$out"; return 0; }
+  {
+    printf 'anchor.rules\t%s\n' "$(pfctl -a "${M6I_ANCHOR}" -s rules 2>/dev/null | grep -c . || true)"
+    printf 'anchor.nat\t%s\n' "$(pfctl -a "${M6I_ANCHOR}" -s nat 2>/dev/null | grep -c . || true)"
+    pfctl -s References 2>/dev/null | m6i_pf_refs_parse
+  } >"$out"
 }
 # 系统部分的快照（真实模式；自测、空跑跳过）：专用用户、两个 LaunchDaemon 是否已注册、pf 锚点里的规则数、pf 是否启用
 # （M6-11b：装上后回国拦截会启用 pf，卸载后要复原）、DNS 键、各网络服务的 IPv6。
 m6i_snap_system() {
   local out=$1
+  # 自测：M6I_TEST_SYS_SNAP 给出“这一刻”的系统快照内容（对照逻辑的自测用；真实模式下 M6I_TEST_* 一律被拒）
+  [ "${M6I_MODE}" = test ] && [ -n "${M6I_TEST_SYS_SNAP:-}" ] && { cp "${M6I_TEST_SYS_SNAP}" "$out"; return 0; }
   [ "${M6I_MODE}" = real ] || { : >"$out"; return 0; }
   {
     printf 'user\t%s\n' "$(m6i_user_exists && echo yes || echo no)"

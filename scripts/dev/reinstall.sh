@@ -7,23 +7,28 @@
 #   DRY_RUN=1 scripts/dev/reinstall.sh  # 空跑：只按顺序打印会调用的脚本（RUN: 行）
 #
 # 自测用（只在 DRY_RUN=1 时生效）：REINSTALL_TEST_EUID 假装的用户号，REINSTALL_TEST_INSTALLED=0|1 假装装没装过，
+# REINSTALL_TEST_SNAP_ONLY=1 假装安装目录不在、只剩快照，
 # REINSTALL_TEST_FAIL_AT=<1–5> 让第几步失败。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "${ROOT}" || exit 1
 DRY_RUN=${DRY_RUN:-0}
 INST="/Library/Application Support/claude-abroad"
+SNAP="/Library/Application Support/claude-abroad-install-snap"
 
 say() { printf '[reinstall] %s\n' "$*" >&2; }
 
 euid=$(id -u)
+# 装过：安装目录或安装前的快照有一个在（只剩快照时卸载脚本只重做对照、删快照；architect 2026-11-27）
 installed=0
 [ -e "${INST}" ] && installed=1
+[ -e "${SNAP}" ] && installed=1
 if [ "${DRY_RUN}" = 1 ]; then
   euid=${REINSTALL_TEST_EUID:-$euid}
   installed=${REINSTALL_TEST_INSTALLED:-$installed}
+  [ "${REINSTALL_TEST_SNAP_ONLY:-0}" = 1 ] && installed=1
 else
-  for v in REINSTALL_TEST_EUID REINSTALL_TEST_INSTALLED REINSTALL_TEST_FAIL_AT; do
+  for v in REINSTALL_TEST_EUID REINSTALL_TEST_INSTALLED REINSTALL_TEST_FAIL_AT REINSTALL_TEST_SNAP_ONLY; do
     [ -z "${!v:-}" ] || { say "${v} 只能在空跑（DRY_RUN=1）的自测里用"; exit 2; }
   done
 fi

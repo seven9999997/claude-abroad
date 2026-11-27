@@ -28,6 +28,14 @@ if [ "${M6I_MODE}" != dry ] && [ ! -d "${SNAPD}" ]; then
 fi
 rec() { [ "${M6I_MODE}" = dry ] && return 0; [ -n "$(m6i_rec_get "$1")" ]; }
 
+# 只剩快照、安装目录已经不在（上一次卸载做完了、只是对照没过，architect 2026-11-27）：只重做对照，对上了就删快照，不做别的。
+only_snap=0
+# 安装中途失败时自动调用的卸载（M6I_FROM_INSTALL=1）不走这条：那时安装目录可能还没建，但别的步骤已经做了。
+[ "${M6I_MODE}" != dry ] && [ "${M6I_FROM_INSTALL:-0}" != 1 ] && [ ! -e "$(P "${INST}")" ] && only_snap=1
+
+if [ "${only_snap}" = 1 ]; then
+  m6i_log "安装目录已经不在，只剩安装前的快照：只重做对照（对上了就删快照），不做别的"
+else
 # ---- 1. 正常途径：abroad uninstall（安装中途失败时跳过：那时还没有启用过）----
 normal=0
 if [ "${M6I_FROM_INSTALL:-0}" != 1 ]; then
@@ -147,6 +155,7 @@ if rec logdir; then m6i_do rm -rf "$(P "${M6I_LOGDIR}")"; m6i_do rm -f "${SNAPD}
 if rec install_dir; then m6i_do rm -rf "$(P "${INST}")"; m6i_do rm -f "${SNAPD}/install_dir"; fi
 
 # ---- 5. 和安装前的快照对照 ----
+fi
 if [ "${M6I_MODE}" = dry ]; then
   m6i_say STATE "对照 snap/files、snap/system（安装前 / 卸载后）"
   m6i_do rm -rf "$(P "${M6I_SNAP}")（对照一致时）"
@@ -154,7 +163,8 @@ if [ "${M6I_MODE}" = dry ]; then
 fi
 m6i_snap_files "${SNAPD}/files.after"
 m6i_snap_system "${SNAPD}/system.after"
-diffs=$(diff "${SNAPD}/files.before" "${SNAPD}/files.after"; [ -f "${SNAPD}/system.before" ] && m6i_sys_cmp "${SNAPD}/system.before" "${SNAPD}/system.after")
+m6i_pf_info "${SNAPD}/pf.after"
+diffs=$(diff "${SNAPD}/files.before" "${SNAPD}/files.after"; [ -f "${SNAPD}/system.before" ] && m6i_sys_cmp "${SNAPD}/system.before" "${SNAPD}/system.after" "${SNAPD}/pf.after")
 if [ -n "${diffs}" ]; then
   m6i_log "和安装前的快照不一致（快照留在 ${M6I_SNAP}，可以重试卸载或按 docs/emergency.md 处理）："
   printf '%s\n' "${diffs}" >&2

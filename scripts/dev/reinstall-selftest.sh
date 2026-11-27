@@ -36,6 +36,9 @@ grep -q '主代理配置已随卸载清空' "${TMP}/err" && ok "a. 结尾提示�
 dry REINSTALL_TEST_INSTALLED=0 >"${TMP}/i0"; rc=$?
 want0=$(printf '%s\n' "$want1" | grep -v uninstall)
 [ $rc = 0 ] && [ "$(cat "${TMP}/i0")" = "$want0" ] && grep -q '没装过，跳过卸载' "${TMP}/err" && ok "a. 没装过时跳过卸载" || bad "a. 没装过时不对：$(cat "${TMP}/i0")"
+dry REINSTALL_TEST_INSTALLED=0 REINSTALL_TEST_SNAP_ONLY=1 >"${TMP}/is"; rc=$?
+[ $rc = 0 ] && [ "$(cat "${TMP}/is")" = "$want1" ] && ok "a. 只剩快照目录时也走卸载（卸载脚本会只重做对照、删快照）" || bad "a. 只剩快照目录时没走卸载：$(cat "${TMP}/is")"
+dry REINSTALL_TEST_INSTALLED=0 >/dev/null
 grep -q '已随卸载清空' "${TMP}/err" && bad "a. 没装过时不该说配置已随卸载清空" || ok "a. 没装过时结尾提示不提卸载"
 
 # ---- b. 命令核对 ----
