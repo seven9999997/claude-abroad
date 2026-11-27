@@ -7,23 +7,21 @@ import (
 	"strings"
 	"time"
 
-	"claude-abroad/internal/claudecfg"
 	"claude-abroad/internal/resolverlock"
 	"claude-abroad/internal/state"
 )
 
-// 首次准备（M6-8a，设计 10.2、11.4）：abroadd 写入 Claude 启动管控里的两份静态文件——Claude 域名解析锁（第一层）和
-// Claude Code 的托管设置（第四层）。写完之后回国、停用、启用、重启都不碰它们，只有一键卸载才删（M6-5a）。
+// 首次准备（M6-8a，设计 10.2、11.4）：abroadd 写入 Claude 启动管控里的静态文件——Claude 域名解析锁（第一层）。
+// v0.68 起 Claude Code 的托管设置（第四层）不再由首次准备写：第四道是可选的开关、默认关，打开时才写（claudeswitch.go），
+// 首次准备是否完成也不再和它挂钩。写完之后回国、停用、启用、重启都不碰解析锁，只有一键卸载才删（M6-5a）。
 // 建专用用户、建目录、注册后台服务这些要 root shell 的事由安装脚本做（M6-8b）。
 //
 //   - 只在 System.FirstRun 为真时做（abroadd 带 --launch-control；测试和假系统默认不做）；
 //   - 已卸载（状态目录有 uninstalled 标记）时不做：卸载后重启 abroadd 不会把锁写回去；
 //   - M6-8a 补审返工：**冲突不算完成**——别人的同名文件不覆盖，但不写 prepared 标记、done 为假，说明里写清是哪个
 //     文件和下一步；没完成时冲突检查里有一条“必须处理”，阻止启用（管控是“回国后连不上”的前提）；
-//   - 没完成时重试：启动时、每次冲突检查（启用前、用户点“重新检测”）时再试一次；两个 Write 都可重入，一部分写成功、
-//     另一部分冲突时已写的留着，重试时不重复写；
-//   - 完成之后才出现的冲突（别人后来写了文件）不回退完成标记：自检报告，解析锁那一项提示，托管设置那一项必须处理；
-//   - 开发构建只管测试目标时（System.PrepareTestOnly），不写 Claude Code 的托管设置（不影响本机真实的 Claude Code）。
+//   - 没完成时重试：启动时、每次冲突检查（启用前、用户点“重新检测”）时再试一次；Write 可重入，已写的留着，重试时不重复写；
+//   - 完成之后才出现的冲突（别人后来写了文件）不回退完成标记：自检报告，解析锁那一项提示。
 
 // PreparedFile 是“首次准备做完了”的标记（状态目录里）。
 const PreparedFile = state.PreparedFile
@@ -90,27 +88,6 @@ func (d *Daemon) tryPrepare() PrepareStatus {
 			ok = false
 			ps.Notes = append(ps.Notes, "写入 Claude 域名解析锁失败（会再试）")
 			d.events.Add("prepare", "resolver_lock_failed", err.Error())
-		}
-	}
-	if cs := d.opts.Sys.ClaudeSettings; cs != nil && !d.opts.Sys.PrepareTestOnly {
-		conf, err := cs.Write()
-		switch {
-		case errors.Is(err, claudecfg.ErrConflict):
-			ok = false
-			var parts []string
-			for _, c := range conf {
-				if c.Var != "" {
-					parts = append(parts, c.File+" 的 "+c.Var)
-				} else {
-					parts = append(parts, c.File+"（解析不了）")
-				}
-			}
-			ps.Notes = append(ps.Notes, "Claude Code 的托管设置：别的文件也定义了代理变量，没有写入："+strings.Join(parts, "、")+"。"+prepareNext)
-			d.events.Add("prepare", "claude_settings_conflict", strings.Join(parts, "、"))
-		case err != nil:
-			ok = false
-			ps.Notes = append(ps.Notes, "写入 Claude Code 的托管设置失败（会再试）")
-			d.events.Add("prepare", "claude_settings_failed", err.Error())
 		}
 	}
 	if !ok {

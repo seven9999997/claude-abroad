@@ -3,7 +3,7 @@
 #   a. 两段的空跑和 restore.sh 的空跑退出码 0，没有写状态目录；
 #   b. 命令核对通过；反例（碰网络、打开应用、清单外的命令、没有死人开关、卸载早于回国、重启前没取消死人开关、
 #      应急程序早于停掉后台服务、没有应急演练）都被拦下；
-#   c. --check-only 在没有确认 M5 通过、没有主代理节点时拒绝，并说明原因；
+#   c. --check-only 在没有主代理节点时拒绝并说明原因；没确认 M5、R1、R2、M2 没做时只提醒（打印警告和三个恢复办法），不拒绝；
 #   d. 源码检查：run.sh、restore.sh、lib.sh 里没有 pfctl、networksetup、route、ifconfig、pkill、killall、open 命令；
 #   e. 开发安装脚本的自测、命令核对也通过（端到端依赖它们）；
 #   f. 最终验收清单（docs/m6-acceptance.md）引用的测试、脚本步骤、文件都存在，反例被拦下（M6-10）。
@@ -46,6 +46,15 @@ grep -v 'bin/abroad-rescue$' "${TMP}/e2" >"${TMP}/n8"; neg "第二段没有应�
 awk '/^STEP: 核对 CC1/ { next } { print } /^STEP: 检查点 P1/ { print "STEP: 核对 CC1：本机代理端口认出对端进程（R23）" }' "${TMP}/e1" >"${TMP}/n12"
 neg "本机代理端口的核对早于启用" "${TMP}/n12" "${TMP}/e2"
 grep -v '^STEP: 核对 CC1' "${TMP}/e1" >"${TMP}/n13"; neg "第一段没有本机代理端口的核对" "${TMP}/n13" "${TMP}/e2"
+# v0.68：第四道默认关——CC1 之前打开、之后关掉，两条命令都在清单里
+grep -v 'claude-proxy on$' "${TMP}/e1" >"${TMP}/n14"; neg "CC1 之前没有打开第四道" "${TMP}/n14" "${TMP}/e2"
+grep -v 'claude-proxy off$' "${TMP}/e1" >"${TMP}/n15"; neg "CC1 之后没有关掉第四道" "${TMP}/n15" "${TMP}/e2"
+awk '/claude-proxy off$/ { next } { print } /^STEP: 检查点 P2/ { print "CHANGE: /Library/Application Support/claude-abroad/bin/abroad --yes claude-proxy off" }' "${TMP}/e1" >"${TMP}/n16"
+neg "关掉第四道早于 CC1" "${TMP}/n16" "${TMP}/e2"
+{ cat "${TMP}/e1"; echo 'CHANGE: /Library/Application Support/claude-abroad/bin/abroad claude-proxy on'; } >"${TMP}/n17"; neg "不带 --yes 的打开（不在清单里）" "${TMP}/n17" "${TMP}/e2"
+grep -q '^CHANGE: /Library/Application Support/claude-abroad/bin/abroad --yes claude-proxy on$' "${TMP}/e1" &&
+  grep -q '^CHANGE: /Library/Application Support/claude-abroad/bin/abroad --yes claude-proxy off$' "${TMP}/e1" &&
+  ok "b. 第一段空跑里 CC1 前后有打开、关闭第四道" || bad "b. 第一段空跑里没有打开、关闭第四道"
 if cat scripts/m6/e2e/run.sh scripts/m6/e2e/lib.sh "${TMP}/e1" "${TMP}/e2" "${TMP}/e3" | grep -vE '^[[:space:]]*#' | grep -qE 'managed-settings|ClaudeCode/|claude-settings'; then
   bad "b. 端到端里出现了 Claude Code 托管设置的目录或写入命令"
 else
@@ -54,8 +63,17 @@ fi
 grep -q '^PROBE: sudo -u <你> /usr/bin/curl -x http://127.0.0.1:47821 ' "${TMP}/e1" && ok "b. 第一段空跑里有经本机代理端口的那一次请求" || bad "b. 第一段空跑里没有经本机代理端口的请求"
 
 # ---- c. 前提检查 ----
-env -u M6E_M5_PASSED -u M6E_NODES scripts/m6/e2e/run.sh --check-only >/dev/null 2>"${TMP}/c1"; rc=$?
-[ $rc != 0 ] && grep -q 'M6E_M5_PASSED' "${TMP}/c1" && grep -q 'M6E_NODES' "${TMP}/c1" && ok "c. --check-only 没确认 M5、没有节点时拒绝并说明" || bad "c. --check-only 应拒绝：rc=$rc"
+env -u M6E_M5_PASSED -u M6E_NODES -u M6E_R1R2M2_DONE scripts/m6/e2e/run.sh --check-only >/dev/null 2>"${TMP}/c1"; rc=$?
+[ $rc != 0 ] && grep -q '前提不满足：.*M6E_NODES' "${TMP}/c1" && ok "c. --check-only 没有节点时拒绝并说明" || bad "c. --check-only 没有节点时应拒绝：rc=$rc"
+# 用户 2026-11-27：M5 第二级、R1、R2、M2 没做只提醒、不拒绝；打印“第一次启用没有自动恢复”的警告和三个恢复办法
+grep -q '前提不满足：.*M5' "${TMP}/c1" && bad "c. 没确认 M5 不应再是拒绝的理由" || ok "c. 没确认 M5 不再拒绝"
+grep -q '提醒：没有确认 M5' "${TMP}/c1" && ok "c. 没确认 M5 时提醒" || bad "c. 没确认 M5 时应提醒"
+grep -q '提醒：R1、R2、M2 还没有做' "${TMP}/c1" && grep -q '第一次启用没有自动恢复' "${TMP}/c1" &&
+  grep -q '一键回国' "${TMP}/c1" && grep -q 'sudo abroad restore' "${TMP}/c1" && grep -q 'sudo abroad-rescue' "${TMP}/c1" &&
+  ok "c. R1、R2、M2 没做时打印警告和三个恢复办法" || bad "c. R1、R2、M2 没做时应打印警告和三个恢复办法"
+grep -q '前提不满足：.*R1' "${TMP}/c1" && bad "c. R1、R2、M2 没做不应拒绝" || ok "c. R1、R2、M2 没做不拒绝"
+M6E_R1R2M2_DONE=1 env -u M6E_NODES scripts/m6/e2e/run.sh --check-only >/dev/null 2>"${TMP}/c2"
+grep -q '第一次启用没有自动恢复' "${TMP}/c2" && bad "c. 设了 M6E_R1R2M2_DONE=1 还在警告" || ok "c. 设了 M6E_R1R2M2_DONE=1 不再警告"
 
 # ---- d. 源码检查 ----
 for s in run.sh restore.sh lib.sh; do

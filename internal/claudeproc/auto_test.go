@@ -247,34 +247,51 @@ func TestIDListShared(t *testing.T) {
 	}
 }
 
-// f. 覆盖范围：每种安装方式一行，齐全；npm、Homebrew 写明由第一层和第四层兜着；文字只在一处。
+// f. 覆盖范围：每种安装方式一行，齐全；npm、Homebrew 写明由哪几层兜着——第四道打开时写第一层和第四层，关着时（默认）
+// 只写第一层和第五层并注明第四层未开启，不出现“由第四层兜着”（v0.68）；文字只在一处生成。
 func TestCoverage(t *testing.T) {
-	rows := Coverage()
 	want := map[Kind]CoverageStatus{KindDesktop: CoverageCovered, KindNative: CoverageCovered, KindNPM: CoverageNotCovered, KindHomebrew: CoverageBySignature}
-	if len(rows) != len(want) {
-		t.Fatalf("%v", rows)
-	}
-	for _, r := range rows {
-		cov, ok := want[r.Kind]
-		if !ok || r.Status != cov || r.Name == "" || r.Reason == "" {
-			t.Fatalf("%+v", r)
+	for _, on := range []bool{true, false} {
+		rows := Coverage(on)
+		if len(rows) != len(want) {
+			t.Fatalf("%v", rows)
 		}
-		if cov != CoverageCovered && (!strings.Contains(r.Reason, "第一层（解析锁）") || !strings.Contains(r.Reason, "第四层（本机代理）")) {
-			t.Fatalf("不覆盖的应写明兜底：%+v", r)
+		for _, r := range rows {
+			cov, ok := want[r.Kind]
+			if !ok || r.Status != cov || r.Name == "" || r.Reason == "" {
+				t.Fatalf("%+v", r)
+			}
+			if cov == CoverageCovered {
+				if strings.Contains(r.Reason, "兜着") {
+					t.Fatalf("覆盖的不应写兜底：%+v", r)
+				}
+				continue
+			}
+			if !strings.Contains(r.Reason, "第一层（解析锁）") {
+				t.Fatalf("不覆盖的应写明第一层：%+v", r)
+			}
+			if on && !strings.Contains(r.Reason, "第四层（本机代理）兜着") {
+				t.Fatalf("第四道打开时应写第四层：%+v", r)
+			}
+			if !on && (strings.Contains(r.Reason, "第四层（本机代理）") || !strings.Contains(r.Reason, "第五层") || !strings.Contains(r.Reason, "第四层未开启")) {
+				t.Fatalf("第四道关着时只写第一层和第五层并注明未开启：%+v", r)
+			}
+		}
+		if rows[3].Kind != KindHomebrew || rows[3].Status != CoverageBySignature {
+			t.Fatalf("Homebrew 应视签名而定：%+v", rows[3])
 		}
 	}
-	// 判定给出的原因和覆盖表同一来源
+	// 判定给出的原因和覆盖表同一来源（不带兜底那半句：判定不知道第四道的开关）
 	j, _ := newJudge()
-	if r := j.Judge(proc(600, nodeBin, "/x/node_modules/@anthropic-ai/claude-code/cli.js")); r.Reason != rows[2].Reason {
+	if r := j.Judge(proc(600, nodeBin, "/x/node_modules/@anthropic-ai/claude-code/cli.js")); !strings.HasPrefix(Coverage(true)[2].Reason, r.Reason) || r.Reason == "" {
 		t.Fatalf("原因应来自覆盖表：%q", r.Reason)
 	}
-	if rows[3].Kind != KindHomebrew || rows[3].Status != CoverageBySignature {
-		t.Fatalf("Homebrew 应视签名而定：%+v", rows[3])
-	}
-	// 文字只在 auto.go 的覆盖表里写一次
+	// 兜底的两种说法只在 auto.go 的 FallbackText 里各写一次
 	b, _ := os.ReadFile("auto.go")
-	if n := strings.Count(string(b), "由第一层（解析锁）和第四层（本机代理）兜着"); n != 2 { // npm、Homebrew 两行
-		t.Fatalf("兜底那句应只在覆盖表里出现（%d 次）", n)
+	for _, s := range []string{"由第一层（解析锁）和第四层（本机代理）兜着", "由第一层（解析锁）和第五层（回国拦截）兜着（第四层未开启）"} {
+		if n := strings.Count(string(b), s); n != 1 {
+			t.Fatalf("“%s”应只在 FallbackText 里出现（%d 次）", s, n)
+		}
 	}
 }
 

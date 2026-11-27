@@ -65,7 +65,7 @@ func WindowsOnlyFiles(t testing.TB, root string) []string {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case "third_party", "testdata", ".git", "node_modules", "out":
+			case "third_party", "testdata", ".git", ".claude", "node_modules", "out":
 				return filepath.SkipDir
 			}
 			return nil

@@ -24,7 +24,7 @@ func TestLockSource(t *testing.T) {
 		rel, _ := filepath.Rel(root, p)
 		if d.IsDir() {
 			switch d.Name() {
-			case "third_party", "out", ".git", "testdata", "node_modules", ".build":
+			case "third_party", "out", ".git", ".claude", "testdata", "node_modules", ".build":
 				return filepath.SkipDir
 			}
 			return nil

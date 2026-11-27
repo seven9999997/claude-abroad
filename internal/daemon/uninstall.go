@@ -101,7 +101,7 @@ func (d *Daemon) runUninstall(ctx context.Context) (UninstallResult, error) {
 			notes = append(notes, "解析锁里有别人写的或被改过的文件没有删："+strings.Join(rr.Left, "、"))
 		}
 	}
-	if cs := d.opts.Sys.ClaudeSettings; cs != nil {
+	if cs := d.opts.Sys.ClaudeSettings; cs != nil { // 不管第四道开没开，都按记录检查并删掉我们写的分片（v0.68）
 		left, err := cs.Remove()
 		if err != nil {
 			add("解除 Claude 启动管控", false, "")
@@ -121,10 +121,8 @@ func (d *Daemon) runUninstall(ctx context.Context) (UninstallResult, error) {
 		add("解除 Claude 启动管控", false, "")
 		return res, err
 	}
-	d.stopLaunchGuard()  // 第三层不再结束任何进程
-	if d.cproxy != nil { // 本机代理端口也不再需要（M6-5a 补审建议改）
-		d.cproxy.stop()
-	}
+	d.stopLaunchGuard()      // 第三层不再结束任何进程
+	d.uninstallClaudeProxy() // 本机代理端口也不再需要（M6-5a 补审建议改）；第四道的开关记为关（v0.68）
 	d.events.Add("uninstall", "launch_control_removed", "")
 	add("解除 Claude 启动管控", true, strings.Join(notes, "；"))
 	// 3. 安装器那一侧
@@ -219,4 +217,18 @@ func (d *Daemon) handleUninstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+// uninstallClaudeProxy 是卸载里第四道的收尾：停止监听，开关记为关（之后重启 abroadd 也不再监听）。分片已在前面按记录删过。
+func (d *Daemon) uninstallClaudeProxy() {
+	if !d.cpAvailable() {
+		return
+	}
+	d.cpSwitchMu.Lock()
+	defer d.cpSwitchMu.Unlock()
+	d.stopCP()
+	d.cpOn.Store(false)
+	if err := d.saveClaudeSwitch(false); err != nil {
+		d.events.Add("claude_proxy", "switch_off_failed", "记下开关："+err.Error()) // 已卸载时启动也不监听，不影响结果
+	}
 }

@@ -312,6 +312,7 @@ func TestUninstallStopsClaudeProxy(t *testing.T) {
 	o := e.opts()
 	o.Sys.ResolverLock, o.Sys.ClaudeSettings, o.Sys.Uninstaller = e.lock, e.cs, e.un
 	o.ClaudeProxyAddr = "127.0.0.1:0"
+	presetClaudeProxyOn(t, o.StateDir) // 第四道打开着（v0.68：默认关）
 	e.d = e.start(o)
 	if st := status(t, e.d); st.ClaudeCode == nil || !st.ClaudeCode.Listening {
 		t.Fatalf("卸载前端口应在听：%+v", st.ClaudeCode)

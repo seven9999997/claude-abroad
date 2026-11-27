@@ -56,7 +56,7 @@ type System struct {
 	LaunchControl bool
 	// FirstRun 打开首次准备（M6-8a：第一次启动时写入解析锁和托管设置）；测试和假系统默认关。
 	FirstRun bool
-	// PrepareTestOnly：首次准备只写测试目标（开发构建的 --dev-resolver-test-domain），不写 Claude Code 的托管设置。
+	// PrepareTestOnly：首次准备只写测试目标（开发构建的 --dev-resolver-test-domain）；第四道打开时只监听，不写 Claude Code 的托管设置（测试模式）。
 	PrepareTestOnly bool
 	// Data 是数据面（可为 nil：假系统没有数据面）。daemon 启动时绑定闸门和监护的 Kick，闸门由开变关时断开连接。
 	Data *DataPlane

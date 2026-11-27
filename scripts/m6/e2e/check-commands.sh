@@ -2,7 +2,8 @@
 # 核对 M6-9 端到端脚本的空跑输出：
 #   1. 每一条 CHANGE: 都在 commands.txt 的清单里；没有 pfctl、networksetup、route、ifconfig、pkill、killall、open
 #      （网络由 abroadd 和卸载脚本负责；应用由你自己打开）；kill 只对死人开关；
-#   2. 第一段：死人开关之前只有建状态目录；地区快照在安装之前；安装在第一个检查点之前；本机代理端口的核对（R23）在启用之后、回国之前；
+#   2. 第一段：死人开关之前只有建状态目录；地区快照在安装之前；安装在第一个检查点之前；本机代理端口的核对（R23）在启用之后、回国之前，
+#      它之前打开第四道、之后关掉（v0.68：第四道默认关）；
 #      最后请你重启，并且取消了死人开关；
 #   3. 第二段：先启动死人开关，再核对 guard；应急演练先停后台服务、再执行应急程序、再注册回来；卸载在回国检查点之后；最后执行 restore.sh（地区按快照还原、删状态目录）。
 # 用法：scripts/m6/e2e/check-commands.sh <第一段空跑输出> <第二段空跑输出>
@@ -31,11 +32,13 @@ awk '
   /^CHANGE: scripts\/m6\/install\/install\.sh$/ { if (!rg) print "地区快照应在安装之前"; inst = NR }
   /^STEP: 检查点 P1/ { if (!inst) print "安装应在第一个检查点之前"; p1 = NR }
   /^STEP: 检查点 P2/ { p2 = NR }
-  /^STEP: 核对 CC1/ { if (!p2) print "本机代理端口的核对（R23）应在启用之后"; cc1 = NR }
-  /^STEP: 检查点 P3/ { if (!cc1) print "回国之前应先核对本机代理端口（R23）" }
+  /^CHANGE: .*\/bin\/abroad --yes claude-proxy on$/ { if (!p2) print "打开第四道应在启用之后"; con = NR }
+  /^STEP: 核对 CC1/ { if (!p2) print "本机代理端口的核对（R23）应在启用之后"; if (!con) print "核对 CC1 之前应先打开第四道"; cc1 = NR }
+  /^CHANGE: .*\/bin\/abroad --yes claude-proxy off$/ { if (!cc1) print "关闭第四道应在核对 CC1 之后"; coff = NR }
+  /^STEP: 检查点 P3/ { if (!cc1) print "回国之前应先核对本机代理端口（R23）"; if (!coff) print "回国之前应先关掉第四道（CC1 做完）" }
   /^CHANGE: kill <死人开关的 PID>$/ { stop = NR }
   /^WAIT: 重启电脑/ { if (!stop) print "请你重启之前应先取消死人开关"; rb = NR }
-  END { if (!dm) print "第一段没有死人开关"; if (!p1) print "第一段没有检查点"; if (!cc1) print "第一段没有核对本机代理端口（R23）"; if (!rb) print "第一段最后没有请你重启" }' "$1" |
+  END { if (!dm) print "第一段没有死人开关"; if (!p1) print "第一段没有检查点"; if (!cc1) print "第一段没有核对本机代理端口（R23）"; if (!con || !coff) print "第一段 CC1 前后没有打开、关闭第四道"; if (!rb) print "第一段最后没有请你重启" }' "$1" |
   while IFS= read -r l; do echo "✗ 第一段：$l"; done >"$PAT.o"
 awk '
   /^CHANGE: 死人开关/ { dm = NR }

@@ -96,6 +96,7 @@ precheck() {
   [ -S "${API}" ] || reasons+=("连不上 abroadd（${API}）：先用 scripts/m6/install 装好开发安装")
   [ "$(state)" = ENABLED ] || reasons+=("abroadd 不在已启用状态：先在应用里启用（实测要在接管下做，绕开代理也不暴露本机 IP）")
   [ "$(rbset)" = real ] && reasons+=("回国拦截用的是真实的 Anthropic 地址段（发布构建，或没有只管测试目标）：回国后这台 Mac 直连 Anthropic 会被拒，这里的 Claude Code 会话会断开。实测用开发安装（测试段）")
+  [ "$(cc enabled)" = true ] || reasons+=("第四道的开关没打开（v0.68 起默认关）：先执行 sudo abroad claude-proxy on（开发安装只管测试目标：只监听，不写托管设置），做完 sudo abroad claude-proxy off")
   [ "$(cc listening)" = true ] || reasons+=("本机代理端口 ${M6L_PORT} 没在听：$(cc listen_error)")
   [ -e "${M6L_STATE}" ] && reasons+=("上一次运行没有结束（${M6L_STATE}）：先执行 sudo scripts/m6/layer4/restore.sh")
   if [ -e "${M6L_FRAG}" ]; then reasons+=("${M6L_FRAG} 已经存在（开发安装默认不写它；可能是别的运行留下的）：确认后删除"); fi

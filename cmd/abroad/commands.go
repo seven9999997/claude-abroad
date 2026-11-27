@@ -71,6 +71,10 @@ var commands = []command{
 	{path: []string{"lan", "show"}, route: "lan-get", run: cmdLANShow},
 	{path: []string{"lan", "on"}, route: "lan-put", run: cmdLANSet(true)},
 	{path: []string{"lan", "off"}, route: "lan-put", run: cmdLANSet(false)},
+	// v0.68：第四道（Claude Code 的本机代理）的开关，默认关；打开和关闭都要 sudo
+	{path: []string{"claude-proxy", "show"}, route: "claude-proxy-get", run: cmdClaudeProxyShow},
+	{path: []string{"claude-proxy", "on"}, route: "claude-proxy-put", run: cmdClaudeProxySet(true)},
+	{path: []string{"claude-proxy", "off"}, route: "claude-proxy-put", run: cmdClaudeProxySet(false)},
 	{path: []string{"region", "show"}, route: "region-get", run: cmdRegionShow},
 	{path: []string{"region", "set"}, route: "region-put", run: cmdRegionSet},
 	{path: []string{"region", "auto"}, route: "region-put", run: cmdRegionAuto},

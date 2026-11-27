@@ -310,12 +310,27 @@ public enum L10n {
         default: return "完整性清单被改过或读不出"
         }
     }
-    // M6-8a：首次准备（写入解析锁和托管设置）
+    // M6-8a：首次准备（写入解析锁；v0.68 起不写托管设置）
     public static let prepareTitle = "首次准备"
     public static let prepareDone = "已完成"
     public static let prepareNotDone = "没有完成（后台下次启动时重试）"
     public static let claudeCodeUnknown = "后台没有报告第四层的状态"
-    public static let claudeCodeNotWritten = "托管设置还没有写入（首次准备时写入）"
+    public static let claudeCodeNotWritten = "托管设置没有写入"
+    // v0.68：第四道是可选的开关，默认关（用户 2026-11-27）。关着写“未开启”，和“未生效”区分开。
+    public static let claudeCodeOff = "未开启（默认关）：Claude Code 不经本机代理，回国后靠第一层（解析锁）和第五层（回国拦截）"
+    public static let claudeCodeTestMode = "测试模式：只监听，不写托管设置（本机真实的 Claude Code 不受影响）"
+    public static let claudeCodeLeftover = "托管设置目录里还有 claude-abroad.json（被改过所以没有删，或是上一版写下的）：它会把 Claude Code 指向一个没在听的端口，请自己检查后删掉，或再执行一次下面的关闭命令"
+    public static let claudeCodeConsequenceTitle = "打开的后果："
+    /// 打开第四道的后果（和后台 daemon.ClaudeProxyConsequences 内容一致；命令行打开前打印同样的三句）。
+    public static let claudeCodeConsequences = [
+        "这台 Mac 上所有 Claude Code 都会被指向 Claude 出国的本机代理（127.0.0.1:47821）。",
+        "没有处于“已启用”时，Claude Code 一律连不上，包括经本机别的代理线路启动的。",
+        "关掉开关（sudo abroad claude-proxy off）或卸载才恢复。",
+    ]
+    public static let claudeCodeOnLabel = "打开（在终端里执行，会先显示后果并要求确认）："
+    public static let claudeCodeOffLabel = "关闭（在终端里执行）："
+    public static let claudeCodeOnCommand = "sudo abroad claude-proxy on"
+    public static let claudeCodeOffCommand = "sudo abroad claude-proxy off"
     public static let claudeCodeEffective = "生效中：Claude Code 只经本机代理端口联网，回国后一律连不上"
     public static let claudeCodeNotEffective = "未生效"
     public static func claudeCodeProblem(_ kind: String) -> String {

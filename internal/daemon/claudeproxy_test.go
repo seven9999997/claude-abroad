@@ -115,6 +115,7 @@ func newCPEnv(t *testing.T) *cpEnv {
 	fake := &m3Direct{pinnedSet: map[string]bool{}}
 	c.m3Env = newM3DaemonCore(t, m3Rules, fake, func(e *m3Env, o *Options) {
 		o.ClaudeProxyAddr = "127.0.0.1:0"
+		presetClaudeProxyOn(t, o.StateDir) // 第四道打开着（v0.68：默认关）
 		e.dp.SetIdent(cpIdent{})
 		c.vm = newArmVM(o.Sys.VM)
 		o.Sys.VM = c.vm
@@ -467,6 +468,7 @@ func TestClaudeProxyPortBusy(t *testing.T) {
 	e := newEnv(t)
 	o := e.opts()
 	o.ClaudeProxyAddr = ln.Addr().String()
+	presetClaudeProxyOn(t, o.StateDir)
 	d := e.start(o)
 	st := status(t, d)
 	if st.ClaudeCode == nil || st.ClaudeCode.Listening || st.ClaudeCode.Effective || st.ClaudeCode.ListenErr == "" {
@@ -482,6 +484,7 @@ func TestClaudeProxyPortBusy(t *testing.T) {
 	e2 := newEnv(t)
 	o2 := e2.opts()
 	o2.ClaudeProxyAddr = "0.0.0.0:0"
+	presetClaudeProxyOn(t, o2.StateDir)
 	d2 := e2.start(o2)
 	if st := status(t, d2); st.ClaudeCode == nil || st.ClaudeCode.Listening {
 		t.Fatalf("非回环地址不应监听：%+v", st.ClaudeCode)
@@ -507,6 +510,7 @@ func TestClaudeProxyRecoversAfterPortFreed(t *testing.T) {
 	o := e.opts()
 	o.ClaudeProxyAddr = occ.Addr().String()
 	o.ClaudeProxyRetry = 20 * time.Millisecond
+	presetClaudeProxyOn(t, o.StateDir)
 	d := e.start(o)
 	if !d.claudeProxyDown() || status(t, d).ClaudeCode.Listening {
 		t.Fatal("被占用时应未生效")
@@ -569,6 +573,7 @@ func TestClaudeProxyHandshakeTimeout(t *testing.T) {
 	o := e.opts()
 	o.ClaudeProxyAddr = "127.0.0.1:0"
 	o.ClaudeProxyHandshake = 200 * time.Millisecond
+	presetClaudeProxyOn(t, o.StateDir)
 	d := e.start(o)
 	_, port, _ := d.cproxy.listening()
 	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))

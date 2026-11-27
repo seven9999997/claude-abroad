@@ -24,11 +24,16 @@
 ```sh
 scripts/dev/integrity-build.sh --dev
 scripts/dev/app-bundle.sh
-export M6E_NODES=/path/to/nodes.yaml M6E_M5_PASSED=1
+export M6E_NODES=/path/to/nodes.yaml
 scripts/m6/e2e/run.sh --check-only
 ```
 
-前提：M5 第二级走查已经通过；没有别的代理软件的 TUN、VPN 和系统代理；开发安装的前提（见 scripts/m6/install）。
+前提：没有别的代理软件的 TUN、VPN 和系统代理；开发安装的前提（见 scripts/m6/install）。
+
+- **M5 第二级走查、R1、R2、M2 没做只提醒、不拒绝**（用户 2026-11-27 决定暂不测）。R1、R2、M2 没做时会打印警告：
+  **第一次启用没有自动恢复**——启用后如果断网回不来，用下面任一办法恢复：① 应用里“一键回国”；② `sudo abroad restore`
+  （命令行在 `/Library/Application Support/claude-abroad/bin/abroad`）；③ `sudo abroad-rescue`（后台服务不在或状态文件损坏时，
+  先按 docs/emergency.md 停掉后台服务）。做过之后可以设 `M6E_R1R2M2_DONE=1`、`M6E_M5_PASSED=1` 关掉提醒。
 
 ## 第一段
 
@@ -41,7 +46,7 @@ sudo -E scripts/m6/e2e/run.sh
 3. 以你自己的身份打开应用 `open /Applications/ClaudeAbroad.app`，按提示在应用里操作，每步做完按回车，脚本经接口核对：
    - P1 安装引导：添加来源（本地配置文件选 `M6E_NODES`）→ 选节点 → 应用主代理 → 完成；
    - P2 启用；
-   - CC1 本机代理端口认出对端进程（R23；2026-11-27 从第四层实测挪来）：以你自己的身份用 curl 经 `127.0.0.1:47821` 发一次请求，状态里“最近的连接”应认出这个程序（不是 unknown、不按 Claude 处理）。不写 Claude Code 的托管设置，只有这一个显式带代理参数的 curl 经过端口；判断用的字段另存在 `out/m6e-cc1-*.txt`（不含目的域名）；
+   - CC1 本机代理端口认出对端进程（R23；2026-11-27 从第四层实测挪来）：以你自己的身份用 curl 经 `127.0.0.1:47821` 发一次请求，状态里“最近的连接”应认出这个程序（不是 unknown、不按 Claude 处理）。第四道默认关（v0.68）：这一步之前脚本执行 `abroad --yes claude-proxy on`、做完执行 `abroad --yes claude-proxy off`（开发安装只管测试目标，打开只监听、不写 Claude Code 的托管设置），只有这一个显式带代理参数的 curl 经过端口；判断用的字段另存在 `out/m6e-cc1-*.txt`（不含目的域名）；
    - LAN1 允许局域网（补齐三，设了 `M6E_LAN_PROBE=<局域网设备的 地址:端口>` 时，如打印机 `192.168.1.20:631`）：
      `abroad lan off` 后连不上这台设备，`abroad lan on` 后恢复；没设时跳过；
    - P3 一键回国：本机网络恢复（直连探测 204）、解析锁仍在；

@@ -23,7 +23,7 @@ func TestSettingsSource(t *testing.T) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case "third_party", "out", ".git", "testdata", "node_modules", ".build":
+			case "third_party", "out", ".git", ".claude", "testdata", "node_modules", ".build":
 				return filepath.SkipDir
 			}
 			return nil

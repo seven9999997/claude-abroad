@@ -182,8 +182,9 @@ func claudeService(skip bool, fakeDir string, logger *log.Logger) (*claudeproc.S
 	return svc, lg, nil
 }
 
-// controlParts 是启动管控的几样东西（M6-4b-1 返工）：只有带 --launch-control 才有——首次准备（写解析锁和托管设置）、
-// 第三层、本机代理端口。不带时都为空：真实模式和 M6 之前完全相同（M2–M5 的真机脚本就是这样运行的）。
+// controlParts 是启动管控的几样东西（M6-4b-1 返工）：只有带 --launch-control 才有——首次准备（写解析锁）、
+// 第三层、第四道（托管设置和本机代理端口；v0.68 起是持久化的开关、默认关，开关由 abroadd 自己存在状态目录里，
+// 这里只把它们接上）。不带时都为空：真实模式和 M6 之前完全相同（M2–M5 的真机脚本就是这样运行的）。
 type controlParts struct {
 	lock      *resolverlock.Lock
 	settings  *claudecfg.Settings
@@ -289,7 +290,8 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		LaunchGuard: ctl.guard, LaunchControl: f.launchControl,
 		// 程序完整性校验（M6-7）：清单的摘要在构建时写进程序；没给清单时不校验。
 		Integrity: integrityChecker(f),
-		// 首次准备（M6-8a）：第一次启动时写入解析锁和托管设置；开发构建只管测试域名时不写托管设置。
+		// 首次准备（M6-8a）：第一次启动时写入解析锁（v0.68 起不写托管设置）；开发构建只管测试域名时第四道打开也只监听、
+		// 不写托管设置（测试模式）。
 		FirstRun: ctl.firstRun, PrepareTestOnly: f.resolverTest,
 	})
 	if err != nil {
@@ -297,7 +299,7 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		return 1
 	}
 	d, err := daemon.Start(context.Background(), daemon.Options{StateDir: f.stateDir, Sys: sys, Log: logger, SocketDir: f.socketDir,
-		ClaudeProxyAddr: ctl.proxyAddr, // 第四层的本机代理端口（M6-3b；只有带 --launch-control）
+		ClaudeProxyAddr: ctl.proxyAddr, // 第四层的本机代理端口（M6-3b；只有带 --launch-control；第四道打开时才监听）
 		// M6-2b：运行时目录沿用 socket 目录（/var/run/claude-abroad，重启后清空）：给开机时的 guard 写标记、收养它的启用引用。
 		RunDir: f.socketDir,
 		// M6-11b：回国拦截被重新加载时只清到那几段的连接状态（默认关，等真机结论）。

@@ -64,6 +64,9 @@ const usage = `用法：abroad [--json] [--yes] [--socket <路径>] <子命令> 
   rules nofake ls | add <域名>… | rm <域名>…     不分配假地址的名单（添加是放松，需要 sudo；Claude 的域名和置顶域名加不进）
   check history [clear]                          环境检测的历史（最新的在前，每条标出变了的项）；clear 清空
   lan show | on | off                            允许局域网（默认开；关掉后局域网里的打印机、NAS、投屏、共享都连不上；从关到开需要 sudo）
+  claude-proxy show                              第四道（Claude Code 的本机代理）：默认关；打开后这台 Mac 上所有 Claude Code 只经本机代理联网
+  sudo abroad claude-proxy on                    打开第四道（先显示后果并要求确认）
+  sudo abroad claude-proxy off                   关闭第四道（删掉写下的托管设置、停止监听）
   region show | set <时区> <语言> [--locale <地区格式>] | auto      地区（地区会变时需要 sudo 和确认）
   engine ls | install <名字> | rollback <名字>
   launchguard                      启动管控：现在是否允许启动 Claude、四层是否生效

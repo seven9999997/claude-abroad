@@ -5,7 +5,8 @@
 #   c. 只删自己写的分片（临时目录）：内容和记录一致才删；自己建的空目录一并删；被改过的留下并报告；别人的文件不动；
 #   d. 自测用的目录变量离开自测被拒绝；
 #   e. 源码检查：没有 pfctl、networksetup、route、ifconfig、pkill、killall、launchctl，不打开应用；
-#   f. 生成内容的唯一来源：abroad-dev claude-settings content 和 abroadd 写的逐字相同（Go 测试 TestClaudeSettingsCmd）。
+#   f. 生成内容的唯一来源：abroad-dev claude-settings content 和 abroadd 写的逐字相同（Go 测试 TestClaudeSettingsCmd）；
+#   g. 前提检查要求第四道的开关已打开（v0.68 默认关）。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "${ROOT}" || exit 1
@@ -62,6 +63,10 @@ done
 
 # ---- f ----
 go test ./cmd/abroad-dev -run TestClaudeSettingsCmd >/dev/null 2>&1 && ok "f. 托管设置内容和 abroadd 写的逐字相同" || bad "f. TestClaudeSettingsCmd 不通过"
+
+# ---- g（v0.68）：前提检查要求第四道的开关已打开（默认关；实测自己写分片的做法不变）----
+grep -q '\[ "\$(cc enabled)" = true \] || reasons+=("第四道的开关没打开' scripts/m6/layer4/run.sh &&
+  ok "g. 前提检查里有“第四道的开关已打开”" || bad "g. 前提检查里没有“第四道的开关已打开”"
 
 echo
 [ $fails = 0 ] && echo "自测全部通过" || echo "自测：${fails} 处不通过"

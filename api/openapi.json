@@ -418,6 +418,17 @@
         ],
         "type": "object"
       },
+      "DaemonClaudeProxySetting": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      },
       "DaemonClaudeProxyStatus": {
         "properties": {
           "accepted": {
@@ -425,6 +436,12 @@
             "type": "integer"
           },
           "effective": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "leftover": {
             "type": "boolean"
           },
           "listen_error": {
@@ -449,11 +466,48 @@
           },
           "settings": {
             "$ref": "#/components/schemas/ClaudecfgStatus"
+          },
+          "test_mode": {
+            "type": "boolean"
           }
         },
         "required": [
           "effective",
+          "enabled",
           "listening"
+        ],
+        "type": "object"
+      },
+      "DaemonClaudeProxyView": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "leftover": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DaemonClaudeProxyStatus"
+          },
+          "test_mode": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available",
+          "enabled"
         ],
         "type": "object"
       },
@@ -3300,6 +3354,71 @@
           }
         },
         "x-level": "per_call"
+      }
+    },
+    "/v1/settings/claude-proxy": {
+      "get": {
+        "description": "第四道（Claude Code 的本机代理）的开关和状态（默认关；没打开启动管控时 available 为假）",
+        "operationId": "claude-proxy-get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonClaudeProxyView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      },
+      "put": {
+        "description": "打开或关闭第四道：两个方向都要本人授权；打开时别的托管设置定义了代理变量就拒绝（422，conflicts 列出文件和变量）",
+        "operationId": "claude-proxy-put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DaemonClaudeProxySetting"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonClaudeProxyView"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "sensitive"
       }
     },
     "/v1/settings/lan": {

@@ -19,8 +19,8 @@
 | # | 完成标准 | 结论 | 依据 | 弱在哪里；这一版到此为止（以后如果购买账号从哪里接上） |
 |---|---|---|---|---|
 | 1 | 在全新的机器上拖入“应用程序”即可安装、使用 | **达到替代程度** + **待真机** | 开发安装脚本代替 DMG 和 SMAppService：`script:scripts/m6/install/install.sh#M6-11b`（安装后只读核对首次准备、完整性、回国拦截），`script:scripts/m6/install/selftest.sh#M6-11b`（在临时目录里真装真卸）；端到端 `script:scripts/m6/e2e/run.sh#I1` | 要从源码构建、要 sudo 执行脚本，非开发者用不了；只能装在执行脚本的那台 Mac 上；没有签名的更新通道（重装即升级）。这一版到此为止；以后如果购买账号，按 P1–P3 接上（安装位置和后台服务注册的接口见 m6-plan 第 8 节） |
-| 2 | 回国后 Claude 连不上 | **达到**（机制；每一道各自拦不住什么见第 4 节）+ **待真机**（对各程序是否有效） | 五道管控见第 4 节。第一道 `go:internal/resolverlock#TestWriteIdempotent`；第四道 `go:internal/daemon#TestClaudeProxyStateTable`；第五道 `go:internal/state#TestReturnBlockNoGap`、`go:internal/daemon#TestReturnBlockSwitch`；启用、停用、回国全流程不碰解析锁 `go:internal/daemon#TestResolverLockInDaemon`；回国时结束不了 Claude 就中止、什么都不改 `go:internal/daemon#TestRestoreLeftovers` | 解析锁对自带加密 DNS 的程序、开着别的代理软件时无效（R9、R18，`scripts/m6/resolver`）；第五道本机另有代理软件接管时拦不住；Anthropic 新增地址段要等新版本。对真实地址段的效果只能用发布构建验证（第 7 节“没有做”） |
-| 3 | 回国后 Claude 被打开后马上结束 | **达到替代程度** + **待真机** | 第三道：`go:internal/daemon#TestLaunchGuardRuleA`、`go:internal/claudeproc#TestGuardTermThenKill`；开发构建只针对测试目录 `go:internal/claudeproc#TestFakeDirGuard`；端到端 `script:scripts/m6/e2e/run.sh#L1` | 没有 Endpoint Security（P5），不能在程序运行之前拒绝：每 200 毫秒扫描、发现即结束，Claude 可能已经运行零点几秒（这一版的最终状态：Endpoint Security 要付费账号，这一版不做）；只结束签名确认过的进程，npm、Homebrew 装的 Claude Code 第三道不覆盖（靠第一、四、五道）。端到端的开发构建只验证机制，对真实 Claude 的效果要发布构建（第 7 节） |
+| 2 | 回国后 Claude 连不上 | **达到**（机制；每一道各自拦不住什么见第 4 节）+ **待真机**（对各程序是否有效） | 五道管控见第 4 节。第一道 `go:internal/resolverlock#TestWriteIdempotent`；第四道（v0.68 起可选、默认关，打开之后）`go:internal/daemon#TestClaudeProxyStateTable`；第五道 `go:internal/state#TestReturnBlockNoGap`、`go:internal/daemon#TestReturnBlockSwitch`；启用、停用、回国全流程不碰解析锁 `go:internal/daemon#TestResolverLockInDaemon`；回国时结束不了 Claude 就中止、什么都不改 `go:internal/daemon#TestRestoreLeftovers` | 解析锁对自带加密 DNS 的程序、开着别的代理软件时无效（R9、R18，`scripts/m6/resolver`）；第五道本机另有代理软件接管时拦不住；Anthropic 新增地址段要等新版本。对真实地址段的效果只能用发布构建验证（第 7 节“没有做”） |
+| 3 | 回国后 Claude 被打开后马上结束 | **达到替代程度** + **待真机** | 第三道：`go:internal/daemon#TestLaunchGuardRuleA`、`go:internal/claudeproc#TestGuardTermThenKill`；开发构建只针对测试目录 `go:internal/claudeproc#TestFakeDirGuard`；端到端 `script:scripts/m6/e2e/run.sh#L1` | 没有 Endpoint Security（P5），不能在程序运行之前拒绝：每 200 毫秒扫描、发现即结束，Claude 可能已经运行零点几秒（这一版的最终状态：Endpoint Security 要付费账号，这一版不做）；只结束签名确认过的进程，npm、Homebrew 装的 Claude Code 第三道不覆盖（靠第一、五道，第四道打开时还有第四道；v0.68 起第四道默认关）。端到端的开发构建只验证机制，对真实 Claude 的效果要发布构建（第 7 节） |
 | 4 | 一键卸载后恢复正常并完全清理 | **达到** + **待真机** | `go:internal/daemon#TestUninstallRestoresEverything`、`go:internal/daemon#TestUninstallFromEachState`、`go:internal/daemon#TestReturnBlockUninstall`（三种起点卸载后锚点空、引用全部释放、pf 回到安装前）、`go:internal/daemon#TestUninstalledRejectsChanges`；命令行 `go:cmd/abroad#TestCLIUninstall`；开发安装的卸载和快照对照 `script:scripts/m6/e2e/run.sh#U1` | 第 3 步“注销后台服务、删除专用用户和数据”由安装器完成（现在是开发安装的卸载脚本）；快照对照里 pf 是否启用那一行的格式没在真机核对过，认不出时记“无法判断”、不参与对照 |
 | 5 | 未签名的脚本调用回国接口被拒绝 | **达到替代程度** | `go:internal/api#TestClassifyAndAllowed`、`go:internal/daemon#TestSocketSecurity`；三句话见下 | 见下 |
 
@@ -46,11 +46,11 @@
 | G7 | Mac 应用和命令行 | **达到替代程度** + **待真机** | 应用临时签名、开发安装（S1）；M5 走查 |
 | G8 | 出国后的环境检测 17 项 | **达到** + **待真机** | M4、M5 第二级 |
 | G9 | 启动管控：回国后 Claude 连不上、不允许启动，只有卸载才解除 | 同第 1 节第 2、3 行 | 第 4 节 |
-| G9.1 | 回国后没被拦住的 Claude Code 流量不从本机 IP 出去 | **达到**（机制，只有自动测试）；**真实效果暂不测（用户 2026-11-27 决定）** | 第四道：托管设置指向本机代理端口，回国时一律 403 `go:internal/daemon#TestClaudeProxyStateTable`。依赖两个没有在真机上验证过的前提（都来自 Claude Code 官方文档的描述）：① Claude Code 会采用托管设置里的代理变量（R21）；② 代理不通或被拒时它不回退直连（R22）。补测时用 `script:scripts/m6/layer4/run.sh#T2a` |
+| G9.1 | 回国后没被拦住的 Claude Code 流量不从本机 IP 出去（**v0.68 起可选，默认关**：用户 2026-11-27“caibao这个兜底做个开关吧，默认不开启”） | **达到**（机制，只有自动测试）；**真实效果暂不测（用户 2026-11-27 决定）** | 默认关：首次准备不写托管设置、端口不监听、冲突检查里没有它的两项 `go:internal/daemon#TestClaudeProxyDefaultOff`；打开、关闭、三步回滚、卸载、重启后保持 `go:internal/daemon#TestClaudeProxyTurnOn`、`go:internal/daemon#TestClaudeProxyTurnOnRollback`、`go:internal/daemon#TestClaudeProxyTurnOff`、`go:internal/daemon#TestClaudeProxyUninstall`、`go:internal/daemon#TestClaudeProxyPersistsAcrossRestart`；命令行 `go:cmd/abroad#TestCLIClaudeProxy`；应用 `swift:claudeCodeOffByDefault`。打开之后，第四道：托管设置指向本机代理端口，回国时一律 403 `go:internal/daemon#TestClaudeProxyStateTable`。依赖两个没有在真机上验证过的前提（都来自 Claude Code 官方文档的描述）：① Claude Code 会采用托管设置里的代理变量（R21）；② 代理不通或被拒时它不回退直连（R22）。补测时用 `script:scripts/m6/layer4/run.sh#T2a` |
 | G9.2 | 回国后按 Anthropic 地址段拦截 | **达到**（机制）+ **待真机** | 第五道：`go:internal/state#TestCrashExhaustiveReturnBlock`、`go:internal/daemon#TestReturnBlockGuardAdoptedAfterReboot`；开发构建只拦测试段 `go:internal/daemon#TestReturnBlockSetFromPrepare`；真机（测试段）：`script:scripts/m6/e2e/run.sh#RB1`、`script:scripts/m6/e2e/run.sh#RB3` |
 | G10 | 一键卸载 | 同第 1 节第 4 行 | — |
 
-**“回国干净”的改写**（设计 v0.56）：回国恢复的是路由、DNS、IPv6、时区、语言（`go:internal/state#TestNormalCycle`）；启动管控——解析锁、托管设置、第三道、回国拦截的 pf 规则和一个 pf 启用引用——一直保留，只有一键卸载才解除（`go:internal/daemon#TestReturnBlockUninstall`）。回国后 pf 保持启用。
+**“回国干净”的改写**（设计 v0.56）：回国恢复的是路由、DNS、IPv6、时区、语言（`go:internal/state#TestNormalCycle`）；启动管控——解析锁、托管设置（第四道打开时才有；v0.68 起默认关）、第三道、回国拦截的 pf 规则和一个 pf 启用引用——回国不碰，一直保留，只有一键卸载才解除（`go:internal/daemon#TestReturnBlockUninstall`）。回国后 pf 保持启用。
 
 ## 3. 五条底线
 
@@ -69,7 +69,7 @@
 | 一 解析锁 | `/etc/resolver` 下的文件把内置的 Claude 域名（`claude.ai`、`claude.com`、`anthropic.com`、`claudeusercontent.com`、`claudemcpcontent.com`）交给一个不应答的解析地址（解析失败）；首次准备写入，只有卸载删除 | 用系统解析器的程序 | 自带加密 DNS 的浏览器；开着别的代理软件（R9、R18）；用户追加的置顶域名不在锁里 | 只锁测试域名 `lock-test.claude-abroad.invalid` | `go:internal/resolverlock#TestDomainsFromBuiltinPinned`、`go:internal/resolverlock#TestBackfill` | `scripts/m6/resolver` |
 | 二 启动拦截（Endpoint Security） | 程序运行之前拒绝 | — | 没有这一道 | — | — | 这一版不做（P5，没有付费账号） |
 | 三 发现即结束 | 每 200 毫秒扫描，只结束签名确认过的 Claude（口径 A–D） | Claude 桌面版、原生安装的 Claude Code | 运行零点几秒内；npm、Homebrew 装的 Claude Code；扫描失败时不结束 | 只结束安装目录 `fake-claude` 里的测试进程 | `go:internal/daemon#TestLaunchGuardRuleB`、`go:internal/claudeproc#TestCoverage`；拦下时的通知 `swift:launchBlockedNotifications`；“打开 Claude”只在已启用且检测通过时可点 `swift:openClaudeConditions` | 端到端 L1 |
-| 四 Claude Code 的本机代理 | 托管设置把 Claude Code 指向 `127.0.0.1:47821`；已启用时按规则转发，其余一律 403，不回退直连 | Claude Code（读托管设置的版本） | Claude 桌面版和浏览器；Claude Code 不读托管设置或绕开代理时（R21、R22）。这两个前提有任何一个不成立，这一道对相应的情况就不起作用，那时靠第一、三、五道；两条暂不测（用户 2026-11-27 决定） | 不写托管设置 | `go:internal/daemon#TestClaudeProxyRules`、`go:internal/claudecfg#TestWriteRemove` | `scripts/m6/layer4`（T0–T5，暂不测）；R23 在端到端 CC1 |
+| 四 Claude Code 的本机代理（**可选，默认关**，v0.68） | 关着时什么都不写、不监听（这一道不起作用，回国后靠第一、三、五道）；打开（`sudo abroad claude-proxy on`）后托管设置把 Claude Code 指向 `127.0.0.1:47821`；已启用时按规则转发，其余一律 403，不回退直连 | Claude Code（读托管设置的版本） | Claude 桌面版和浏览器；Claude Code 不读托管设置或绕开代理时（R21、R22）。这两个前提有任何一个不成立，这一道对相应的情况就不起作用，那时靠第一、三、五道；两条暂不测（用户 2026-11-27 决定） | 打开也只监听、不写托管设置（测试模式）`go:internal/daemon#TestClaudeProxyTestMode` | `go:internal/daemon#TestClaudeProxyRules`、`go:internal/claudecfg#TestWriteRemove`；默认关 `go:internal/daemon#TestClaudeProxyDefaultOff`；覆盖范围按开关生成 `go:internal/claudeproc#TestCoverage` | `scripts/m6/layer4`（T0–T5，暂不测）；R23 在端到端 CC1 |
 | 五 回国拦截 | 回国后 pf 锚点里只留“立即拒绝到 Anthropic 登记地址段”的两行，留一个 pf 启用引用；装上即生效，只有卸载才解除 | 本机任何程序（包括浏览器）直连这些地址 | 本机另有代理软件接管时（出口是那个代理）；Anthropic 新增地址段；共用 CDN 的域名（不和域名名单联动） | 只拦测试段 `192.0.2.0/24`、`2001:db8:abd::/48`（文档保留地址）；选择文件读不出时不加载 | `go:internal/guard#TestRestoredReturnBlockTable`、`go:internal/rescue#TestReturnBlockKept`、`go:internal/pf#TestPatrolRestoredVerifyNoReloadLoop`、`go:internal/srccheck#TestReturnBlockTestNetsDevOnly`；界面 `swift:returnBlockInSettings`、`swift:returnBlockConfirmAndHome`、`swift:returnBlockTestTag` | 端到端 RB1、RB2、B3、RB3、K1 |
 
 **没打开管控时**（abroadd 不带 `--launch-control`，M2–M5 的真机脚本就是这样）：不做首次准备，不写解析锁和托管设置，不接第三道，不监听本机代理端口，回国拦截不生效；回国就是清空锚点、释放全部启用引用（`go:internal/daemon#TestLaunchControlOff`、`go:internal/daemon#TestPrepareOffByDefault`、`go:internal/state#TestReturnBlockOffUnchanged`；应用设置页显示“未启用” `swift:settingsLaunchControlOff`）。卸载第 2 步写“这次安装没有打开启动管控，不需要解除”（`go:internal/daemon#TestUninstallWithoutLaunchControl`）。
@@ -105,9 +105,9 @@
 | R18 | 有别的代理软件时解析锁失效 | **待真机** | `scripts/m6/resolver` 里有 Clash 时多看一步 |
 | R19 | 纯 Go 镜像构建是否够用 | **有结论：够用**（M4-1，会话里构建镜像并起虚拟机） | 发版物料存档了 24 个 Alpine 软件包和 4 个上游文件，SHA-256 核对一致（M6-8c） |
 | R20 | 引擎在出口不可用时退回直连 | **有结论，已修复**（M1-6c-2：会话里用开发脚本在这台 Mac 上起真实虚拟机复现了 mihomo 的 UDP 隐式直连并修复；出站收紧到路线第一跳兜底）；**用户的真机脚本尚未执行** | M2、M4 的真机脚本里经出口发 UDP 再核对；每次升级引擎版本、新增出口类型时重跑 |
-| R21 | 托管设置的代理变量能否盖过启动环境 | **暂不测（用户 2026-11-27 决定）** | 只能通过写入真实的托管设置来验证，写入期间这台 Mac 上所有 Claude Code 都改连本机代理端口，会影响平时的用法，所以推后；收尾时由用户决定补测还是定为不测。补测用 `script:scripts/m6/layer4/run.sh#T1a` |
-| R22 | 代理端口不通或 403 时 Claude Code 是否回退直连 | **暂不测（用户 2026-11-27 决定）** | 同 R21。补测用 `script:scripts/m6/layer4/run.sh#T2b` |
-| R23 | 回环连接能否按本地端口找到对端进程 | **待真机** | 端到端 `script:scripts/m6/e2e/run.sh#CC1`（启用后用 curl 经本机代理端口，不需要托管设置；2026-11-27 从第四层挪来） |
+| R21 | 托管设置的代理变量能否盖过启动环境 | **暂不测（用户 2026-11-27 决定）** | v0.68 起第四道默认关：关着时这一条不影响任何人，只有打开了第四道的人才受它影响。只能通过写入真实的托管设置来验证，写入期间这台 Mac 上所有 Claude Code 都改连本机代理端口，会影响平时的用法，所以推后；收尾时由用户决定补测还是定为不测。补测用 `script:scripts/m6/layer4/run.sh#T1a` |
+| R22 | 代理端口不通或 403 时 Claude Code 是否回退直连 | **暂不测（用户 2026-11-27 决定）** | 同 R21（默认关着时不影响任何人，打开的人才受它影响）。补测用 `script:scripts/m6/layer4/run.sh#T2b` |
+| R23 | 回环连接能否按本地端口找到对端进程 | **待真机** | 端到端 `script:scripts/m6/e2e/run.sh#CC1`（启用后先打开第四道（开发安装只监听、不写托管设置），用 curl 经本机代理端口，做完关掉；2026-11-27 从第四层挪来） |
 
 另外两项待真机：装上即启用 pf 对这台 Mac 上别的用 pf 的软件有没有影响（只取一个引用、只写自己的锚点，按设计没有影响；端到端的快照对照确认）；回国拦截的定向清理连接状态（`script:scripts/m6/e2e/run.sh#K1`）。
 
@@ -135,7 +135,7 @@
 | P7 | Sparkle 更新；引擎的联网下载；**引擎的安装与回滚**（M6-6b） | 自动更新：没有付费账号；引擎的安装与回滚、联网下载：**不因为账号**，没有可信的更新通道（M6-6b 已定这一版不做） | 重新构建镜像并重新执行开发安装；引擎只随镜像内置 |
 | P8 | 系统授权（M5-3） | **不因为账号，仍然要做**：等 E1、E2 的结果 | 终端退路 |
 
-**替代做法**（m6-plan 第 2 节 S1–S7）：开发安装代替 DMG 和 SMAppService（S1）；只有第一、三、四、五道（S2）；SHA-256 清单（S3）；对端 uid 三级权限（S4、S5）；手动重装代替自动更新（S6）；不分发、自行构建（S7）。**用户决定不购买付费开发者账号，第 1 节完成标准里第 1、5 两条以替代做法为最终状态**，第 3 条同样以替代做法为最终状态（没有第二道）。
+**替代做法**（m6-plan 第 2 节 S1–S7）：开发安装代替 DMG 和 SMAppService（S1）；只有第一、三、四、五道（S2；第四道 v0.68 起可选、默认关）；SHA-256 清单（S3）；对端 uid 三级权限（S4、S5）；手动重装代替自动更新（S6）；不分发、自行构建（S7）。**用户决定不购买付费开发者账号，第 1 节完成标准里第 1、5 两条以替代做法为最终状态**，第 3 条同样以替代做法为最终状态（没有第二道）。
 
 **设计里写了、这一版没有或换了做法的功能**（2026-11-27 对照设计第 4、5、7、8、9、10、11 节逐节核对，并略读第 1、2、3、6、12 节、m5 走查清单的“与原型不同”、m6-plan 第 1、2、8、10 节；每一项都在代码里查过。P1–P8 不重复列）：
 

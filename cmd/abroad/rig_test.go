@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"claude-abroad/internal/claudecfg"
 	"context"
 	"encoding/json"
 	"net"
@@ -39,7 +40,8 @@ type rig struct {
 	pr   *fakeProber
 	sub  []byte // 订阅地址抓到的内容
 	mu   sync.Mutex
-	urls []string // 抓过的订阅地址
+	urls []string            // 抓过的订阅地址
+	cs   *claudecfg.Settings // rigOpt.cproxy 时的托管设置（临时目录）
 	// trace 在命令行每个请求发出前被调用（补齐一：核对规则提交带 If-Match、在读和写之间插入别处的改动）。
 	trace func(method, path string, h http.Header)
 }
@@ -49,6 +51,7 @@ type rigOpt struct {
 	claude bool // 进程表里有一个 Claude
 	reject bool // abroadd 认为对端是“其他用户”（连接被断开）
 	prep   bool // 打开首次准备（M6-11b：回国拦截随之打开）
+	cproxy bool // 打开了启动管控时的第四道（托管设置在临时目录、端口由系统分配；开关默认关，v0.68）
 }
 
 func newRig(t *testing.T, o rigOpt) *rig {
@@ -83,6 +86,10 @@ func newRig(t *testing.T, o rigOpt) *rig {
 			return r.sub, nil
 		}
 	}
+	if o.cproxy {
+		r.cs = &claudecfg.Settings{Dir: filepath.Join(short, "ClaudeCode", "managed-settings.d"), RecordDir: r.dir}
+		sys.ClaudeSettings, sys.LaunchControl = r.cs, true
+	}
 	opts := daemon.Options{StateDir: r.dir, Sys: sys, SuperviseInterval: time.Hour, LockTimeout: 300 * time.Millisecond, LockRetry: 20 * time.Millisecond,
 		PeerUID: func(*net.UnixConn) (int, error) {
 			if o.reject {
@@ -91,6 +98,9 @@ func newRig(t *testing.T, o rigOpt) *rig {
 			return int(r.peer.Load()), nil
 		},
 		ConsoleUID: func() (int, error) { return consoleUID, nil },
+	}
+	if o.cproxy {
+		opts.ClaudeProxyAddr = "127.0.0.1:0"
 	}
 	d, err := daemon.Start(context.Background(), opts)
 	if err != nil {

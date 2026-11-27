@@ -34,7 +34,7 @@ func TestNoOtherSignals(t *testing.T) {
 		rel, _ := filepath.Rel(root, p)
 		if d.IsDir() {
 			switch d.Name() {
-			case "third_party", "out", ".git", "testdata", "node_modules":
+			case "third_party", "out", ".git", ".claude", "testdata", "node_modules":
 				return filepath.SkipDir
 			}
 			return nil

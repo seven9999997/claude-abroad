@@ -13,6 +13,8 @@
 ^rm -f /Library/Application Support/claude-abroad/fake-claude/claude-fake$
 ^launchctl bootstrap system /Library/LaunchDaemons/com\.claude-abroad\.dev\.abroadd\.plist$
 ^/Library/Application Support/claude-abroad/bin/abroad-rescue$
+# v0.68：第四道的开关（CC1 之前打开、之后关掉；开发安装只管测试目标，打开只监听、不写托管设置）
+^/Library/Application Support/claude-abroad/bin/abroad --yes claude-proxy (on|off)$
 # 补齐三：“允许局域网”的关和开（只在设了 M6E_LAN_PROBE 时）
 ^/Library/Application Support/claude-abroad/bin/abroad lan (off|on)$
 # M6-11b：只清目的地在测试段里的连接状态（经 pfcheck.sh；测试段是文档保留地址，没有真实连接）。

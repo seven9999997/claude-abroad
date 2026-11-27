@@ -241,3 +241,25 @@ func TestRemoveCleansCreatedDir(t *testing.T) {
 		t.Fatal("目录里还有别人的文件时应留下")
 	}
 }
+
+// v0.68：Present 只看我们这个名字的文件在不在（关掉时被改过而留下的、上一版写下的）。
+func TestPresent(t *testing.T) {
+	s := newSettings(t)
+	if s.Present() {
+		t.Fatal("还没写时不应在")
+	}
+	if _, err := s.Write(); err != nil {
+		t.Fatal(err)
+	}
+	if !s.Present() {
+		t.Fatal("写入后应在")
+	}
+	_ = os.WriteFile(s.path(), []byte("{}\n"), 0o644) // 被改过
+	if left, err := s.Remove(); err != nil || !left || !s.Present() {
+		t.Fatalf("被改过的不删，应仍在：%v %v", left, err)
+	}
+	_ = os.Remove(s.path())
+	if s.Present() {
+		t.Fatal("删掉后不应在")
+	}
+}

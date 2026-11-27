@@ -267,6 +267,13 @@ func (s *Settings) Remove() (left bool, err error) {
 	return left, nil
 }
 
+// Present 报告分片目录里有没有我们这个名字的文件（不管内容；只读）。第四道关着时用来提示“那份文件还在”：
+// 关掉时被改过而没有删的、上一版首次准备写下的。
+func (s *Settings) Present() bool {
+	_, err := os.Lstat(s.path())
+	return err == nil
+}
+
 // Status 是托管设置的状态（状态接口用；不含路径）。
 type Status struct {
 	Written   bool       `json:"written"`             // 记录里写入过

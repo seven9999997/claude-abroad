@@ -12,7 +12,8 @@
 #   scripts/m6/e2e/run.sh --check-only          # 前提检查（只读）
 #   DRY_RUN=1 scripts/m6/e2e/run.sh [--after-reboot]   # 空跑
 #
-# 环境变量：M6E_NODES（主代理节点的 Clash YAML，必填）、M6E_M5_PASSED=1（M5 第二级走查已通过，必填）、
+# 环境变量：M6E_NODES（主代理节点的 Clash YAML，必填）、M6E_M5_PASSED=1（M5 第二级走查已通过；没设只提醒）、
+#   M6E_R1R2M2_DONE=1（R1、R2、M2 已经做过；没设时打印“第一次启用没有自动恢复”的警告和恢复办法，不拒绝）、
 #   M6E_DEADMAN_SECS（死人开关，默认 3600 秒）、M6E_YES=1（跳过开始前的按键确认）。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -148,7 +149,12 @@ precheck() {
   conf=$(netstat -rn -f inet 2>/dev/null | awk '$4 ~ /^(utun|ipsec|ppp|tun|tap|wg)[0-9]+$/ && $1 == "default" { print $4 }' | sort -u | tr '\n' ' ')
   [ -n "${conf}" ] && reasons+=("别的代理软件的 TUN 或 VPN 开着（${conf% }）：请先关掉")
   m6e_system_proxy_on && reasons+=("系统代理开着：请先全部关掉")
-  [ "${M6E_M5_PASSED:-0}" = 1 ] || reasons+=("没有确认 M5 的第二级走查已经通过：通过后设 M6E_M5_PASSED=1")
+  # 用户 2026-11-27：R1、R2、M2（以及 M5 第二级）暂不测——只提醒、不拒绝。
+  if [ "${M6E_R1R2M2_DONE:-0}" != 1 ]; then
+    m6e_log "提醒：R1、R2、M2 还没有做（用户 2026-11-27 决定暂不测）。"
+    m6e_log "警告：第一次启用没有自动恢复。启用后如果断网回不来，用下面任一办法恢复：① 应用里“一键回国”；② sudo abroad restore（命令行在 /Library/Application Support/claude-abroad/bin/abroad）；③ sudo abroad-rescue（后台服务不在或状态文件损坏时，先按 docs/emergency.md 停掉后台服务）。"
+  fi
+  [ "${M6E_M5_PASSED:-0}" = 1 ] || m6e_log "提醒：没有确认 M5 的第二级走查已经通过（用户 2026-11-27 决定暂不测，不再拒绝；通过后可设 M6E_M5_PASSED=1）"
   [ -n "${M6E_NODES:-}" ] && [ -f "${M6E_NODES:-/nonexistent}" ] || reasons+=("没有主代理：请设置 M6E_NODES（Clash YAML，在应用里用“本地配置文件”添加）")
   [ -e "${M6E_STATE}/phase" ] && reasons+=("上一次运行还没结束（${M6E_STATE}）：重启后的第二段用 --after-reboot；放弃的话执行 sudo scripts/m6/e2e/restore.sh")
   scripts/m6/install/install.sh --check-only >/dev/null 2>"${OUT}/m6e-install-check.txt" || reasons+=("开发安装的前提不满足：$(tr '\n' ' ' <"${OUT}/m6e-install-check.txt")")
@@ -189,9 +195,13 @@ if [ "${PHASE}" = 1 ]; then
   checkpoint P1 "在安装引导里添加来源（本地配置文件选 M6E_NODES 那份）→ 选节点 → 应用主代理（按提示在终端执行 sudo abroad …）→ 完成" c_mainproxy "从引导里配好主代理"
   checkpoint P2 "点“启用”（地区会变时确认框等 3 秒再确认）。这一步会接管本机网络" c_enabled "启用"
   # R23（architect 2026-11-27：第四层实测暂不测，R23 不需要托管设置，挪到这里）：已启用时以你自己的身份用 curl 经本机代理端口
-  # 发一次请求，核对状态里“最近的连接”认出的程序是 curl 这一类（不是 unknown、不按 Claude 处理）。不写任何托管设置：
-  # 开发安装本来就打开了管控，端口在监听；只有显式带代理参数的这一个 curl 经过它。判断用的字段另存一份，不含目的域名。
+  # 发一次请求，核对状态里“最近的连接”认出的程序是 curl 这一类（不是 unknown、不按 Claude 处理）。v0.68 起第四道是开关、
+  # 默认关：这一步之前先打开、做完关掉（开发安装只管测试目标，打开只监听、不写托管设置）；只有显式带代理参数的这一个 curl
+  # 经过它。判断用的字段另存一份，不含目的域名。
   CC_PORT=47821
+  CLI="/Library/Application Support/claude-abroad/bin/abroad"
+  step "打开第四道（CC1 要本机代理端口在听；测试模式：只监听，不写托管设置）"
+  m6e_do "${CLI}" --yes claude-proxy on || m6e_log "打开第四道失败：CC1 会不通过（看 abroad claude-proxy show）"
   step "核对 CC1：本机代理端口认出对端进程（R23）"
   if [ "$DRY_RUN" = 1 ]; then printf 'PROBE: sudo -u <你> /usr/bin/curl -x http://127.0.0.1:%s https://www.gstatic.com/generate_204\n' "${CC_PORT}" >&3; res CC1 跳过 "空跑"; else
     cst=$(get /v1/status); ca0=$(jget "$cst" claude_code.accepted)
@@ -206,6 +216,8 @@ if [ "${PHASE}" = 1 ]; then
       res CC1 不通过 "认不出对端进程或没有新连接（识别不出时一律按 Claude 处理，设计 R23 的备选）：${cfields}"
     fi
   fi
+  step "关闭第四道（CC1 做完；回到默认的关）"
+  m6e_do "${CLI}" --yes claude-proxy off || m6e_log "关闭第四道失败：请手动执行 sudo \"${CLI}\" claude-proxy off"
   # 补齐三：“允许局域网”开关（已启用时）。M6E_LAN_PROBE=<局域网里一台设备的 地址:端口>（如打印机 192.168.1.20:631）；没给时跳过。
   step "允许局域网：关掉后连局域网设备失败，打开后恢复"
   if [ -z "${M6E_LAN_PROBE:-}" ]; then res LAN1 跳过 "没有设 M6E_LAN_PROBE"; elif [ "$DRY_RUN" = 1 ]; then

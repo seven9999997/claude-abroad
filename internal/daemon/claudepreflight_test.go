@@ -58,6 +58,7 @@ func TestClaudeLayerBlocksEnable(t *testing.T) {
 	o := e.opts()
 	o.ClaudeProxyAddr = occ.Addr().String()
 	o.ClaudeProxyRetry = 20 * time.Millisecond
+	presetClaudeProxyOn(t, o.StateDir) // 第四道打开着（v0.68：默认关）
 	d := e.start(o)
 	code, b := callOp(t, d, "/v1/enable")
 	if code != 422 || !strings.Contains(string(b), "本机代理端口被别的程序占着") {

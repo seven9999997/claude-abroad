@@ -13,7 +13,7 @@
 正常途径不行（命令行说连不上后台服务，或说“状态文件已损坏”）时，用应急程序 `abroad-rescue`。它以 root 按固定顺序做：
 先列出要结束的 Claude 进程、你确认后结束它们（结束不了就停下，不碰网络）→ 把状态写成“已回国” → 清空 Claude 出国自己的
 断网规则 → 删 DNS 设置和接管路由 → 按记录恢复 IPv6、时区和语言。每一步都打印出来；中途停下时处理后再执行一次即可。
-它不删 Claude 域名解析锁和 Claude Code 的托管设置（那是“回国后 Claude 连不上”的管控，只有卸载才解除）。打开了启动管控的
+它不删 Claude 域名解析锁和 Claude Code 的托管设置（那是“回国后 Claude 连不上”的管控，只有卸载才解除；托管设置只在第四道打开时才有，v0.68 起默认关，关掉用 `sudo abroad claude-proxy off`）。打开了启动管控的
 安装（首次准备做过、没卸载）里，第 4 步不是清空，而是换成“回国拦截”（只拦 Anthropic 的地址段，也是管控的一部分）。
 
 1. 后台服务还在运行（哪怕卡住）时应急程序会拒绝，先停掉它（开发安装的服务名；会结束它管着的虚拟机，不会结束 Claude）：
@@ -97,7 +97,7 @@ sudo networksetup -setv6automatic "Wi-Fi"
   sudo rm -f /etc/resolver/claude.ai /etc/resolver/claude.com /etc/resolver/anthropic.com /etc/resolver/claudeusercontent.com /etc/resolver/claudemcpcontent.com
   ```
 
-- Claude Code 的托管设置：`/Library/Application Support/ClaudeCode/managed-settings.d/claude-abroad.json`（内容是指向 `http://127.0.0.1:47821` 的代理变量）：
+- Claude Code 的托管设置（只在第四道打开过时才有；v0.68 起默认关）：`/Library/Application Support/ClaudeCode/managed-settings.d/claude-abroad.json`（内容是指向 `http://127.0.0.1:47821` 的代理变量）：
 
   ```sh
   cat "/Library/Application Support/ClaudeCode/managed-settings.d/claude-abroad.json"

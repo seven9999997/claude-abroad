@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -40,8 +41,12 @@ const (
 
 // ClaudeProxyStatus 是第四层的状态（状态接口用；不含路径和地址）。
 type ClaudeProxyStatus struct {
-	Settings  *claudecfg.Status `json:"settings,omitempty"` // 托管设置的自检（接了才有）
-	Listening bool              `json:"listening"`          // 本机代理端口在听
+	// v0.68：第四道的开关（默认关）。关着时只有 enabled、leftover，不报告托管设置和端口（界面写“未开启”，不是“未生效”）。
+	Enabled   bool              `json:"enabled"`
+	TestMode  bool              `json:"test_mode,omitempty"` // 开发构建只管测试目标：打开只监听，不写托管设置
+	Leftover  bool              `json:"leftover,omitempty"`  // 关着，但托管设置目录里还有我们这个名字的文件（要用户自己处理）
+	Settings  *claudecfg.Status `json:"settings,omitempty"`  // 托管设置的自检（接了才有）
+	Listening bool              `json:"listening"`           // 本机代理端口在听
 	Port      int               `json:"port,omitempty"`
 	ListenErr string            `json:"listen_error,omitempty"` // 没在听的原因（端口被占用等）
 	Effective bool              `json:"effective"`              // 托管设置生效且端口在听
@@ -88,19 +93,19 @@ type claudeProxy struct {
 	cancel   context.CancelFunc
 }
 
-// startClaudeProxy 在 Options.ClaudeProxyAddr 上监听（必须是回环地址）。监听失败（端口被占用）时 abroadd 照常启动，
-// 状态里标出“第四层未生效”，冲突检查里按“必须处理”列出。
+// startClaudeProxy 在启动时、第四道的开关打开着时在 Options.ClaudeProxyAddr 上监听（必须是回环地址）。监听失败（端口
+// 被占用）时 abroadd 照常启动，状态里标出“第四层未生效”，冲突检查里按“必须处理”列出，并按间隔重试。
+// 开关关着（默认）、已卸载时不监听。
 func (d *Daemon) startClaudeProxy() {
 	addr := d.opts.ClaudeProxyAddr
-	if addr == "" {
+	if addr == "" || !d.cpOn.Load() || d.uninstalled() {
 		return
 	}
-	cp := &claudeProxy{d: d, addr: addr, retry: d.opts.ClaudeProxyRetry, handshake: d.opts.ClaudeProxyHandshake,
-		conns: map[net.Conn]struct{}{}, listen: listenLoopbackTCP}
-	cp.ctx, cp.cancel = context.WithCancel(context.Background())
+	cp := d.newClaudeProxy()
+	d.cpMu.Lock()
 	d.cproxy = cp
-	ap, err := netip.ParseAddrPort(addr)
-	if err != nil || !ap.Addr().IsLoopback() {
+	d.cpMu.Unlock()
+	if !validCPAddr(addr) {
 		cp.err = "本机代理端口只能监听回环地址"
 		d.events.Add("claude_proxy", "listen_failed", cp.err)
 		return // 配置错误：不重试
@@ -110,6 +115,36 @@ func (d *Daemon) startClaudeProxy() {
 		cp.wg.Add(1)
 		go cp.retryLoop()
 	}
+}
+
+func (d *Daemon) newClaudeProxy() *claudeProxy {
+	listen := d.cpListen
+	if listen == nil {
+		listen = listenLoopbackTCP
+	}
+	cp := &claudeProxy{d: d, addr: d.opts.ClaudeProxyAddr, retry: d.opts.ClaudeProxyRetry, handshake: d.opts.ClaudeProxyHandshake,
+		conns: map[net.Conn]struct{}{}, listen: listen}
+	cp.ctx, cp.cancel = context.WithCancel(context.Background())
+	return cp
+}
+
+func validCPAddr(addr string) bool {
+	ap, err := netip.ParseAddrPort(addr)
+	return err == nil && ap.Addr().IsLoopback()
+}
+
+// listenClaudeProxyOnce 是打开第四道时的监听：只试一次，监听不上就返回错误（调用方回到关的状态），不进重试。
+func (d *Daemon) listenClaudeProxyOnce() (*claudeProxy, error) {
+	if !validCPAddr(d.opts.ClaudeProxyAddr) {
+		return nil, errors.New("本机代理端口只能监听回环地址")
+	}
+	cp := d.newClaudeProxy()
+	if !cp.tryListen() {
+		err := errors.New(cp.err)
+		cp.stop()
+		return nil, err
+	}
+	return cp, nil
 }
 
 // listenLoopbackTCP 是唯一的监听：地址在 startClaudeProxy 里已校验是回环（源码检查要求本文件有 IsLoopback 校验）。
@@ -405,35 +440,39 @@ func (cp *claudeProxy) recentCopy() []ClaudeProxyConn {
 	return append([]ClaudeProxyConn{}, cp.recent...)
 }
 
-// claudeCodeStatus 是第四层的状态：托管设置的自检加本机代理端口。
+// claudeCodeStatus 是第四层的状态：开关、托管设置的自检加本机代理端口。没有开关的安装（没打开启动管控）为 nil。
 func (d *Daemon) claudeCodeStatus() *ClaudeProxyStatus {
-	s := d.opts.Sys.ClaudeSettings
-	cp := d.cproxy
-	if s == nil && cp == nil {
+	if !d.cpAvailable() {
 		return nil
 	}
-	st := &ClaudeProxyStatus{}
-	if s != nil {
+	s := d.opts.Sys.ClaudeSettings
+	st := &ClaudeProxyStatus{Enabled: d.cpOn.Load(), TestMode: d.cpTestMode(), Recent: []ClaudeProxyConn{}}
+	if !st.Enabled { // 关着：不报告托管设置的自检和端口（“未开启”，和“未生效”区分开），只提示留下的文件
+		st.Leftover = s != nil && s.Present()
+		return st
+	}
+	if s != nil && !st.TestMode {
 		cs := s.Check()
 		st.Settings = &cs
 	}
-	if cp != nil {
+	if cp := d.curCP(); cp != nil {
 		st.Listening, st.Port, st.ListenErr = cp.listening()
 		st.Accepted, st.Refused, st.Recent = cp.accepted.Load(), cp.refused.Load(), cp.recentCopy()
-	}
-	if st.Recent == nil {
-		st.Recent = []ClaudeProxyConn{}
+		if st.Recent == nil {
+			st.Recent = []ClaudeProxyConn{}
+		}
 	}
 	st.Effective = st.Settings != nil && st.Settings.Effective && st.Listening
 	return st
 }
 
-// claudeProxyDown 报告本机代理端口没在听（冲突检查的“必须处理”项用）。没配置端口时为 false。
+// claudeProxyDown 报告本机代理端口没在听（冲突检查的“必须处理”项用）。第四道关着、没配置端口时为 false。
 func (d *Daemon) claudeProxyDown() bool {
-	if d.cproxy == nil {
+	cp := d.curCP()
+	if cp == nil || !d.cpOn.Load() {
 		return false
 	}
-	ok, _, _ := d.cproxy.listening()
+	ok, _, _ := cp.listening()
 	return !ok
 }
 

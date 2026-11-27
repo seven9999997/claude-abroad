@@ -219,16 +219,40 @@ const (
 	CoverageBySignature CoverageStatus = "by_signature"
 )
 
-// coverage 是覆盖范围的唯一来源（文字只写在这里）。
-var coverage = []CoverageRow{
-	{KindDesktop, "Claude 桌面版", CoverageCovered, "按 Bundle ID 和运行中进程的签名确认，可以自动结束"},
-	{KindNative, "Claude Code（原生安装，含 IDE 插件带的）", CoverageCovered, "按运行中进程的签名确认，可以自动结束"},
-	{KindNPM, "Claude Code（npm 安装，含 IDE 插件用 node 启动的）", CoverageNotCovered, "签名确认不了，第三层不覆盖，由第一层（解析锁）和第四层（本机代理）兜着"},
-	{KindHomebrew, "Claude Code（Homebrew 安装）", CoverageBySignature, "运行中进程的签名是 Anthropic 的可以自动结束；否则不覆盖，由第一层（解析锁）和第四层（本机代理）兜着"},
+// coverage 是覆盖范围的唯一来源（文字只写在这里）。fallback 为真的行（第三层不覆盖或不一定覆盖）后面接上
+// FallbackText 按第四道的开关生成的兜底说明。
+var coverage = []struct {
+	CoverageRow
+	fallback bool
+}{
+	{CoverageRow{KindDesktop, "Claude 桌面版", CoverageCovered, "按 Bundle ID 和运行中进程的签名确认，可以自动结束"}, false},
+	{CoverageRow{KindNative, "Claude Code（原生安装，含 IDE 插件带的）", CoverageCovered, "按运行中进程的签名确认，可以自动结束"}, false},
+	{CoverageRow{KindNPM, "Claude Code（npm 安装，含 IDE 插件用 node 启动的）", CoverageNotCovered, "签名确认不了，第三层不覆盖"}, true},
+	{CoverageRow{KindHomebrew, "Claude Code（Homebrew 安装）", CoverageBySignature, "运行中进程的签名是 Anthropic 的可以自动结束；否则不覆盖"}, true},
 }
 
-// Coverage 返回每种安装方式第三层覆盖不覆盖、原因（给 M6-4b 的状态接口和界面用）。
-func Coverage() []CoverageRow { return append([]CoverageRow(nil), coverage...) }
+// FallbackText 是第三层没覆盖时由哪几层兜着（v0.68：第四道可选、默认关）。文字只在这里生成：
+// 第四道打开时写第一层和第四层；关着时只写第一层和第五层，并注明第四层未开启。
+func FallbackText(layer4 bool) string {
+	if layer4 {
+		return "由第一层（解析锁）和第四层（本机代理）兜着"
+	}
+	return "由第一层（解析锁）和第五层（回国拦截）兜着（第四层未开启）"
+}
+
+// Coverage 返回每种安装方式第三层覆盖不覆盖、原因（给状态接口和界面用）。layer4 是第四道现在是否打开（并且真的管着
+// 本机的 Claude Code：开发构建的测试模式不算）。
+func Coverage(layer4 bool) []CoverageRow {
+	out := make([]CoverageRow, 0, len(coverage))
+	for _, c := range coverage {
+		r := c.CoverageRow
+		if c.fallback {
+			r.Reason += "，" + FallbackText(layer4)
+		}
+		out = append(out, r)
+	}
+	return out
+}
 
 func coverageReason(k Kind) string {
 	for _, r := range coverage {

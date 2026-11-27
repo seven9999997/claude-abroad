@@ -44,7 +44,7 @@ func (e *prepEnv) restart(t *testing.T, d *Daemon, testOnly bool) *Daemon {
 	return e.start(testOnly)
 }
 
-// 第一次启动写入解析锁和托管设置、记下标记；之后重启不再写（被删掉的不自动写回，自检报告）。
+// 第一次启动写入解析锁、记下标记（v0.68 起不写托管设置）；之后重启不再写（被删掉的不自动写回，自检报告）。
 func TestPrepareFirstRun(t *testing.T) {
 	e := newPrepEnv(t)
 	d := e.start(false)
@@ -55,8 +55,9 @@ func TestPrepareFirstRun(t *testing.T) {
 	if st.ResolverLock == nil || !st.ResolverLock.Effective {
 		t.Fatalf("解析锁应生效：%+v", st.ResolverLock)
 	}
-	if st.ClaudeCode == nil || st.ClaudeCode.Settings == nil || !st.ClaudeCode.Settings.Effective {
-		t.Fatalf("托管设置应生效：%+v", st.ClaudeCode)
+	// v0.68：托管设置不再由首次准备写（第四道是开关、默认关）
+	if _, err := os.Stat(e.cs.Dir); !os.IsNotExist(err) {
+		t.Fatal("首次准备不应写托管设置")
 	}
 	if _, err := os.Stat(filepath.Join(e.dir, PreparedFile)); err != nil {
 		t.Fatal("应有 prepared 标记")
@@ -168,34 +169,25 @@ func TestPrepareResolverConflictBlocksUntilFixed(t *testing.T) {
 	post(t, d, "/v1/enable", 200)
 }
 
-// 托管设置有冲突（别的分片定义了代理变量）：同样不算完成、挡住启用；解析锁已写的留着，重试时不重复写。
-func TestPrepareSettingsConflictPartial(t *testing.T) {
+// v0.68：托管设置的冲突（别的分片定义了代理变量）不再影响首次准备——第四道默认关，首次准备不写托管设置，也不因它不算完成。
+func TestPrepareIgnoresClaudeSettingsConflict(t *testing.T) {
 	e := newPrepEnv(t)
 	_ = os.MkdirAll(e.cs.Dir, 0o755)
 	foreign := filepath.Join(e.cs.Dir, "corp.json")
 	_ = os.WriteFile(foreign, []byte(`{"env":{"HTTPS_PROXY":"http://proxy.corp.example:8080"}}`), 0o644)
 	d := e.start(false)
 	st := status(t, d)
-	if st.Prepare.Done || !strings.Contains(strings.Join(st.Prepare.Notes, ""), "corp.json 的 HTTPS_PROXY") {
-		t.Fatalf("托管设置冲突时不应算完成：%+v", st.Prepare)
+	if !st.Prepare.Done || strings.Contains(strings.Join(st.Prepare.Notes, ""), "corp.json") {
+		t.Fatalf("托管设置的冲突不应影响首次准备：%+v", st.Prepare)
 	}
 	if !st.ResolverLock.Effective {
-		t.Fatal("解析锁已写的应留着")
+		t.Fatal("解析锁应写入")
 	}
-	lockFile := filepath.Join(e.lock.Dir, "claude.ai")
-	fi1, _ := os.Stat(lockFile)
-	if code, b := callOp(t, d, "/v1/enable"); code != 422 || !strings.Contains(string(b), "corp.json") {
-		t.Fatalf("应挡住启用：%d %s", code, b)
+	if _, err := os.Lstat(filepath.Join(e.cs.Dir, claudecfg.FileName)); err == nil {
+		t.Fatal("首次准备不应写托管设置")
 	}
-	_ = os.Remove(foreign)
 	time.Sleep(20 * time.Millisecond)
-	post(t, d, "/v1/enable", 200) // 启用前的检查里再试一次，完成后放行
-	if st := status(t, d); !st.Prepare.Done || st.ClaudeCode == nil || st.ClaudeCode.Settings == nil || !st.ClaudeCode.Settings.Effective {
-		t.Fatalf("重试后应完成：%+v", st.Prepare)
-	}
-	if fi2, _ := os.Stat(lockFile); !fi2.ModTime().Equal(fi1.ModTime()) {
-		t.Fatal("已写的解析锁重试时不应重写")
-	}
+	post(t, d, "/v1/enable", 200)
 }
 
 // 完成之后才出现的冲突（别人后来写了文件）：完成标记不回退，行为和以前一样（自检报告）。

@@ -93,8 +93,14 @@ type Daemon struct {
 	vmm    *vmmgr.Manager
 	vmStop func()
 	vmDone chan struct{}
-	// M6-3b：第四层的本机代理端口（Options.ClaudeProxyAddr 非空时）。
+	// M6-3b：第四层的本机代理端口（Options.ClaudeProxyAddr 非空、第四道打开时；cpMu 保护）。
 	cproxy *claudeProxy
+	cpMu   sync.Mutex
+	// v0.68：第四道的开关（默认关）；cpSwitchMu 让打开、关闭、卸载里的清理串行。
+	cpOn        atomic.Bool
+	cpSwitchMu  sync.Mutex
+	writeSwitch func(path string, b []byte) error       // 测试：替换记开关（注入失败）
+	cpListen    func(addr string) (net.Listener, error) // 测试：替换监听（注入失败）
 	// M6-4b：启动管控的第三层（Sys.LaunchGuard 非空时）。
 	// M6-7：启动时完整性校验的结果（接了校验时）。
 	integrity    *integrity.Result
@@ -335,11 +341,13 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 		}
 	}()
 
-	d.startClaudeProxy()   // 第四层的本机代理端口（M6-3b；没配置时什么都不做）
+	d.loadClaudeSwitch()   // 第四道的开关（v0.68；默认关，没有开关的安装什么都不做）
+	d.startClaudeProxy()   // 第四层的本机代理端口（M6-3b；开关关着、没配置时什么都不做）
 	d.startClaudeDomains() // 记录 Claude 访问的域名（M6-12；有数据面时）
 	d.startLaunchGuard()   // 启动管控的第三层（M6-4b；没配置时什么都不做）
-	if chk := preflightChecker(s.Preflight); chk != nil && d.cproxy != nil {
+	if chk := preflightChecker(s.Preflight); chk != nil && d.cpAvailable() {
 		chk.ClaudeProxyDown = d.claudeProxyDown // 端口被占用：冲突检查的“必须处理”项
+		chk.ClaudeLayerOn = d.cpOn.Load         // 第四道关着（默认）时和它有关的两项都不出现（v0.68）
 	}
 	if chk := preflightChecker(s.Preflight); chk != nil && s.FirstRun {
 		chk.PrepareProblem = d.prepareProblem // 首次准备没完成：阻止启用，并借这次检查再试一次（M6-8a 补审返工）
@@ -408,7 +416,7 @@ func (d *Daemon) stopInternals(closeGate bool) {
 	}
 	d.stopLaunchGuard()   // 启动管控的第三层
 	d.stopClaudeDomains() // 记录 Claude 访问的域名：最后落一次盘
-	d.cproxy.stop()       // 第四层的本机代理端口（没配置时为 nil，stop 什么都不做）
+	d.stopCP()            // 第四层的本机代理端口（没在听时什么都不做）
 	if d.vmStop != nil {  // 由 abroadd 管理的虚拟机：关掉自己拉起的（先请它退出，超时强制结束）
 		d.vmStop()
 		<-d.vmDone

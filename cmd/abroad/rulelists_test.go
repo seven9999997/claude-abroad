@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"claude-abroad/internal/apiclient"
+	"claude-abroad/internal/claudecfg"
+	"claude-abroad/internal/daemon"
 	"claude-abroad/internal/rules"
 )
 
@@ -346,5 +350,68 @@ func TestCLIHistoryAndKinds(t *testing.T) {
 	ia, is := strings.Index(x.out, "A  应用"), strings.Index(x.out, "系统进程：")
 	if ia < 0 || is < ia || !strings.Contains(x.out, "apsd  系统进程  2 个连接") || !strings.Contains(x.out, "推送服务：所有应用的推送通知都经它（改它的规则会同时影响那些应用）") {
 		t.Fatalf("apps：%+v", x)
+	}
+}
+
+// v0.68 验收 i：第四道的开关——查看、打开、关闭；打开时显示后果并要求确认，取消（或不是终端又没有 --yes）则不发请求；
+// 不带 sudo 时本地拒绝（打开和关闭都是）；没打开管控时显示“未启用”。
+func TestCLIClaudeProxy(t *testing.T) {
+	r := newRig(t, rigOpt{cproxy: true})
+	r.asOwner()
+	if x := r.run("claude-proxy", "show"); x.code != ExitOK || !strings.Contains(x.out, "未开启") || !strings.Contains(x.out, "sudo abroad claude-proxy on") {
+		t.Fatalf("默认关：%+v", x)
+	}
+	// 不带 sudo：本地拒绝，不发请求
+	r.asConsole()
+	for _, w := range []string{"on", "off"} {
+		if x := r.runWith(in{tty: true, stdin: "yes\n"}, "claude-proxy", w); x.code != ExitDenied || x.reqs != 0 || !strings.Contains(x.err, "敏感操作") {
+			t.Fatalf("%s 不带 sudo 应本地拒绝：%+v", w, x)
+		}
+	}
+	r.asOwner()
+	// 取消：打印后果，不发请求
+	x := r.runWith(in{tty: true, stdin: "no\n"}, "claude-proxy", "on")
+	if x.code != ExitConfirm || x.reqs != 0 || !strings.Contains(x.err, "没有确认") {
+		t.Fatalf("取消不应发请求：%+v", x)
+	}
+	for _, c := range daemon.ClaudeProxyConsequences {
+		if !strings.Contains(x.out, c) {
+			t.Fatalf("应打印后果“%s”：%s", c, x.out)
+		}
+	}
+	for _, must := range []string{"所有 Claude Code", "已启用", "别的代理线路", "关掉开关", "卸载"} {
+		if !strings.Contains(x.out, must) {
+			t.Fatalf("后果里应有“%s”：%s", must, x.out)
+		}
+	}
+	if x := r.run("claude-proxy", "on"); x.code != ExitConfirm || x.reqs != 0 {
+		t.Fatalf("不是终端又没有 --yes 时不应发请求：%+v", x)
+	}
+	// 确认后打开
+	if x := r.runWith(in{tty: true, stdin: "yes\n"}, "claude-proxy", "on"); x.code != ExitOK || !strings.Contains(x.out, "已打开") {
+		t.Fatalf("打开：%+v", x)
+	}
+	if _, err := os.Stat(filepath.Join(r.cs.Dir, claudecfg.FileName)); err != nil {
+		t.Fatal("打开后应写入分片")
+	}
+	if x := r.run("claude-proxy", "show"); !strings.Contains(x.out, "已打开") {
+		t.Fatalf("%+v", x)
+	}
+	if x := r.run("--yes", "claude-proxy", "off"); x.code != ExitOK || !strings.Contains(x.out, "未开启") {
+		t.Fatalf("关闭：%+v", x)
+	}
+	if _, err := os.Stat(filepath.Join(r.cs.Dir, claudecfg.FileName)); !os.IsNotExist(err) {
+		t.Fatal("关闭后分片应删掉")
+	}
+	// 别的托管设置定义了代理变量：打开被拒，原样显示文件和变量
+	_ = os.MkdirAll(r.cs.Dir, 0o755)
+	_ = os.WriteFile(filepath.Join(r.cs.Dir, "corp.json"), []byte(`{"env":{"HTTPS_PROXY":"http://p.example:1"}}`), 0o644)
+	if x := r.run("--yes", "claude-proxy", "on"); x.code != ExitFail || !strings.Contains(x.err, "corp.json 的 HTTPS_PROXY") {
+		t.Fatalf("冲突时应拒绝：%+v", x)
+	}
+	// 没打开管控
+	r2 := newRig(t, rigOpt{})
+	if x := r2.run("claude-proxy", "show"); x.code != ExitOK || !strings.Contains(x.out, "未启用") {
+		t.Fatalf("没打开管控：%+v", x)
 	}
 }

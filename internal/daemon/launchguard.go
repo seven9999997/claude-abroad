@@ -189,7 +189,7 @@ type LaunchGuardView struct {
 }
 
 func (d *Daemon) launchGuardView() LaunchGuardView {
-	v := LaunchGuardView{Allowed: true, Coverage: claudeproc.Coverage(), Recent: []claudeproc.GuardRecord{}}
+	v := LaunchGuardView{Allowed: true, Recent: []claudeproc.GuardRecord{}}
 	if g := d.opts.Sys.LaunchGuard; g != nil && d.gs != nil {
 		p := d.guardPolicyPeek()
 		v.Allowed, v.CoverAll = p.Allowed, p.CoverAll
@@ -207,11 +207,19 @@ func (d *Daemon) launchGuardView() LaunchGuardView {
 		lock = lk.Check().Effective
 	}
 	cc := d.claudeCodeStatus()
+	l4 := LaunchGuardLayer{Layer: 4, Name: "Claude Code 的本机代理", Effective: cc != nil && cc.Effective, Note: "只覆盖 Claude Code"}
+	switch { // v0.68：第四道可选、默认关；关着写“未开启”，和“未生效”区分开
+	case cc != nil && !cc.Enabled:
+		l4.Note = ClaudeProxyOffNote
+	case cc != nil && cc.TestMode:
+		l4.Note = ClaudeProxyTestNote
+	}
+	v.Coverage = claudeproc.Coverage(d.layer4Covers())
 	v.Layers = []LaunchGuardLayer{
 		{Layer: 1, Name: "Claude 域名解析锁", Effective: lock},
 		{Layer: 2, Name: "启动拦截（系统扩展）", Effective: false, Note: "需要付费开发者账号和 Apple 的授权，暂不提供"},
 		{Layer: 3, Name: "发现即结束", Effective: d.opts.Sys.LaunchGuard != nil},
-		{Layer: 4, Name: "Claude Code 的本机代理", Effective: cc != nil && cc.Effective, Note: "只覆盖 Claude Code"},
+		l4,
 	}
 	if !d.opts.Sys.LaunchControl { // M6-4b-1 返工：这次安装没打开启动管控，第一、三、四层是“未启用”而不是“未生效”
 		v.LaunchControl = false
@@ -228,4 +236,9 @@ func (d *Daemon) launchGuardView() LaunchGuardView {
 
 func (d *Daemon) handleLaunchGuard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, d.launchGuardView())
+}
+
+// layer4Covers 报告第四道现在是否管着本机的 Claude Code（打开、不是测试模式）：覆盖范围里的兜底说明按它生成。
+func (d *Daemon) layer4Covers() bool {
+	return d.cpAvailable() && d.cpOn.Load() && !d.cpTestMode()
 }

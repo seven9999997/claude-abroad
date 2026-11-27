@@ -713,10 +713,17 @@ public final class SettingsModel: PageModel {
         if let c = l.conflicts, !c.isEmpty { parts.append(L10n.resolverLockConflicts(c)) }
         return parts.joined(separator: "\n")
     }
-    /// 第四层的状态文字：生效、未写入、未生效（托管设置的问题或端口没在听）、有冲突；总带覆盖范围那句。
+    /// 第四层的状态文字：未开启（默认关）、测试模式、生效、未写入、未生效（托管设置的问题或端口没在听）、有冲突；
+    /// 打开着时总带覆盖范围那句。没打开启动管控时“未启用”（没有开关）。
     public var claudeCodeText: String {
         if !launchControlOn { return L10n.launchControlOff }
         guard let c = claudeCode else { return L10n.claudeCodeUnknown }
+        if !c.enabled {
+            return c.leftover == true ? L10n.claudeCodeOff + "\n" + L10n.claudeCodeLeftover : L10n.claudeCodeOff
+        }
+        if c.testMode == true {
+            return L10n.claudeCodeTestMode + (c.listening ? "" : "\n" + L10n.claudeCodePortDown)
+        }
         var parts: [String] = []
         let s = c.settings
         if s == nil || s?.written == false {
@@ -735,11 +742,23 @@ public final class SettingsModel: PageModel {
         parts.append(L10n.claudeCodeScope)
         return parts.joined(separator: "\n")
     }
-    /// 第四层是否有问题（界面标成警告色）。写入过但未生效、端口没在听、有冲突。
+    /// 第四层是否有问题（界面标成警告色）。打开着：写入过但未生效、端口没在听、有冲突；关着：只有留下的文件。
     public var claudeCodeWarn: Bool {
         guard let c = claudeCode else { return false }
+        if !c.enabled { return c.leftover == true }
+        if c.testMode == true { return !c.listening }
         let written = c.settings?.written ?? false
         return (written && !c.effective) || !c.listening || !(c.settings?.conflicts ?? []).isEmpty
+    }
+    /// 第四道的开关在这次安装里有没有（打开了启动管控、后台报告了第四层）：没有时界面不显示后果和命令。
+    public var claudeCodeSwitchShown: Bool { launchControlOn && claudeCode != nil }
+    /// 打开第四道的后果（来自文字表）。
+    public var claudeCodeConsequenceText: String {
+        L10n.claudeCodeConsequenceTitle + "\n" + L10n.claudeCodeConsequences.map { "· " + $0 }.joined(separator: "\n")
+    }
+    /// 打开、关闭各自对应的终端命令（应用里不直接切换：两个方向都要本人授权）。
+    public var claudeCodeCommands: [(label: String, command: String)] {
+        [(L10n.claudeCodeOnLabel, L10n.claudeCodeOnCommand), (L10n.claudeCodeOffLabel, L10n.claudeCodeOffCommand)]
     }
     /// Claude 访问过的域名：每个一行（域名和次数）；没有时一句“还没有记录”。
     public var claudeDomainLines: [String] {

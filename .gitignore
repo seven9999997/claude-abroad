@@ -53,3 +53,6 @@ scripts/m5/probe/swift/.build/
 # Mac 应用（SwiftPM）的构建目录
 /app/.build/
 /app/.swiftpm/
+
+# 工具的临时代码副本（git worktree）
+/.claude/worktrees/

@@ -9,7 +9,7 @@
 > 这台 Mac 上别的连接不受影响；pf 从此保持启用到卸载为止（卸载后按快照复原）。
 > 默认是开发构建：abroadd 带 `--launch-control`（打开启动管控）、`--dev-fake-claude-dir`（回国、卸载和第三层只针对
 > 安装目录下 `fake-claude` 里的测试进程，本机真实的 Claude 不受影响）和
-> `--dev-resolver-test-domain`（首次准备只锁测试域名 `lock-test.claude-abroad.invalid`，不写 Claude Code 的托管设置），
+> `--dev-resolver-test-domain`（首次准备只锁测试域名 `lock-test.claude-abroad.invalid`；第四道默认关，打开（`sudo abroad claude-proxy on`）也只监听本机代理端口、不写 Claude Code 的托管设置），
 > 本机真实的 Claude、Claude Code 不受影响。**启用**（应用里点“启用”或 `abroad up`）才会接管网络，那是 M6-9 的步骤。
 
 ## 准备（以你自己的身份，不要 sudo）

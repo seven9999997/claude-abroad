@@ -80,6 +80,8 @@ type Checker struct {
 	ClaudeSettingsConflicts func() []string
 	// ClaudeProxyDown 报告第四层的本机代理端口没在听（被占用；M6-3b）；nil 时跳过。
 	ClaudeProxyDown func() bool
+	// ClaudeLayerOn 报告第四道的开关是否打开（v0.68，默认关）；返回假时上面两项都不检查、不挡启用。nil 按打开（老行为）。
+	ClaudeLayerOn func() bool
 	// IntegrityProblem 返回程序完整性校验不通过的说明（M6-7）；nil 或返回空时跳过。
 	IntegrityProblem func() string
 	// PrepareProblem 返回首次准备没完成的说明（M6-8a 补审返工；调用时没完成会先再试一次）；nil 或返回空时跳过。
@@ -178,6 +180,9 @@ func (c *Checker) checkResolverLock() []Finding {
 // Claude Code 的流量会交给它），都是必须处理的阻断项。
 func (c *Checker) checkClaudeCode() []Finding {
 	var out []Finding
+	if c.ClaudeLayerOn != nil && !c.ClaudeLayerOn() { // 第四道关着（默认）：这两项不出现
+		return nil
+	}
 	if c.ClaudeSettingsConflicts != nil {
 		if cs := c.ClaudeSettingsConflicts(); len(cs) > 0 {
 			out = append(out, Finding{ID: "claude_settings", Severity: Block,

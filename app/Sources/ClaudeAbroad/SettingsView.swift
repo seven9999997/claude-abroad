@@ -43,7 +43,16 @@ struct SettingsView: View {
                     Text(model.resolverLockText).foregroundStyle(model.resolverLockWarn ? .orange : .primary)
                 }
                 LabeledContent(L10n.claudeCodeTitle) {
-                    Text(model.claudeCodeText).foregroundStyle(model.claudeCodeWarn ? .orange : .primary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(model.claudeCodeText).foregroundStyle(model.claudeCodeWarn ? .orange : .primary)
+                        if model.claudeCodeSwitchShown { // v0.68：第四道是开关、默认关；两个方向都要本人授权，给出终端命令
+                            Text(model.claudeCodeConsequenceText).font(.caption)
+                            ForEach(model.claudeCodeCommands, id: \.command) { c in
+                                Text(c.label).font(.caption)
+                                Text(c.command).font(.caption.monospaced()).textSelection(.enabled)
+                            }
+                        }
+                    }
                 }
                 if let t = model.returnBlockText {
                     LabeledContent(L10n.returnBlockTitle) { Text(t) }

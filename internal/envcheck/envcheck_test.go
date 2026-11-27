@@ -467,7 +467,7 @@ func TestClaudeLiteralsOnlyInAllowedFiles(t *testing.T) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case "third_party", "out", ".git", "testdata", "node_modules", "guest":
+			case "third_party", "out", ".git", ".claude", "testdata", "node_modules", "guest":
 				return filepath.SkipDir
 			}
 			return nil

@@ -263,7 +263,17 @@ public struct DaemonClaudeProxyConn: Codable, Sendable {
     }
 }
 
+public struct DaemonClaudeProxySetting: Codable, Sendable {
+    public var enabled: Bool
+    enum CodingKeys: String, CodingKey {
+        case enabled = "enabled"
+    }
+}
+
 public struct DaemonClaudeProxyStatus: Codable, Sendable {
+    public var enabled: Bool
+    public var testMode: Bool?
+    public var leftover: Bool?
     public var settings: ClaudecfgStatus?
     public var listening: Bool
     public var port: Int64?
@@ -273,6 +283,9 @@ public struct DaemonClaudeProxyStatus: Codable, Sendable {
     public var refused: Int64?
     public var recent: [DaemonClaudeProxyConn]?
     enum CodingKeys: String, CodingKey {
+        case enabled = "enabled"
+        case testMode = "test_mode"
+        case leftover = "leftover"
         case settings = "settings"
         case listening = "listening"
         case port = "port"
@@ -281,6 +294,25 @@ public struct DaemonClaudeProxyStatus: Codable, Sendable {
         case accepted = "accepted"
         case refused = "refused"
         case recent = "recent"
+    }
+}
+
+public struct DaemonClaudeProxyView: Codable, Sendable {
+    public var available: Bool
+    public var enabled: Bool
+    public var testMode: Bool?
+    public var leftover: Bool?
+    public var note: String?
+    public var notes: [String]?
+    public var status: DaemonClaudeProxyStatus?
+    enum CodingKeys: String, CodingKey {
+        case available = "available"
+        case enabled = "enabled"
+        case testMode = "test_mode"
+        case leftover = "leftover"
+        case note = "note"
+        case notes = "notes"
+        case status = "status"
     }
 }
 
