@@ -37,7 +37,9 @@ precheck() {
     [ -f "${SRC}/${f}" ] || reasons+=("缺少 ${SRC}/${f}：先以自己的身份执行 scripts/dev/integrity-build.sh --dev（要先有虚拟机镜像 guest/out）")
   done
   if [ -x "${SRC}/bin/abroadd" ] && [ "${M6I_MODE}" != test ]; then
-    "${SRC}/bin/abroadd" -h 2>&1 | grep -q -- '-dev-fake-claude-dir' ||
+    # 先存下输出再判断：abroadd -h 的退出码是 2（Go 的 flag 包），直接接管道在 pipefail 下会误报“不是开发构建”
+    local usage; usage=$("${SRC}/bin/abroadd" -h 2>&1 || true)
+    case "${usage}" in *-dev-fake-claude-dir*) ;; *) false ;; esac ||
       reasons+=("${SRC}/bin/abroadd 不是开发构建（认不出 --dev-fake-claude-dir）：请用 scripts/dev/integrity-build.sh --dev 构建")
   fi
   [ -d "${APPSRC}/Contents/MacOS" ] || reasons+=("缺少应用包 ${APPSRC}：先执行 scripts/dev/app-bundle.sh")
