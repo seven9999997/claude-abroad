@@ -163,6 +163,8 @@ payload/
 
 ## 3. 阶段 B：应用里的入口
 
+> **复用 B0（2026-11-27 起顺序是 A → B0 → B，计划见 `docs/app-privileged-plan.md`）**：阶段 B 不再新建提权层，直接用 B0 做好的 `PrivilegedRunner.swift`（唯一的 `NSAppleScript`、唯一的基础路径常量、后台串行队列）、`PrivilegedCommand.swift`（单引号和 AppleScript 两层转义、拒绝控制字符、临时目录 `claude-abroad-staging`、退出码表、golden 命令和脚本侧真跑）、源码检查的例外和反例、“只能从点击调用”的测试。下面 3.1、3.4 的复制和核对、3.5 的②③④、3.8 里 `PrivilegedRunner`、`ServiceInstall.swift` 的转义部分都以 B0 为准；阶段 B 只加安装、升级、卸载三种命令、版本比较和它们的界面。
+
 ### 3.1 提权方式
 
 `NSAppleScript` 执行 `do shell script "<命令>" with prompt "<文字>" with administrator privileges`：系统自带、不要签名、没有废弃。不用 `AuthorizationExecuteWithPrivileges`；`SMJobBless`/`SMAppService` 要签名，这一版不做（P2、P3 不变）。
