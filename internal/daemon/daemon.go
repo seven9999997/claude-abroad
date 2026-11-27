@@ -498,6 +498,8 @@ type Status struct {
 	// M6-4b-3 补审返工：最近一次回国时，用户选了“同时强制退出浏览器”但还在运行的浏览器（没能结束的、签名确认不了
 	// 所以没动的、只列出的）。只有名字。
 	BrowsersLeft []string `json:"browsers_left,omitempty"`
+	// ClaudeProxyChange：这次回国要求切换第四道时的结果（v0.72；只在回国那次应答里有，/v1/status 不带）。
+	ClaudeProxyChange *ClaudeProxyChange `json:"claude_proxy_change,omitempty"`
 	// M6-4b-1 返工：这次安装是否打开了启动管控（--launch-control）。没打开时解析锁、托管设置、第三层都“未启用”。
 	LaunchControl bool `json:"launch_control,omitempty"`
 	// M6-8a：首次准备（写入解析锁和托管设置）的结果（打开了首次准备时）。
@@ -657,6 +659,12 @@ func (d *Daemon) op(fn func(ctx context.Context) error, allowCorrupt bool) http.
 
 // exec 执行一个操作并写应答（请求体已经读过）。返回操作的错误（调用方用来判断要不要放回确认码）。
 func (d *Daemon) exec(w http.ResponseWriter, r *http.Request, fn func(ctx context.Context) error, allowCorrupt bool) error {
+	return d.execThen(w, r, fn, allowCorrupt, nil)
+}
+
+// execThen 同 exec；fn 成功之后先调用 after（可为 nil；v0.72 回国之后切第四道），再取状态写 200，after 的结果放进
+// claude_proxy_change。fn 失败时 after 不会被调用。
+func (d *Daemon) execThen(w http.ResponseWriter, r *http.Request, fn func(ctx context.Context) error, allowCorrupt bool, after func() *ClaudeProxyChange) error {
 	if !allowCorrupt && d.corrupt.Load() {
 		if _, err := d.store.Load(); err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, errBody{usererror.New("执行操作", "状态文件已损坏", state.RescueHint+"。", ErrCorruptMode).Error()})
@@ -669,7 +677,13 @@ func (d *Daemon) exec(w http.ResponseWriter, r *http.Request, fn func(ctx contex
 		writeErr(w, errCode(err), api.ErrorBody{Error: err.Error(), Code: opErrCode(err, errCode(err))})
 		return err
 	}
-	writeJSON(w, http.StatusOK, d.Status())
+	var chg *ClaudeProxyChange
+	if after != nil {
+		chg = after()
+	}
+	st := d.Status()
+	st.ClaudeProxyChange = chg
+	writeJSON(w, http.StatusOK, st)
 	return nil
 }
 

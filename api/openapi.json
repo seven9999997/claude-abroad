@@ -431,6 +431,33 @@
         ],
         "type": "object"
       },
+      "DaemonClaudeProxyChange": {
+        "properties": {
+          "conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudecfgConflict"
+            },
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "target"
+        ],
+        "type": "object"
+      },
       "DaemonClaudeProxyConn": {
         "properties": {
           "action": {
@@ -560,6 +587,9 @@
       },
       "DaemonConfirmNeeded": {
         "properties": {
+          "claude_proxy": {
+            "$ref": "#/components/schemas/DaemonRestoreClaudeProxy"
+          },
           "code": {
             "type": "string"
           },
@@ -1350,6 +1380,86 @@
         },
         "type": "object"
       },
+      "DaemonRestoreClaudeProxy": {
+        "properties": {
+          "conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudecfgConflict"
+            },
+            "type": "array"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": "boolean"
+          },
+          "test_mode": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "current",
+          "target",
+          "test_mode"
+        ],
+        "type": "object"
+      },
+      "DaemonRestorePreviewView": {
+        "properties": {
+          "browser_note": {
+            "type": "string"
+          },
+          "browsers": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudeprocTarget"
+            },
+            "type": "array"
+          },
+          "claude_proxy": {
+            "$ref": "#/components/schemas/DaemonRestoreClaudeProxy"
+          },
+          "note": {
+            "type": "string"
+          },
+          "notice": {
+            "type": "string"
+          },
+          "processes": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudeprocTarget"
+            },
+            "type": "array"
+          },
+          "unverified": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudeprocTarget"
+            },
+            "type": "array"
+          },
+          "will_kill": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "will_kill"
+        ],
+        "type": "object"
+      },
+      "DaemonRestoreRequest": {
+        "properties": {
+          "claude_proxy": {
+            "type": "boolean"
+          },
+          "confirm": {
+            "type": "string"
+          },
+          "kill_browsers": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "DaemonReturnBlockStatus": {
         "properties": {
           "active": {
@@ -1526,6 +1636,9 @@
           },
           "claude_code": {
             "$ref": "#/components/schemas/DaemonClaudeProxyStatus"
+          },
+          "claude_proxy_change": {
+            "$ref": "#/components/schemas/DaemonClaudeProxyChange"
           },
           "corrupt": {
             "type": "boolean"
@@ -2300,7 +2413,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DaemonConfirmRequest"
+                "$ref": "#/components/schemas/DaemonRestoreRequest"
               }
             }
           }
@@ -3423,13 +3536,13 @@
     },
     "/v1/restore": {
       "post": {
-        "description": "回国：一律两步确认",
+        "description": "回国：一律两步确认；可带 claude_proxy（回国之后第四道开或关，确认码按原值绑定；先回国、成功后才切换，结果在 claude_proxy_change；v0.72）",
         "operationId": "restore",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DaemonConfirmRequest"
+                "$ref": "#/components/schemas/DaemonRestoreRequest"
               }
             }
           }
@@ -3461,14 +3574,14 @@
     },
     "/v1/restore/preview": {
       "get": {
-        "description": "回国会结束的 Claude 进程清单（只查看：不签发确认码、不改任何状态；design 10.1）",
+        "description": "回国会结束的 Claude 进程清单和第四道的现状、冲突（只查看：不签发确认码、不改任何状态；?kill_browsers=true、?claude_proxy=on|off 按勾选预览；design 10.1、v0.72）",
         "operationId": "restore-preview",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ClaudeprocPreview"
+                  "$ref": "#/components/schemas/DaemonRestorePreviewView"
                 }
               }
             },

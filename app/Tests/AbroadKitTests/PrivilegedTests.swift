@@ -115,8 +115,11 @@ func unescapeAppleScript(_ s: String) -> String? {
 func goldenCommands() throws -> String {
     let samples: [(String, [PrivilegedStep])] = [
         ("addsource", [PrivilegedStep(.addSourceURLFile(path: "@IN@", name: "订阅", viaHost: false))]),
-        ("restore-kill", [PrivilegedStep(.restore, options: ["--kill-browsers"])]),
+        ("restore-kill", [PrivilegedStep(.restoreWith(killBrowsers: true, claudeProxy: nil))]),
         ("mainuse-apply", [PrivilegedStep(.mainUse(node: "n1", via: ["n2"])), PrivilegedStep(.mainApply)]),
+        // v0.72：回国确认里选第四道（参数从 arguments 来）
+        ("restore-cp-on", [PrivilegedStep(.restoreWith(killBrowsers: false, claudeProxy: true))]),
+        ("restore-kill-cp-off", [PrivilegedStep(.restoreWith(killBrowsers: true, claudeProxy: false))]),
     ]
     var out = ""
     for (name, steps) in samples {
@@ -160,12 +163,21 @@ let sampleOps: [SensitiveOperation] = [
     .ruleListAdd(kind: "local", item: "a"), .ruleListRemove(kind: "local", item: "a"), .ruleListAdd(kind: "pinned", item: "a"), .ruleListRemove(kind: "pinned", item: "a"),
     .ruleListAdd(kind: "offline", item: "a"), .ruleListRemove(kind: "offline", item: "a"), .ruleListAdd(kind: "nofake", item: "a"), .ruleListRemove(kind: "nofake", item: "a"),
     .udp443(on: true), .allowLAN(on: true), .allowLAN(on: false), .claudeProxy(on: true), .claudeProxy(on: false),
+    .restoreWith(killBrowsers: true, claudeProxy: nil), .restoreWith(killBrowsers: false, claudeProxy: true), .restoreWith(killBrowsers: true, claudeProxy: false),
 ]
 
 @Test func privilegedWhitelistFile() throws {
     let txt = try readRepo("app/Tests/AbroadKitTests/testdata/privileged-subcommands.txt")
-    let words = txt.split(separator: "\n").filter { !$0.hasPrefix("#") && !$0.isEmpty }.map { String($0.split(separator: "\t")[0]) }
+    let rows = txt.split(separator: "\n").filter { !$0.hasPrefix("#") && !$0.isEmpty }.map { $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init) }
+    let words = rows.map { $0[0] }
     #expect(words == PrivilegedSubcommand.allCases.map(\.rawValue), "白名单和 testdata/privileged-subcommands.txt 不一致")
+    // v0.72：第三列“允许的参数”和 allowedFlags 一致
+    for (row, sub) in zip(rows, PrivilegedSubcommand.allCases) {
+        #expect(row.count == 3, "每行三列：\(row)")
+        let flags = row.count == 3 ? row[2].split(separator: " ").map(String.init) : []
+        #expect(flags == sub.allowedFlags, "\(sub.rawValue) 的允许参数和文件里不一致")
+    }
+    #expect(PrivilegedSubcommand.restore.allowedFlags == ["--kill-browsers", "--claude-proxy=on|off"])
     var used = Set<PrivilegedSubcommand>()
     for op in sampleOps {
         let m = try #require(PrivilegedSubcommand.matching(op.arguments), "\(op) 不在白名单里")
@@ -179,6 +191,17 @@ let sampleOps: [SensitiveOperation] = [
 @Test func privilegedWhitelistRejectsUnknown() {
     for args in [["uninstall"], ["down"], ["main", "refresh", "s1"], ["domains", "clear"], ["check", "history", "clear"], ["status"]] {
         #expect(PrivilegedSubcommand.matching(args) == nil, "\(args) 不应在白名单里")
+    }
+    // v0.72 反例：子命令在白名单里，但参数不在允许的参数里（或值不对）时拒绝，不拼命令
+    for args in [["restore", "--force"], ["restore", "--claude-proxy", "maybe"], ["restore", "--claude-proxy"], ["lan", "on", "--yes"]] {
+        #expect(throws: PrivilegedCommandError.self, "\(args) 应被拒绝") {
+            try PrivilegedCommand.checkFlags(PrivilegedSubcommand.matching(args)!, Array(args.dropFirst(PrivilegedSubcommand.matching(args)!.words.count)))
+        }
+    }
+    for args in [["restore", "--kill-browsers", "--claude-proxy", "on"], ["restore", "--claude-proxy", "off"], ["main", "use", "n1", "--via", "n2"]] {
+        #expect(throws: Never.self) {
+            try PrivilegedCommand.checkFlags(PrivilegedSubcommand.matching(args)!, Array(args.dropFirst(PrivilegedSubcommand.matching(args)!.words.count)))
+        }
     }
 }
 

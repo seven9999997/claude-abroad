@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -96,8 +95,7 @@ func (a *app) confirmClaudeProxyOn() bool {
 		return false
 	}
 	fmt.Fprint(pw, "确认打开？输入 yes 继续：")
-	line, _ := bufio.NewReader(a.stdin).ReadString('\n')
-	s := strings.ToLower(strings.TrimSpace(line))
+	s := strings.ToLower(strings.TrimSpace(a.readLine()))
 	if s != "yes" && s != "y" && s != "是" {
 		fmt.Fprintln(a.stderr, "没有确认，什么都没有改动")
 		return false

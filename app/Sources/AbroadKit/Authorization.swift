@@ -27,6 +27,17 @@ public enum SensitiveOperation: Sendable, Equatable {
     case allowLAN(on: Bool)
     /// 第四道（Claude Code 的本机代理）的开关（v0.68；B0 起应用里可以直接执行）。
     case claudeProxy(on: Bool)
+    /// 回国，带确认框里选的选项（v0.72）：同时强制退出浏览器；回国之后第四道开或关（nil = 保持现状，只在和现状不同时带）。
+    /// .restore 是“刚点一键回国、还没有选项”的场合；执行和终端命令都用这个，参数只从 arguments 来。
+    case restoreWith(killBrowsers: Bool, claudeProxy: Bool?)
+
+    /// 是不是回国（.restore 或带选项的 .restoreWith）。
+    public var isRestore: Bool {
+        switch self {
+        case .restore, .restoreWith: return true
+        default: return false
+        }
+    }
 
     /// 命令行 abroad 之后的参数（不含 sudo）。终端命令和经系统密码框执行的命令都由它生成：参数只有这一份。
     public var arguments: [String] {
@@ -51,6 +62,8 @@ public enum SensitiveOperation: Sendable, Equatable {
         case let .udp443(on): return ["rules", "udp443", on ? "on" : "off"]
         case let .allowLAN(on): return ["lan", on ? "on" : "off"]
         case let .claudeProxy(on): return ["claude-proxy", on ? "on" : "off"]
+        case let .restoreWith(kill, cp):
+            return ["restore"] + (kill ? ["--kill-browsers"] : []) + (cp.map { ["--claude-proxy", $0 ? "on" : "off"] } ?? [])
         }
     }
 

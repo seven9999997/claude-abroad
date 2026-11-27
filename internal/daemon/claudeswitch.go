@@ -26,7 +26,8 @@ import (
 //   - 关掉：删我们写的分片（只删内容和记录一致的）→ 停止监听 → 记下开关。被改过删不掉时如实报告，开关仍记为关，
 //     状态里提示那份文件要用户自己处理；
 //   - 开发构建只管测试目标时（System.PrepareTestOnly）：打开只监听，不写托管设置；
-//   - 回国不碰它；卸载不管开没开都按记录删分片，并把开关记为关。
+//   - 回国流程本身不碰它；只有用户在这次回国确认里明确选了另一个状态，才在回国成功之后切换（v0.72，restoreSwitchCP）；
+//     卸载不管开没开都按记录删分片，并把开关记为关。
 
 // ClaudeProxySwitchFile 是开关的文件（状态目录里，0600）。
 const ClaudeProxySwitchFile = "claude-proxy-switch.json"
@@ -57,6 +58,61 @@ var ClaudeProxyConsequences = []string{
 	"这台 Mac 上所有 Claude Code 都会被指向 Claude 出国的本机代理（127.0.0.1:47821）。",
 	"没有处于“已启用”时，Claude Code 一律连不上，包括经本机别的代理线路启动的。",
 	"关掉开关（sudo abroad claude-proxy off）或卸载才恢复。",
+}
+
+// v0.72：回国确认里第四道的文字（应用的文字表里有逐字相同的一份，测试对照）。
+const (
+	ClaudeProxyRestoreOffNote  = "回国后 Claude Code 不再被指向本机代理，回国后靠解析锁和回国拦截挡住它（默认状态）"
+	ClaudeProxyRestoreTestNote = "测试模式：只监听，不写托管设置，本机真实的 Claude Code 不受它管"
+	ClaudeProxyRestoreKeepOn   = "第四道保持现状（开）"
+	ClaudeProxyRestoreKeepOff  = "第四道保持现状（关）"
+	// 回国成功、切换失败时 notes 的最后一句（下一步）。
+	ClaudeProxyRestoreNextOn  = "处理后执行 sudo abroad claude-proxy on"
+	ClaudeProxyRestoreNextOff = "处理后执行 sudo abroad claude-proxy off"
+)
+
+// ClaudeProxyChange 是回国成功之后切换第四道的结果（v0.72）：切换失败不算回国失败，写明原因和下一步
+// （notes 前面是原因，最后一句是下一步 ClaudeProxyRestoreNextOn/Off）。
+type ClaudeProxyChange struct {
+	Target    bool                 `json:"target"`
+	OK        bool                 `json:"ok"`
+	Notes     []string             `json:"notes,omitempty"`
+	Conflicts []claudecfg.Conflict `json:"conflicts,omitempty"`
+}
+
+// restoreSwitchCP 在回国成功之后切换第四道（规则和 PUT /v1/settings/claude-proxy 相同：claudeProxyOn、claudeProxyOff）。
+func (d *Daemon) restoreSwitchCP(on bool) *ClaudeProxyChange {
+	ch := &ClaudeProxyChange{Target: on}
+	if on {
+		conf, err := d.claudeProxyOn()
+		ch.OK, ch.Conflicts = err == nil, conf
+		if err != nil {
+			why := err.Error()
+			switch {
+			case errors.Is(err, ErrUninstalledOp):
+				why = "Claude 出国正在卸载或已经卸载"
+			case len(conf) > 0:
+				why = "Claude Code 的托管设置里别的文件也定义了代理变量：" + strings.Join(conflictParts(conf), "、")
+			}
+			ch.Notes = []string{"第四道没有打开：" + why, ClaudeProxyRestoreNextOn}
+		}
+	} else {
+		notes, err := d.claudeProxyOff()
+		ch.Notes = notes
+		if err != nil {
+			ch.Notes = append(ch.Notes, err.Error())
+		}
+		ch.OK = err == nil && len(notes) == 0
+		if !ch.OK {
+			ch.Notes = append(ch.Notes, ClaudeProxyRestoreNextOff)
+		}
+	}
+	res := "成功"
+	if !ch.OK {
+		res = "没有完成"
+	}
+	d.events.Add("restore", "claude_proxy_"+onOff(on), res)
+	return ch
 }
 
 // ClaudeProxyOffNote 是第四道关着时各处的说明（和“未生效”区分开）。

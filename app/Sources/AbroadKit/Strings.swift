@@ -504,6 +504,44 @@ extension L10n {
     public static let privEnableNoChange = "启用会接管本机网络；地区不会变，不结束任何进程。"
     public static let privEnableAlready = "已经是启用状态。"
     public static let privClaudeProxyOff = "关掉之后，回国后靠解析锁和回国拦截。"
+    // v0.72：回国确认里选第四道（四句和后台 daemon.ClaudeProxyRestore* 逐字相同，Go 测试对照）。
+    public static let restoreClaudeProxyOption = "回国后开启 Claude Code 兜底（第四道）"
+    public static let restoreClaudeProxyOffNote = "回国后 Claude Code 不再被指向本机代理，回国后靠解析锁和回国拦截挡住它（默认状态）"
+    public static let restoreClaudeProxyTestNote = "测试模式：只监听，不写托管设置，本机真实的 Claude Code 不受它管"
+    public static let restoreClaudeProxyKeepOn = "第四道保持现状（开）"
+    public static let restoreClaudeProxyKeepOff = "第四道保持现状（关）"
+    public static let restoreClaudeProxyOnTitle = "回国后打开第四道（Claude Code 的本机代理）的后果："
+    /// 确认框里第四道那一块的文字（按目标状态）：关 → 开是开关已有的三句后果，开 → 关一句，不变一行现状；测试模式另加一句。
+    public static func claudeProxyLines(current: Bool, target: Bool, testMode: Bool) -> [String] {
+        var out: [String]
+        switch (current, target) {
+        case (true, true): out = [restoreClaudeProxyKeepOn]
+        case (false, false): out = [restoreClaudeProxyKeepOff]
+        case (false, true): out = [restoreClaudeProxyOnTitle] + claudeCodeConsequences
+        case (true, false): out = [restoreClaudeProxyOffNote]
+        }
+        if testMode { out.append(restoreClaudeProxyTestNote) }
+        return out
+    }
+    /// 勾选打开、只读预览带回冲突时（“执行”不可点）。
+    public static func restoreClaudeProxyBlocked(_ items: [String]) -> String {
+        "打开第四道会被拒绝：别的托管设置文件也定义了代理变量：" + items.joined(separator: "、") + "。去掉这些变量后再试，或取消勾选再回国（不会替你改别人的文件）。"
+    }
+    /// 执行时命令行第一步才发现的冲突（只读预览之后才出现）：什么都没改。
+    public static func restoreClaudeProxyConflicts(_ items: [String]) -> String {
+        "没有回国，什么都没有改：别的托管设置文件也定义了代理变量：" + items.joined(separator: "、") + "。去掉这些变量后再试，或取消勾选再回国。"
+    }
+    /// 回国成功、切换第四道失败（警告样式）。
+    public static func restoreClaudeProxyChangeFailed(_ notes: [String]) -> String {
+        "回国已完成，但第四道没有切换：" + notes.joined(separator: "；")
+    }
+    public static let restoreClaudeProxyChangeOn = "已完成；第四道已打开"
+    public static let restoreClaudeProxyChangeOff = "已完成；第四道已关闭"
+    /// 冲突的一项：“文件 的 变量”（解析不了的文件写“文件（解析不了）”）。
+    public static func conflictItem(file: String, variable: String?) -> String {
+        if let v = variable, !v.isEmpty { return file + " 的 " + v }
+        return file + "（解析不了）"
+    }
     public static let claudeCodeTurnOn = "打开…"
     public static let privScriptFailed = "系统密码框的脚本没能准备好"
     public static func privErrorNumber(_ n: Int) -> String { "系统返回错误 \(n)" }
@@ -530,7 +568,7 @@ extension L10n {
     public static func privTitle(_ op: SensitiveOperation) -> String {
         switch op {
         case .enable: return "启用（接管本机网络）"
-        case .restore: return "回国（恢复本机网络）"
+        case .restore, .restoreWith: return "回国（恢复本机网络）"
         case .mainApply: return "应用主代理"
         case let .regionSet(tz, lang): return "切换地区到 \(tz)、\(lang)"
         case .regionAuto: return "地区改为跟随出口"
@@ -554,7 +592,7 @@ extension L10n {
     public static func privConsequences(_ op: SensitiveOperation) -> [String] {
         switch op {
         case .enable: return []
-        case .restore: return [returnBlockConsequence]
+        case .restore, .restoreWith: return [returnBlockConsequence]
         case .mainApply: return ["会经虚拟机里的主代理做一次出口检查并建立出口基准；已启用时会先关闸门、换第一跳，失败回到原来的主代理。"]
         case .regionSet, .regionAuto: return ["已启用且地区会变时，会结束正在运行的 Claude 并改 Mac 的时区和语言。"]
         case .addSourceFile, .addSourceURLFile, .addNodeFile: return ["订阅地址、节点和密码只经文件交给命令行，不出现在命令里。"]

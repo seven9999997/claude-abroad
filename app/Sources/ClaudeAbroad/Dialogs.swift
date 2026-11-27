@@ -139,6 +139,7 @@ struct PrivilegedSheet: View {
                 ForEach(r.lines, id: \.self) { l in Text("· " + l).fixedSize(horizontal: false, vertical: true) }
                 if let b = r.blocked { ToneNote(tone: .failure, text: b, symbol: "xmark.octagon") }
                 preview(r)
+                if r.claudeProxy != nil { claudeProxy } // v0.72：回国确认里选第四道
                 if !r.removes.isEmpty { // 阶段 B：卸载会删除的东西（只读卸载预览给的）
                     CardSection(L10n.serviceRemoves) {
                         ForEach(r.removes, id: \.self) { x in CardRow { Text("· " + x).fixedSize(horizontal: false, vertical: true) } }
@@ -160,7 +161,7 @@ struct PrivilegedSheet: View {
                         Button(L10n.cancel) { Task { await session.userClosed() } }.keyboardShortcut(.cancelAction).disabled(session.phase == .running)
                         Button(L10n.privExecute, action: { Task { await session.userTappedExecute() } })
                             .buttonStyle(.borderedProminent)
-                            .disabled(session.phase != .confirming || r.blocked != nil)
+                            .disabled(session.phase != .confirming || r.blocked != nil || session.claudeProxyBlocked)
                     }
                 }
                 .controlSize(.large)
@@ -212,12 +213,28 @@ struct PrivilegedSheet: View {
         }
     }
 
+    /// 回国确认里第四道的勾选（初值等于现状）和按勾选的说明；勾选打开且有冲突时列出冲突，“执行”不可点。
+    @ViewBuilder private var claudeProxy: some View {
+        CardSection(L10n.claudeCodeTitle) {
+            CardRow { Toggle(L10n.restoreClaudeProxyOption, isOn: $session.claudeProxyOn).disabled(session.phase != .confirming) }
+            ForEach(Array(session.claudeProxyLines.enumerated()), id: \.offset) { _, l in
+                RowSeparator()
+                CardRow { Text(l).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+            }
+        }
+        if session.claudeProxyBlocked {
+            ToneNote(tone: .failure, text: L10n.restoreClaudeProxyBlocked(session.claudeProxyConflicts), symbol: "xmark.octagon")
+        }
+    }
+
     @ViewBuilder private var result: some View {
         switch session.phase {
         case .running:
             HStack { ProgressView().controlSize(.small); Text(L10n.privRunning) }
         case let .done(ok, message, output):
-            if ok { ToneNote(tone: .success, text: message, symbol: "checkmark.circle") } else { ErrorBlock(text: ErrorText(raw: message)) }
+            if ok && session.warning { // 回国已完成、但第四道没有切换（v0.72）
+                ToneNote(tone: .attention, text: message, symbol: "exclamationmark.triangle")
+            } else if ok { ToneNote(tone: .success, text: message, symbol: "checkmark.circle") } else { ErrorBlock(text: ErrorText(raw: message)) }
             if !output.isEmpty {
                 Text(L10n.privOutput).font(.caption).foregroundStyle(.secondary)
                 ScrollView { CodeBlock(text: output) }.frame(maxHeight: 160)

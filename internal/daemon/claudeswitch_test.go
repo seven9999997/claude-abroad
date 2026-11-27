@@ -525,7 +525,8 @@ func TestClaudeProxyConsequencesInAppStrings(t *testing.T) {
 			t.Fatalf("后果里应有“%s”", must)
 		}
 	}
-	for _, c := range ClaudeProxyConsequences {
+	for _, c := range append(append([]string{}, ClaudeProxyConsequences...), // v0.72：回国确认里第四道的四句
+		ClaudeProxyRestoreOffNote, ClaudeProxyRestoreTestNote, ClaudeProxyRestoreKeepOn, ClaudeProxyRestoreKeepOff) {
 		if !strings.Contains(string(b), `"`+c+`"`) {
 			t.Fatalf("应用的文字表里没有这一句：%s", c)
 		}

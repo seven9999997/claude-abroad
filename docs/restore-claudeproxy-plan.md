@@ -1,6 +1,6 @@
 # 回国确认里选择第四道：实施计划（交架构顾问审）
 
-> 版本：**v2，对应设计 v0.72**（2026-11-27）。只是计划，代码还没改。
+> 版本：**v3，对应设计 v0.72**（2026-11-27）。v2 经顾问审过（a1d7635，没有必须改），四处 ★ 和第 10 条的裁定写在第 6 节开头；已实现，实现中的偏离见第 7 节。
 > v1（3cbcf17，设计号原定 v0.71）写在 B0 之前。之后 v0.71 给了阶段 A，v0.71b 给了 B0（应用里经系统密码框以 root 运行已安装的 `abroad --yes --json <子命令>`），v0.71c 给了阶段 B；这一条顺延为 **v0.72**（`docs/app-privileged-plan.md` v2 裁定②）。v2 按顾问的修订要求①–⑦接上 B0 之后的现状，对照表见第 0 节末尾。
 > 依据：用户原话（2026-11-27）“caibao 兜底 回国前提示也提示一下是否需要兜底，不需要就不兜底了”；architect 原判定五条和验收 a–m；顾问的修订要求①–⑦；设计 v0.71c 的 10.1、10.2 第四层 v0.68 一段、10.3、11.1–11.4、16 节 v0.71–v0.71c；`docs/app-privileged-plan.md` v2。
 > 会话里的边界：不改宿主机网络，不碰本机会话依赖的代理和隧道（见 `docs/LOCAL.md`），不用 sudo，不运行真实模式，不运行真实的 `PrivilegedRunner`（不弹密码框、不提权），不碰 `/Applications/ClaudeAbroad.app` 和 `/Library/Application Support/claude-abroad*`，不提交。测试全是假系统、临时目录、`127.0.0.1:0` 端口、假的 `PrivilegedRunning`；swift 集成测试由 `scripts/dev/app-test.sh` 以当前用户起 `--fake-system` 的 abroadd，用完停掉。
@@ -269,6 +269,13 @@ v1 里改 `ConfirmFlow` 和 `reissue` 的部分**全部删掉**：应用的回�
 
 ## 6. 风险和拿不准的地方（★ 是请顾问裁定的）
 
+**v3：顾问的裁定（2026-11-27）**
+- ① 摘要按请求里的原值绑定，不按现状归一；设计 11.1 写明“按请求里的原值绑定”。测试 `TestRestoreCPBinding`（含“原值 off 和 keep 不混用”一例；去掉摘要里的这一项时它失败，实现时验证过）。
+- ② 命令行追问时答的不是 y、n、回车：打印“没有确认，什么都没有改动”后退出，退出码和取消确认相同（4）。测试 `TestCLIRestoreClaudeProxy/交互：答别的`。
+- ③ 应用里勾选打开、只读预览带回冲突：“执行”不可点并列出冲突（文件和变量），取消勾选恢复可点（`swift:restoreClaudeProxyConflictBlocks`）；只读预览之后才出现的冲突由 root 运行的命令行在第一步回 422，应用显示冲突文字、什么都没改（`swift:restoreClaudeProxyLateConflict`；命令行 `--json` 时把这个错误应答写到标准输出，`TestCLIRestoreClaudeProxy/预览时有冲突`）。
+- ④ 回国成功、切换失败：命令行退出码 0，标准错误按“做什么失败了：原因。下一步”写清，`--json` 里 `claude_proxy_change.ok` 为假（`TestCLIRestoreClaudeProxy/回国成功、打开失败`）；应用用警告样式显示“回国已完成，但第四道没有切换”加原因（`swift:restoreClaudeProxyResult`）；设计 11.3 写明约定。
+- 第 10 条：白名单加第三列“允许的参数”，Swift `allowedFlags` 和 Go `TestPrivilegedWhitelistMatchesRoutes` 两边核对（Go 对照帮助文本的用法行）；反例 `TestPrivilegedWhitelistFlagCounterexamples`（restore 带不在白名单里的参数、取值不一致）和 `swift:privilegedWhitelistRejectsUnknown`（`restore --force`、`--claude-proxy maybe` 被拒）；命令 golden 加 `restore-cp-on`、`restore-kill-cp-off`。
+
 1. ★ **摘要按字面值，还是先按现状归一**。本计划按字面值：现在开时，第一步带 `true`、第二步不带，算不一致。这样验收 b 不依赖两步之间的现状。应用和命令行只在值和现状不同时才带这个字段，正常使用碰不到。
 2. ★ 命令行追问时输入不是 y、n 或回车：本计划按“没有确认，什么都没有改动”退出，不猜。
 3. ★ **应用里预览有冲突时**：勾选打开就让“执行”不可点，并显示冲突（预览已经带了 `conflicts`，不用另发请求）。只读预览和执行之间才出现的冲突，由 root 命令行的第一步回 422，应用显示冲突文字，什么都没改。
@@ -282,3 +289,14 @@ v1 里改 `ConfirmFlow` 和 `reissue` 的部分**全部删掉**：应用的回�
 11. 读终端改为共用一个缓冲读取器，会碰到 `claude-proxy on` 和所有两步确认的读取路径；行为应该不变，由现有的命令行测试守着。
 12. 检查顺序是“开关不可用、已卸载”在“已经是回国状态”之前：卸载后状态总是 RESTORED，要打开时回 409 而不是 422，和原判定一致。
 13. 计划里没有任何改宿主机网络、碰 pf、sudo、运行真实模式或真实提权的命令。`scripts/m6/install/selftest.sh` 场景 u 是以当前用户在自测目录里用 `bash -c` 跑 golden 命令，不提权、不碰系统路径（B0 已审过的做法）。
+
+## 7. 实现中的偏离和补充（v3）
+
+1. **请求类型**：按计划第 1 步用单独的 `RestoreRequest`（顾问的实现清单里写的是“ConfirmRequest 加 claude_proxy”，按已审的计划做：启用、切换地区、卸载仍不认这个字段）。
+2. **`claude_proxy_change.notes` 的写法**：前面是原因（如“第四道没有打开：<原因>”），最后一句是下一步（`ClaudeProxyRestoreNextOn/Off`，“处理后执行 sudo abroad claude-proxy on|off”）；不在 notes 里再写“回国已完成”（命令行和应用各自加这半句，避免重复）。
+3. **命令行 `--json` 时回国的错误应答写到标准输出**（只限 restore，需要确认时不重复写）：应用经系统密码框执行时只拿得到标准输出，裁定③的“应用显示冲突文字”靠它。
+4. **`RestorePreviewView.note` 加了 omitempty**：生成的 Swift 类型里是可选的，应用连老版本的后台（没有这一项）时只读预览照样能解。
+5. **`PrivilegedStep.options` 删掉**：所有参数只从 `SensitiveOperation.arguments` 来；`restore-kill` 的命令 golden 一字不变。
+6. **`allowedFlags` 覆盖所有带参数的子命令**（`main add-source`、`main add-node`、`main use`、`exit add` 的 `--file`、`--url-file`、`--name`、`--via-host`、`--via`、`--kind`，取值 `*`），否则拼命令时会把它们当成不允许的参数；白名单第三列照实列出。
+7. 应用的集成测试加 `restorePreviewDecodes`（真实后台的只读回国预览能解成新类型）。
+

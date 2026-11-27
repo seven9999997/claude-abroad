@@ -11,6 +11,7 @@ import (
 
 	"claude-abroad/internal/api"
 	"claude-abroad/internal/apiclient"
+	"claude-abroad/internal/daemon"
 	"claude-abroad/internal/rules"
 
 	"go.yaml.in/yaml/v3"
@@ -478,9 +479,12 @@ func printUninstallSteps(a *app, body []byte, failed bool) {
 }
 
 func cmdRestore(a *app, args []string) int {
-	f, err := parseFlags(args, nil, []string{"--force", "--kill-browsers"}, nil)
+	f, err := parseFlags(args, []string{"--claude-proxy"}, []string{"--force", "--kill-browsers"}, nil)
 	if err != nil {
 		return usageErr(a, err.Error())
+	}
+	if len(f.pos) > 0 {
+		return usageErr(a, "restore 不带位置参数")
 	}
 	if f.bools["--force"] {
 		fmt.Fprintln(a.stderr, "restore --force 改成了单独的应急程序：后台服务不在、或状态文件损坏时，先按应急文档停掉后台服务，再执行 sudo abroad-rescue。后台服务正常时请用 abroad restore。")
@@ -490,13 +494,145 @@ func cmdRestore(a *app, args []string) int {
 	if f.bools["--kill-browsers"] { // 用户显式选择：同时结束确认过的浏览器（M6-4b-3）
 		body = map[string]any{"kill_browsers": true}
 	}
-	resp, code := a.confirmed("POST", "/v1/restore", body)
+	cpGiven := false
+	if v, ok := f.vals["--claude-proxy"]; ok { // v0.72：回国之后第四道开或关（不带就保持现状）
+		if v != "on" && v != "off" {
+			return usageErr(a, "--claude-proxy 只认 on 或 off")
+		}
+		if body == nil {
+			body = map[string]any{}
+		}
+		body["claude_proxy"] = v == "on"
+		cpGiven = true
+	}
+	resp, code := a.confirmedAsk("POST", "/v1/restore", body, "yes", a.restoreCPAsk(cpGiven))
 	if code != ExitOK {
+		// v0.72：--json 时回国的错误应答（例如第一步发现第四道的冲突，带 conflicts）也原样写到标准输出，
+		// 应用经系统密码框执行时只拿得到标准输出，据此显示冲突（文字仍在标准错误）。
+		if a.json && code != ExitConfirm && resp.Code >= 400 && json.Valid(resp.Body) { // 需要确认时 confirmWith 已经写过预览
+			a.stdout.Write(resp.Body)
+			fmt.Fprintln(a.stdout)
+		}
 		return code
 	}
 	rc := printState(a, resp)
 	printBrowsersLeft(a, resp.Body)
+	printCPChange(a, resp.Body)
 	return rc
+}
+
+// restoreCPLines 是回国预览里第四道那一块的文字（按目标状态；和应用的文字表同一份内容）。
+func restoreCPLines(cp daemon.RestoreClaudeProxy) []string {
+	var out []string
+	switch {
+	case cp.Target == cp.Current && cp.Current:
+		out = append(out, daemon.ClaudeProxyRestoreKeepOn)
+	case cp.Target == cp.Current:
+		out = append(out, daemon.ClaudeProxyRestoreKeepOff)
+	case cp.Target:
+		out = append(out, "回国后打开第四道（Claude Code 的本机代理）的后果：")
+		for _, l := range daemon.ClaudeProxyConsequences {
+			out = append(out, "  · "+l)
+		}
+	default:
+		out = append(out, daemon.ClaudeProxyRestoreOffNote)
+	}
+	if cp.TestMode {
+		out = append(out, daemon.ClaudeProxyRestoreTestNote)
+	}
+	return out
+}
+
+// restoreCPAsk 是回国最后确认前的追问（v0.72，architect 原判定）：交互运行、没带 --claude-proxy、预览里有第四道时问一句，
+// 回车保持；答得和现状不同就带明确的值重新预览（新确认码），打印后果，再要求确认词；别的输入什么都不改、退出。
+// --yes 或不在终端时不问，打印“第四道保持现状（开/关）；要改加 --claude-proxy on|off”。
+func (a *app) restoreCPAsk(given bool) confirmAsk {
+	return func(pw io.Writer, raw []byte, body map[string]any, round int) (map[string]any, int) {
+		var cn struct {
+			ClaudeProxy *daemon.RestoreClaudeProxy `json:"claude_proxy"`
+		}
+		if json.Unmarshal(raw, &cn) != nil || cn.ClaudeProxy == nil {
+			return nil, ExitOK
+		}
+		cp := *cn.ClaudeProxy
+		lines := restoreCPLines(cp)
+		if !given && round == 0 && (a.yes || !a.isTerminal()) {
+			lines[0] += "；要改加 --claude-proxy on|off"
+		}
+		for _, l := range lines {
+			fmt.Fprintln(pw, l)
+		}
+		if given || round > 0 || a.yes || !a.isTerminal() {
+			return nil, ExitOK
+		}
+		if cp.Current {
+			fmt.Fprint(pw, "回国后保留 Claude Code 兜底（第四道）？[Y/n]")
+		} else {
+			fmt.Fprint(pw, "回国后开启 Claude Code 兜底（第四道）？[y/N]")
+		}
+		var want bool
+		switch strings.ToLower(strings.TrimSpace(a.readLine())) {
+		case "":
+			return nil, ExitOK
+		case "y", "yes", "是":
+			want = true
+		case "n", "no", "否":
+			want = false
+		default:
+			fmt.Fprintln(a.stderr, "没有确认，什么都没有改动")
+			return nil, ExitConfirm
+		}
+		if want == cp.Current {
+			return nil, ExitOK
+		}
+		nb := map[string]any{}
+		for k, v := range body {
+			nb[k] = v
+		}
+		nb["claude_proxy"] = want
+		return nb, ExitOK
+	}
+}
+
+// printCPChange 打印回国之后切换第四道的结果（v0.72）。切换失败不算回国失败（退出码仍是 0），在标准错误按
+// “做什么失败了：原因。下一步”写清；--json 时应答原样在标准输出（claude_proxy_change.ok 为假）。
+func printCPChange(a *app, body []byte) {
+	var v struct {
+		C *daemon.ClaudeProxyChange `json:"claude_proxy_change"`
+	}
+	if json.Unmarshal(body, &v) != nil || v.C == nil {
+		return
+	}
+	if v.C.OK {
+		if !a.json {
+			if v.C.Target {
+				fmt.Fprintln(a.stdout, "第四道已打开")
+			} else {
+				fmt.Fprintln(a.stdout, "第四道已关闭")
+			}
+		}
+		return
+	}
+	next := daemon.ClaudeProxyRestoreNextOff
+	if v.C.Target {
+		next = daemon.ClaudeProxyRestoreNextOn
+	}
+	var why []string
+	for _, n := range v.C.Notes {
+		if n != next {
+			why = append(why, n)
+		}
+	}
+	for _, c := range v.C.Conflicts {
+		if c.Var != "" {
+			why = append(why, c.File+" 的 "+c.Var)
+		}
+	}
+	if len(why) == 0 {
+		why = []string{"原因不明"}
+	}
+	// 和 usererror 同一个格式（命令行只是接口的客户端，不引入它）：做什么失败了：原因。下一步
+	fmt.Fprintln(a.stderr, "回国已完成，但切换第四道失败："+strings.TrimRight(strings.Join(why, "；"), "。；")+"。"+next+"。")
 }
 
 // printBrowsersLeft：选了 --kill-browsers 但还在运行的浏览器（M6-4b-3 补审返工；回国仍算成功）。

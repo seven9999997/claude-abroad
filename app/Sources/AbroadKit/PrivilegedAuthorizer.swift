@@ -48,9 +48,12 @@ public struct PrivilegedRequest: Sendable {
     public var payload: String?
     /// 卸载：会删除的东西（只读卸载预览给的）。
     public var removes: [String] = []
+    /// 回国：第四道的现状、测试模式和打开会撞上的冲突（只读回国预览给的；没打开启动管控、卸载过时没有，v0.72）。
+    public var claudeProxy: DaemonRestoreClaudeProxy?
+    public var isRestore: Bool { steps.contains { $0.isRestore } }
     public var browsersOption: Bool {
         if case .uninstall = service { return !(preview?.browsers ?? []).isEmpty }
-        return steps.contains(.restore) && !(preview?.browsers ?? []).isEmpty
+        return isRestore && !(preview?.browsers ?? []).isEmpty
     }
 }
 
@@ -66,6 +69,10 @@ public final class PrivilegedSession: ObservableObject {
     @Published public private(set) var request: PrivilegedRequest?
     @Published public private(set) var phase: PrivilegedPhase = .none
     @Published public var killBrowsers = false
+    /// 回国确认框里“回国后开启 Claude Code 兜底（第四道）”（v0.72）：初值等于现状。
+    @Published public var claudeProxyOn = false
+    /// 执行后的警告（回国已完成、但第四道没有切换）：结果用警告样式显示。
+    @Published public private(set) var warning = false
 
     public let client: APIClient
     public let runner: PrivilegedRunning?
@@ -93,8 +100,12 @@ public final class PrivilegedSession: ObservableObject {
         r.host = host
         if let now = await currentLine(first) { r.lines.insert(now, at: 0) }
         switch first {
-        case .restore:
-            if case .ok(let pv) = await client.restorePreview() { r.preview = pv }
+        case .restore, .restoreWith:
+            if case .ok(let pv) = await client.restorePreview() {
+                // 进程部分和回国第一步同一个结构（多出的 claude_proxy、note 解码时不要）
+                r.preview = (try? JSONEncoder().encode(pv)).flatMap { try? JSONDecoder().decode(ClaudeprocPreview.self, from: $0) }
+                r.claudeProxy = pv.claudeProxy
+            }
             r.note = L10n.privRecheck
         case .enable:
             if case .ok(let ep) = await client.enablePreview() {
@@ -109,11 +120,37 @@ public final class PrivilegedSession: ObservableObject {
         default: break
         }
         killBrowsers = false
+        claudeProxyOn = r.claudeProxy?.current ?? false
+        warning = false
         self.onDone = onDone
         self.onTerminal = onTerminal
         terminalPrompt = terminal
         request = r
         phase = .confirming
+    }
+
+    /// 回国时第四道的请求值：没有这一块、或勾选等于现状时 nil（保持，命令里不带 --claude-proxy）；否则是勾选的值。
+    public var claudeProxyRequest: Bool? {
+        guard let cp = request?.claudeProxy, claudeProxyOn != cp.current else { return nil }
+        return claudeProxyOn
+    }
+
+    /// 勾选成打开、现在关、只读预览带回冲突：“执行”不可点（取消勾选恢复）。
+    public var claudeProxyConflicts: [String] {
+        guard let cp = request?.claudeProxy, claudeProxyOn, !cp.current else { return [] }
+        return (cp.conflicts ?? []).map { L10n.conflictItem(file: $0.file, variable: $0.var) }
+    }
+    public var claudeProxyBlocked: Bool { !claudeProxyConflicts.isEmpty }
+
+    /// 确认框里第四道那一块的文字（按勾选）。
+    public var claudeProxyLines: [String] {
+        guard let cp = request?.claudeProxy else { return [] }
+        return L10n.claudeProxyLines(current: cp.current, target: claudeProxyOn, testMode: cp.testMode)
+    }
+
+    /// 带上确认框里的选项之后真正要执行的操作（回国换成 .restoreWith；参数只从 arguments 来）。
+    func resolved(_ op: SensitiveOperation) -> SensitiveOperation {
+        op.isRestore ? .restoreWith(killBrowsers: killBrowsers, claudeProxy: claudeProxyRequest) : op
     }
 
     /// 阶段 B（v0.71c）：弹出安装、升级、卸载后台服务的确认框（不执行）。卸载先读只读的卸载预览。
@@ -136,6 +173,8 @@ public final class PrivilegedSession: ObservableObject {
             }
         }
         killBrowsers = false
+        claudeProxyOn = false
+        warning = false
         self.onDone = onDone
         self.onTerminal = onTerminal
         terminalPrompt = terminal
@@ -179,7 +218,7 @@ public final class PrivilegedSession: ObservableObject {
 
     /// 用户点了“执行”：这一刻算输入文件的摘要、拼命令、交给执行层。只能从确认框的按钮调用（源码检查守着）。
     public func userTappedExecute() async {
-        guard let r = request, phase == .confirming else { return }
+        guard let r = request, phase == .confirming, !claudeProxyBlocked else { return }
         guard let runner else { userTappedTerminal(); return }
         if let a = r.service {
             let act: ServiceAction
@@ -201,7 +240,7 @@ public final class PrivilegedSession: ObservableObject {
             }
             digests[f] = sum
         }
-        let steps = r.steps.map { op in PrivilegedStep(op, options: op == .restore && killBrowsers ? ["--kill-browsers"] : []) }
+        let steps = r.steps.map { PrivilegedStep(resolved($0)) }
         let cmd: String
         do {
             cmd = try PrivilegedCommand.build(steps, paths: runner.paths, digests: digests)
@@ -223,7 +262,11 @@ public final class PrivilegedSession: ObservableObject {
             phase = .done(ok: false, message: L10n.privUnavailable, output: why)
         case .finished(let out):
             if let (code, body) = PrivilegedCommand.parse(out) {
-                let msg = service.map { L10n.serviceExit(code, $0) } ?? L10n.privExit(code)
+                var msg = service.map { L10n.serviceExit(code, $0) } ?? L10n.privExit(code)
+                if service == nil, request?.isRestore == true, let m = restoreMessage(code: code, body: body) {
+                    msg = m.message
+                    warning = m.warning
+                }
                 phase = .done(ok: code == 0, message: msg, output: body)
             } else {
                 phase = .done(ok: false, message: L10n.privUnavailable, output: out)
@@ -231,9 +274,32 @@ public final class PrivilegedSession: ObservableObject {
         }
     }
 
-    /// 改在终端执行：交给原来的终端退路（临时文件由终端退路的关闭来删）。
+    /// 回国的结果里第四道的部分（v0.72）：命令行 --json 的输出里有 claude_proxy_change（成功）或带 conflicts 的错误应答。
+    func restoreMessage(code: Int, body: String) -> (message: String, warning: Bool)? {
+        struct Out: Decodable {
+            var claudeProxyChange: DaemonClaudeProxyChange?
+            var conflicts: [ClaudecfgConflict]?
+            enum CodingKeys: String, CodingKey { case claudeProxyChange = "claude_proxy_change", conflicts }
+        }
+        // 输出里可能先有别的行：取最后一个以 { 开头的段落解析
+        guard let start = body.range(of: "{", options: []), let o = try? JSONDecoder().decode(Out.self, from: Data(body[start.lowerBound...].utf8)) else { return nil }
+        if code == 0, let c = o.claudeProxyChange {
+            if c.ok { return (c.target ? L10n.restoreClaudeProxyChangeOn : L10n.restoreClaudeProxyChangeOff, false) }
+            return (L10n.restoreClaudeProxyChangeFailed(c.notes ?? []), true)
+        }
+        if code != 0, let cs = o.conflicts, !cs.isEmpty {
+            return (L10n.restoreClaudeProxyConflicts(cs.map { L10n.conflictItem(file: $0.file, variable: $0.var) }), false)
+        }
+        return nil
+    }
+
+    /// 改在终端执行：交给原来的终端退路（临时文件由终端退路的关闭来删）。回国按确认框里当前的选项重新生成命令
+    /// （和提权命令同一份 arguments：只在和现状不同时带 --claude-proxy，v0.72）。
     public func userTappedTerminal() {
-        guard request != nil, phase != .running, let t = terminalPrompt else { return }
+        guard let r = request, phase != .running, var t = terminalPrompt else { return }
+        if r.isRestore, r.steps.count == 1 {
+            t = TerminalPrompt(commands: [resolved(r.steps[0]).terminalCommand])
+        }
         let cb = onTerminal
         request = nil
         phase = .none

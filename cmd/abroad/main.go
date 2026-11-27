@@ -44,7 +44,7 @@ const usage = `用法：abroad [--json] [--yes] [--socket <路径>] <子命令> 
   status [--watch]                 状态（--watch 持续显示事件，Ctrl+C 退出）
   check [--device]                 立即重新跑一轮环境检测
   up | down                        启用 | 停用
-  sudo abroad restore [--kill-browsers]   一键回国（两步确认；后台服务不在时用 sudo abroad-rescue）
+  sudo abroad restore [--kill-browsers] [--claude-proxy on|off]   一键回国（两步确认；--claude-proxy 选回国后第四道开或关，不带就保持现状；后台服务不在时用 sudo abroad-rescue）
   sudo abroad uninstall            卸载
   apps                             在联网的应用
   main show | nodes | check | exit 主代理：当前选择、全部节点、检查、出口的 IP 和地区
@@ -94,7 +94,17 @@ type app struct {
 	client         *apiclient.Client
 	json, yes      bool
 	ctx            context.Context
-	route          string // 当前子命令对应的路由 ID
+	route          string        // 当前子命令对应的路由 ID
+	lines          *bufio.Reader // 读终端的共用缓冲（同一次运行里连续读几行时不能各建一个，v0.72）
+}
+
+// readLine 从标准输入读一行（共用一个缓冲：回国时先问第四道、再要确认词，两行不能被第一次读取吞掉）。
+func (a *app) readLine() string {
+	if a.lines == nil {
+		a.lines = bufio.NewReader(a.stdin)
+	}
+	s, _ := a.lines.ReadString('\n')
+	return s
 }
 
 func main() {
@@ -311,6 +321,15 @@ func (a *app) confirmed(method, path string, body map[string]any) (apiclient.Res
 
 // confirmedWord 同 confirmed，但终端里要输入指定的确认词（卸载要输入 uninstall，设计 10.3）。
 func (a *app) confirmedWord(method, path string, body map[string]any, word string) (apiclient.Response, int) {
+	return a.confirmedAsk(method, path, body, word, nil)
+}
+
+// confirmAsk 是最后确认前的追问（v0.72 回国时问第四道）：打印它那一块；要改选项时返回新的请求体（重新预览、拿新确认码），
+// 不改返回 nil；返回的退出码不是 ExitOK 时什么都不做、退出。round 是第几次预览（重新预览之后只打印、不再问）。
+type confirmAsk func(pw io.Writer, raw []byte, body map[string]any, round int) (map[string]any, int)
+
+// confirmedAsk 同 confirmedWord，多一个可选的追问。
+func (a *app) confirmedAsk(method, path string, body map[string]any, word string, ask confirmAsk) (apiclient.Response, int) {
 	var first any
 	if len(body) > 0 {
 		first = body
@@ -319,6 +338,28 @@ func (a *app) confirmedWord(method, path string, body map[string]any, word strin
 	if code != ExitConfirm {
 		return resp, code
 	}
+	for round := 0; ; round++ {
+		pw, cn := a.printConfirmPreview(resp, body)
+		if ask == nil {
+			return a.confirmWith(method, path, resp, body, word, cn, pw)
+		}
+		nb, c := ask(pw, resp.Body, body, round)
+		if c != ExitOK {
+			return resp, c
+		}
+		if nb == nil {
+			return a.confirmWith(method, path, resp, body, word, cn, pw)
+		}
+		body = nb // 选项改了：带新选项重新发第一步（新的预览、新的确认码），旧码不用
+		resp, code = a.call(method, path, body)
+		if code != ExitConfirm {
+			return resp, code
+		}
+	}
+}
+
+// printConfirmPreview 打印两步确认的预览，返回预览写到哪里和确认码。
+func (a *app) printConfirmPreview(resp apiclient.Response, body map[string]any) (io.Writer, string) {
 	var cn struct {
 		Error   string `json:"error"`
 		Confirm string `json:"confirm"`
@@ -369,6 +410,11 @@ func (a *app) confirmedWord(method, path string, body map[string]any, word strin
 			}
 		}
 	}
+	return pw, cn.Confirm
+}
+
+// confirmWith 要求确认词（--yes 时跳过），带确认码发第二步。
+func (a *app) confirmWith(method, path string, resp apiclient.Response, body map[string]any, word, confirm string, pw io.Writer) (apiclient.Response, int) {
 	if !a.yes {
 		if !a.isTerminal() {
 			fmt.Fprintln(a.stderr, "需要确认：请在终端里运行并确认，或加 --yes")
@@ -379,7 +425,7 @@ func (a *app) confirmedWord(method, path string, body map[string]any, word strin
 			return resp, ExitConfirm
 		}
 		fmt.Fprintf(pw, "确认执行？输入 %s 继续：", word)
-		line, _ := bufio.NewReader(a.stdin).ReadString('\n')
+		line := a.readLine()
 		s := strings.ToLower(strings.TrimSpace(line))
 		ok := s == word
 		if word == "yes" {
@@ -393,7 +439,7 @@ func (a *app) confirmedWord(method, path string, body map[string]any, word strin
 	if body == nil {
 		body = map[string]any{}
 	}
-	body["confirm"] = cn.Confirm
+	body["confirm"] = confirm
 	return a.call(method, path, body)
 }
 

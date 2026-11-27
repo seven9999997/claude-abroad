@@ -58,6 +58,7 @@
 ### 第 2 条 子命令白名单
 - `PrivilegedSubcommand`（Swift 枚举）只列这些（命令行命令表里对应敏感或“按本次调用决定、算出来可能敏感”的接口）：`up`、`restore`、`main add-source`、`main add-node`、`main rm-source`、`main use`、`main confirm-lan`、`main apply`、`exit add`、`exit rm`、`app set`、`app rm`、`rules local|pinned|offline|nofake add|rm`、`rules udp443`、`lan on|off`、`region set`、`region auto`。每个 `SensitiveOperation` 映射到其中一项，参数只来自 `arguments`（第 1 节第 1 步；`terminalCommand` 也由它生成，不另写一份）。
 - **不提供（写明理由）**：`uninstall`（阶段 B 走已安装的 `uninstall.sh`，不走这里）、`claude-proxy on|off`（v0.72“回国确认里选第四道”时再加）、`down`（普通级别，不需要）、`main refresh`（普通级别）、`domains clear`、`check history clear`（普通级别）。
+  - （v0.72 注）`claude-proxy on|off` 已在 B0 按裁定③放进白名单；v0.72 起白名单加第三列“允许的参数”，回国的 `--kill-browsers`、`--claude-proxy` 都从 `SensitiveOperation.arguments` 生成（不再经 `PrivilegedStep.options` 另加），见 `docs/restore-claudeproxy-plan.md` v3。
 - **交叉核对**：
   - Swift `privilegedWhitelistFile`：`PrivilegedSubcommand.allCases` 和 `testdata/privileged-subcommands.txt`（每行“命令词 TAB 路由 ID”）一致；每个 `SensitiveOperation` 的 `arguments` 以白名单里某一项的命令词开头。
   - Go `TestPrivilegedWhitelistMatchesRoutes`（`cmd/abroad`）：文件里每一项在 `commands` 表里有、路由 ID 一致、路由级别是 `api.Sensitive` 或 `api.PerCall`；反过来，命令表里路由是 `Sensitive` 或 `PerCall` 的每个命令，要么在文件里，要么在测试里的 `privilegedNotProvided` 表里写了理由（上面那几项）。新增敏感命令而两边都没写 → 失败。

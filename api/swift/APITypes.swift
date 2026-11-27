@@ -273,6 +273,19 @@ public struct DaemonClaudeDomainsView: Codable, Sendable {
     }
 }
 
+public struct DaemonClaudeProxyChange: Codable, Sendable {
+    public var target: Bool
+    public var ok: Bool
+    public var notes: [String]?
+    public var conflicts: [ClaudecfgConflict]?
+    enum CodingKeys: String, CodingKey {
+        case target = "target"
+        case ok = "ok"
+        case notes = "notes"
+        case conflicts = "conflicts"
+    }
+}
+
 public struct DaemonClaudeProxyConn: Codable, Sendable {
     public var at: String
     public var app: String
@@ -353,6 +366,7 @@ public struct DaemonConfirmNeeded: Codable, Sendable {
     public var preview: ClaudeprocPreview
     public var region: DaemonRegionChange?
     public var returnBlock: Bool?
+    public var claudeProxy: DaemonRestoreClaudeProxy?
     enum CodingKeys: String, CodingKey {
         case error = "error"
         case code = "code"
@@ -361,6 +375,7 @@ public struct DaemonConfirmNeeded: Codable, Sendable {
         case preview = "preview"
         case region = "region"
         case returnBlock = "return_block"
+        case claudeProxy = "claude_proxy"
     }
 }
 
@@ -802,6 +817,51 @@ public struct DaemonRegionStatus: Codable, Sendable {
     }
 }
 
+public struct DaemonRestoreClaudeProxy: Codable, Sendable {
+    public var current: Bool
+    public var target: Bool
+    public var testMode: Bool
+    public var conflicts: [ClaudecfgConflict]?
+    enum CodingKeys: String, CodingKey {
+        case current = "current"
+        case target = "target"
+        case testMode = "test_mode"
+        case conflicts = "conflicts"
+    }
+}
+
+public struct DaemonRestorePreviewView: Codable, Sendable {
+    public var processes: [ClaudeprocTarget]?
+    public var unverified: [ClaudeprocTarget]?
+    public var willKill: Bool
+    public var notice: String?
+    public var browsers: [ClaudeprocTarget]?
+    public var browserNote: String?
+    public var claudeProxy: DaemonRestoreClaudeProxy?
+    public var note: String?
+    enum CodingKeys: String, CodingKey {
+        case processes = "processes"
+        case unverified = "unverified"
+        case willKill = "will_kill"
+        case notice = "notice"
+        case browsers = "browsers"
+        case browserNote = "browser_note"
+        case claudeProxy = "claude_proxy"
+        case note = "note"
+    }
+}
+
+public struct DaemonRestoreRequest: Codable, Sendable {
+    public var confirm: String?
+    public var killBrowsers: Bool?
+    public var claudeProxy: Bool?
+    enum CodingKeys: String, CodingKey {
+        case confirm = "confirm"
+        case killBrowsers = "kill_browsers"
+        case claudeProxy = "claude_proxy"
+    }
+}
+
 public struct DaemonReturnBlockStatus: Codable, Sendable {
     public var on: Bool
     public var active: Bool
@@ -898,6 +958,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var claudeCode: DaemonClaudeProxyStatus?
     public var integrity: IntegrityResult?
     public var browsersLeft: [String]?
+    public var claudeProxyChange: DaemonClaudeProxyChange?
     public var launchControl: Bool?
     public var prepare: DaemonPrepareStatus?
     public var returnBlock: DaemonReturnBlockStatus?
@@ -931,6 +992,7 @@ public struct DaemonStatus: Codable, Sendable {
         case claudeCode = "claude_code"
         case integrity = "integrity"
         case browsersLeft = "browsers_left"
+        case claudeProxyChange = "claude_proxy_change"
         case launchControl = "launch_control"
         case prepare = "prepare"
         case returnBlock = "return_block"

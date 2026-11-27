@@ -130,6 +130,13 @@ struct IntegrationTests {
         #expect(n > 0, "状态变化时应收到事件")
     }
 
+    /// v0.72：真实后台的只读回国预览能解成 DaemonRestorePreviewView（假系统没打开启动管控：没有第四道那一块）。
+    @Test func restorePreviewDecodes() async throws {
+        guard case .ok(let pv) = await client.restorePreview() else { Issue.record("只读回国预览解不出来"); return }
+        #expect(pv.note == "执行时会按当时的情况重新列出；第四道的冲突也会再查一次")
+        #expect(pv.claudeProxy == nil)
+    }
+
     /// M5-9 验收 h：其余页面的视图模型对假系统 abroadd。假系统没有环境检测：页面是“这个模式不提供”。
     @MainActor
     @Test func otherPages() async throws {

@@ -55,6 +55,18 @@ neg "关掉第四道早于 CC1" "${TMP}/n16" "${TMP}/e2"
 grep -q '^CHANGE: /Library/Application Support/claude-abroad/bin/abroad --yes claude-proxy on$' "${TMP}/e1" &&
   grep -q '^CHANGE: /Library/Application Support/claude-abroad/bin/abroad --yes claude-proxy off$' "${TMP}/e1" &&
   ok "b. 第一段空跑里 CC1 前后有打开、关闭第四道" || bad "b. 第一段空跑里没有打开、关闭第四道"
+# v0.72：端到端里的回国一律不带 --claude-proxy（行为不变）；CC1 照旧用 on 和 off 两条命令，claude-proxy 不以别的形式出现
+if cat scripts/m6/e2e/run.sh scripts/m6/e2e/restore.sh scripts/m6/e2e/lib.sh scripts/m6/e2e/commands.txt "${TMP}/e1" "${TMP}/e2" "${TMP}/e3" "${TMP}/r" |
+  grep -vE '^[[:space:]]*#' | grep -qE 'restore.*--claude-proxy'; then
+  bad "b. 端到端脚本里的回国带了 --claude-proxy"
+else
+  ok "b. 端到端脚本里的回国不带 --claude-proxy"
+fi
+{ cat "${TMP}/e1"; echo 'CHANGE: /Library/Application Support/claude-abroad/bin/abroad --yes restore --claude-proxy on'; } | grep -qE 'restore.*--claude-proxy' &&
+  ok "b. 反例被认出：回国带 --claude-proxy" || bad "b. 反例没被认出：回国带 --claude-proxy"
+cp_lines=$(cat "${TMP}/e1" "${TMP}/e2" "${TMP}/e3" | grep -E '^(CHANGE|QUERY|PROBE): .*claude-proxy' | sed 's/^[A-Z]*: //' | sort -u)
+[ "$cp_lines" = "$(printf '%s\n%s' '/Library/Application Support/claude-abroad/bin/abroad --yes claude-proxy off' '/Library/Application Support/claude-abroad/bin/abroad --yes claude-proxy on')" ] &&
+  ok "b. 三段空跑里 claude-proxy 只有 CC1 的 on、off 两条命令" || bad "b. 三段空跑里 claude-proxy 的命令不对：${cp_lines}"
 if cat scripts/m6/e2e/run.sh scripts/m6/e2e/lib.sh "${TMP}/e1" "${TMP}/e2" "${TMP}/e3" | grep -vE '^[[:space:]]*#' | grep -qE 'managed-settings|ClaudeCode/|claude-settings'; then
   bad "b. 端到端里出现了 Claude Code 托管设置的目录或写入命令"
 else

@@ -43,6 +43,19 @@ public enum PrivilegedSubcommand: String, CaseIterable, Sendable {
 
     public var words: [String] { rawValue.split(separator: " ").map(String.init) }
 
+    /// 允许的参数（v0.72，白名单 golden 的第三列）：“--x”是开关，“--x=a|b”是带值的、值只许列出的几种；
+    /// 不带值的位置参数不在这里（由 arguments 生成）。
+    public var allowedFlags: [String] {
+        switch self {
+        case .restore: return ["--kill-browsers", "--claude-proxy=on|off"]
+        case .mainAddSource: return ["--file=*", "--url-file=*", "--name=*", "--via-host"]
+        case .mainAddNode: return ["--file=*", "--name=*"]
+        case .mainUse: return ["--via=*"]
+        case .exitAdd: return ["--kind=*", "--file=*"]
+        default: return []
+        }
+    }
+
     public static func matching(_ args: [String]) -> PrivilegedSubcommand? {
         allCases.filter { args.starts(with: $0.words) }.max { $0.words.count < $1.words.count }
     }
@@ -61,14 +74,12 @@ public struct PrivilegedPaths: Sendable, Equatable {
     }
 }
 
-/// 一步：一个敏感操作，可选的输入文件摘要，和用户在确认框里选的选项（原样传给命令行，如 --kill-browsers）。
+/// 一步：一个敏感操作。参数只来自 op.arguments（v0.72：确认框里的选项也编进 op，例如 .restoreWith，不另加）。
 public struct PrivilegedStep: Sendable, Equatable {
     public var op: SensitiveOperation
-    public var options: [String]
 
-    public init(_ op: SensitiveOperation, options: [String] = []) {
+    public init(_ op: SensitiveOperation) {
         self.op = op
-        self.options = options
     }
 }
 
@@ -81,6 +92,7 @@ public enum ServiceAction: Sendable, Equatable {
 
 public enum PrivilegedCommandError: Error, Equatable {
     case notWhitelisted(String)
+    case flagNotAllowed(String)
     case badCharacter
     case missingDigest
 }
@@ -102,6 +114,30 @@ public enum PrivilegedCommand {
         s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
     }
 
+    /// 子命令之后的参数：以 -- 开头的必须在 allowedFlags 里；带值的取下一个参数，值只许列出的几种（* 表示任意）。
+    static func checkFlags(_ sub: PrivilegedSubcommand, _ rest: [String]) throws {
+        var allowed: [String: [String]?] = [:] // 开关 → nil；带值 → 允许的值（["*"] 表示任意）
+        for f in sub.allowedFlags {
+            if let eq = f.firstIndex(of: "=") {
+                allowed[String(f[..<eq])] = .some(f[f.index(after: eq)...].split(separator: "|").map(String.init))
+            } else {
+                allowed[f] = .some(nil)
+            }
+        }
+        var i = 0
+        while i < rest.count {
+            let a = rest[i]
+            if a.hasPrefix("--") {
+                guard let spec = allowed[a] else { throw PrivilegedCommandError.flagNotAllowed(a) }
+                if let vals = spec {
+                    guard i + 1 < rest.count, vals == ["*"] || vals.contains(rest[i + 1]) else { throw PrivilegedCommandError.flagNotAllowed(a) }
+                    i += 1
+                }
+            }
+            i += 1
+        }
+    }
+
     /// 参数里有换行、NUL 或其他控制字符时拒绝。
     public static func acceptable(_ s: String) -> Bool {
         !s.unicodeScalars.contains { $0.value < 0x20 || $0.value == 0x7F }
@@ -110,7 +146,7 @@ public enum PrivilegedCommand {
     /// 整条 shell 命令。steps 依次执行（前一步失败就停）；有输入文件的一步要给摘要（点“执行”那一刻算的）。
     public static func build(_ steps: [PrivilegedStep], paths: PrivilegedPaths, digests: [String: String]) throws -> String {
         var lines: [String] = ["umask 077", "A=" + shellQuote(paths.abroad) + "; S=" + shellQuote(paths.staging)]
-        for p in [paths.installDir, paths.binDir, paths.abroad] + steps.flatMap({ $0.op.arguments + $0.options }) {
+        for p in [paths.installDir, paths.binDir, paths.abroad] + steps.flatMap({ $0.op.arguments }) {
             guard acceptable(p) else { throw PrivilegedCommandError.badCharacter }
         }
         lines.append(checkLine(paths))
@@ -120,7 +156,7 @@ public enum PrivilegedCommand {
             guard let sub = PrivilegedSubcommand.matching(s.op.arguments) else {
                 throw PrivilegedCommandError.notWhitelisted(s.op.arguments.joined(separator: " "))
             }
-            _ = sub
+            try checkFlags(sub, Array(s.op.arguments.dropFirst(sub.words.count)))
             var args = s.op.arguments
             if let src = s.op.inputFile {
                 guard let sum = digests[src], sum.count == 64, sum.allSatisfy({ $0.isHexDigit }) else { throw PrivilegedCommandError.missingDigest }
@@ -129,7 +165,7 @@ public enum PrivilegedCommand {
                 lines.append(stageLine(src: src, dst: dst, sha: sum.lowercased(), first: staged == 1))
                 args = args.map { $0 == src ? dst : $0 }
             }
-            runs.append((["\"$A\"", "--yes", "--json"] + (args + s.options).map(shellQuote)).joined(separator: " "))
+            runs.append((["\"$A\"", "--yes", "--json"] + args.map(shellQuote)).joined(separator: " "))
         }
         for r in runs {
             lines.append(r + "; rc=$?; [ $rc = 0 ] || { /bin/rm -rf \"$S\"; echo \"RESULT=$rc\"; exit 0; }")

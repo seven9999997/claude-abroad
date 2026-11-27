@@ -39,10 +39,11 @@ func TestPrivilegedWhitelistMatchesRoutes(t *testing.T) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		words, route, ok := strings.Cut(line, "\t")
-		if !ok {
-			t.Fatalf("格式不对：%q", line)
+		cols := strings.Split(line, "\t")
+		if len(cols) != 3 {
+			t.Fatalf("格式不对（三列：命令词、路由 ID、允许的参数）：%q", line)
 		}
+		words, route := cols[0], cols[1]
 		white[words] = true
 		got, ok := cmdRoute[words]
 		if !ok {
@@ -76,9 +77,71 @@ func TestPrivilegedWhitelistMatchesRoutes(t *testing.T) {
 			t.Errorf("“不提供”表里的 %q 不是敏感级别（%s）：普通级别的命令应用直接调接口，不用列", words, l)
 		}
 	}
+	// v0.72：第三列“允许的参数”每一项都出现在命令行帮助里这个子命令的用法行里；回国有 --kill-browsers 和 --claude-proxy
+	if errs := whitelistFlagErrors(string(b), usage); len(errs) > 0 {
+		t.Error(strings.Join(errs, "\n"))
+	}
+	if !strings.Contains(string(b), "restore\trestore\t--kill-browsers --claude-proxy=on|off\n") {
+		t.Error("白名单里 restore 一行应允许 --kill-browsers 和 --claude-proxy=on|off")
+	}
 	for _, w := range []string{"claude-proxy on", "claude-proxy off"} {
 		if !white[w] {
 			t.Errorf("第四道的开关 %q 应在白名单里（顾问 2026-11-27 裁定）", w)
 		}
+	}
+}
+
+// whitelistFlagErrors 核对白名单第三列（允许的参数）：每个参数名都要出现在帮助文本里这个子命令的用法行里（v0.72）。
+func whitelistFlagErrors(white, help string) []string {
+	var errs []string
+	for _, line := range strings.Split(white, "\n") {
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		cols := strings.Split(line, "\t")
+		if len(cols) != 3 || cols[2] == "" {
+			continue
+		}
+		var usageLine string
+		for _, h := range strings.Split(help, "\n") {
+			if i := strings.Index(h, "abroad "+cols[0]); i >= 0 {
+				rest := h[i+len("abroad "+cols[0]):]
+				if rest == "" || rest[0] == ' ' {
+					usageLine = h
+					break
+				}
+			}
+		}
+		if usageLine == "" {
+			errs = append(errs, cols[0]+"：帮助文本里没有它的用法行")
+			continue
+		}
+		for _, f := range strings.Fields(cols[2]) {
+			name, vals, hasVal := strings.Cut(f, "=")
+			if !strings.Contains(usageLine, name) {
+				errs = append(errs, cols[0]+"：允许的参数 "+name+" 不在用法行里")
+				continue
+			}
+			if hasVal && vals != "*" && !strings.Contains(usageLine, name+" "+vals) {
+				errs = append(errs, cols[0]+"：允许的参数 "+name+" 的取值 "+vals+" 和用法行不一致")
+			}
+		}
+	}
+	return errs
+}
+
+// 反例：给 restore 带一个不在用法里的参数、或取值不一致时，核对要报错。
+func TestPrivilegedWhitelistFlagCounterexamples(t *testing.T) {
+	for _, bad := range []string{
+		"restore\trestore\t--kill-browsers --force-everything\n",
+		"restore\trestore\t--claude-proxy=yes|no\n",
+		"nosuch cmd\trestore\t--x\n",
+	} {
+		if errs := whitelistFlagErrors(bad, usage); len(errs) == 0 {
+			t.Errorf("应报错：%q", bad)
+		}
+	}
+	if errs := whitelistFlagErrors("restore\trestore\t--kill-browsers --claude-proxy=on|off\n", usage); len(errs) != 0 {
+		t.Errorf("正例不应报错：%v", errs)
 	}
 }

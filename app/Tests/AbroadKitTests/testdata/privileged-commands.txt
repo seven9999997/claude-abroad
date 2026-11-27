@@ -18,3 +18,15 @@ for p in "$A" '@INST@/bin' '@INST@'; do [ -e "$p" ] && [ ! -L "$p" ] && [ "$(/us
 "$A" --yes --json 'main' 'use' 'n1' '--via' 'n2'; rc=$?; [ $rc = 0 ] || { /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
 "$A" --yes --json 'main' 'apply'; rc=$?; [ $rc = 0 ] || { /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
 /bin/rm -rf "$S"; echo 'RESULT=0'; exit 0
+### restore-cp-on
+umask 077
+A='@INST@/bin/abroad'; S='@STG@'
+for p in "$A" '@INST@/bin' '@INST@'; do [ -e "$p" ] && [ ! -L "$p" ] && [ "$(/usr/bin/stat -f %u "$p")" = 0 ] && [ $(( 0$(/usr/bin/stat -f %Lp "$p") & 022 )) = 0 ] || { echo 'RESULT=31'; exit 0; }; done; [ -f "$A" ] || { echo 'RESULT=31'; exit 0; }
+"$A" --yes --json 'restore' '--claude-proxy' 'on'; rc=$?; [ $rc = 0 ] || { /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
+/bin/rm -rf "$S"; echo 'RESULT=0'; exit 0
+### restore-kill-cp-off
+umask 077
+A='@INST@/bin/abroad'; S='@STG@'
+for p in "$A" '@INST@/bin' '@INST@'; do [ -e "$p" ] && [ ! -L "$p" ] && [ "$(/usr/bin/stat -f %u "$p")" = 0 ] && [ $(( 0$(/usr/bin/stat -f %Lp "$p") & 022 )) = 0 ] || { echo 'RESULT=31'; exit 0; }; done; [ -f "$A" ] || { echo 'RESULT=31'; exit 0; }
+"$A" --yes --json 'restore' '--kill-browsers' '--claude-proxy' 'off'; rc=$?; [ $rc = 0 ] || { /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
+/bin/rm -rf "$S"; echo 'RESULT=0'; exit 0

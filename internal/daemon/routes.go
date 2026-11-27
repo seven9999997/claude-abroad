@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 
 	"claude-abroad/internal/api"
-	"claude-abroad/internal/claudeproc"
 	"claude-abroad/internal/envcheck"
 	"claude-abroad/internal/rules"
 	"claude-abroad/internal/usererror"
@@ -29,9 +28,9 @@ func RouteTable() []api.Route {
 		{ID: "enable", Method: "POST", Path: "/v1/enable", Level: api.PerCall, Async: true, Req: ConfirmRequest{}, Resp: Status{}, Note: "启用；地区会变时两步确认，签名校验推迟期间按敏感处理"},
 		{ID: "disable", Method: "POST", Path: "/v1/disable", Level: api.Normal, Async: true, Resp: Status{}, Note: "停用"},
 		{ID: "enable-preview", Method: "GET", Path: "/v1/enable/preview", Level: api.Read, Resp: EnablePreview{}, Note: "启用的预览（只查看：不签发确认码、不改任何状态、不拉起虚拟机；地区会不会变、会变时要结束的 Claude 进程、现在能不能启用；v0.71b）"},
-		{ID: "restore", Method: "POST", Path: "/v1/restore", Level: api.Sensitive, Req: ConfirmRequest{}, Resp: Status{}, Note: "回国：一律两步确认"},
-		{ID: "restore-preview", Method: "GET", Path: "/v1/restore/preview", Level: api.Read, Resp: claudeproc.Preview{}, Note: "回国会结束的 Claude 进程清单（只查看：不签发确认码、不改任何状态；design 10.1）"},
-		{ID: "restore-alias", Method: "POST", Path: "/v1/actions/restore", Level: api.Sensitive, Req: ConfirmRequest{}, Resp: Status{}, Note: "回国的别名"},
+		{ID: "restore", Method: "POST", Path: "/v1/restore", Level: api.Sensitive, Req: RestoreRequest{}, Resp: Status{}, Note: "回国：一律两步确认；可带 claude_proxy（回国之后第四道开或关，确认码按原值绑定；先回国、成功后才切换，结果在 claude_proxy_change；v0.72）"},
+		{ID: "restore-preview", Method: "GET", Path: "/v1/restore/preview", Level: api.Read, Resp: RestorePreviewView{}, Note: "回国会结束的 Claude 进程清单和第四道的现状、冲突（只查看：不签发确认码、不改任何状态；?kill_browsers=true、?claude_proxy=on|off 按勾选预览；design 10.1、v0.72）"},
+		{ID: "restore-alias", Method: "POST", Path: "/v1/actions/restore", Level: api.Sensitive, Req: RestoreRequest{}, Resp: Status{}, Note: "回国的别名"},
 		{ID: "uninstall-preview", Method: "GET", Path: "/v1/uninstall/preview", Level: api.Read, Resp: UninstallPreviewView{}, Note: "卸载的预览（只查看：不签发确认码、不改任何状态、不拉起虚拟机；内容同卸载第一步；?kill_browsers=true 时按勾选浏览器预览；v0.71c）"},
 		{ID: "uninstall", Method: "POST", Path: "/v1/actions/uninstall", Level: api.Sensitive, Req: ConfirmRequest{}, Resp: UninstallResult{}, Note: "一键卸载（两步确认）：结束 Claude、恢复本机网络、解除 Claude 启动管控；注销后台服务等由安装器完成"},
 		{ID: "exits-list", Method: "GET", Path: "/v1/exits", Level: api.Read, Note: "分流出口摘要（不含配置原文和密钥）"},
