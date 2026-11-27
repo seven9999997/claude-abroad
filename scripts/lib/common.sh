@@ -216,11 +216,22 @@ ab_services() { networksetup -listallnetworkservices 2>/dev/null | tail -n +2 | 
 ab_dev_flags_missing() {
   local bin=$1 help f miss=0; shift
   [ -x "$bin" ] || return 2
-  help=$("$bin" -h 2>&1)
+  help=$("$bin" -h 2>&1 || true) # abroadd -h 的退出码是 2（Go 的 flag 包）：只看输出，不看退出码
   for f in "$@"; do
     printf '%s\n' "$help" | grep -qE -- "(^|[[:space:]])-?${f#--}([[:space:]=]|$)" || { printf '%s\n' "$f"; miss=1; }
   done
   return $miss
+}
+
+# 二进制里有没有任何开发参数（发版物料用：发布构建里不能有）。有时输出这些参数名并返回 0，没有返回 1，程序不能执行返回 2。
+# 同样先存下输出再判断：直接 “abroadd -h | grep -q” 在 pipefail 下永远是假（退出码 2），检查形同虚设。
+ab_dev_flags_present() {
+  local bin=$1 help found
+  [ -x "$bin" ] || return 2
+  help=$("$bin" -h 2>&1 || true)
+  found=$(printf '%s\n' "$help" | grep -oE -- '(^|[[:space:]])-{1,2}dev-[a-z0-9-]+' | tr -d ' \t' | sort -u)
+  [ -n "$found" ] || return 1
+  printf '%s\n' "$found"
 }
 
 ab_system_proxy_on() {

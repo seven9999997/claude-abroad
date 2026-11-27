@@ -23,9 +23,9 @@ echo "${PATCH}"
 echo "== 2. 发布构建"
 scripts/dev/integrity-build.sh >"${OUT}/integrity-build.txt"
 B="scripts/dev/out/integrity"
-# 先存下输出再判断：abroadd -h 的退出码是 2，直接接管道在 pipefail 下这条检查永远不会触发
-usage=$("${B}/bin/abroadd" -h 2>&1 || true)
-if printf '%s\n' "${usage}" | grep -- '-dev-' >/dev/null; then
+. scripts/lib/common.sh # ab_dev_flags_present（自测 scripts/lib/buildcheck-selftest.sh）
+# 用公共函数（先存下输出再判断）：abroadd -h 的退出码是 2，直接接管道在 pipefail 下这条检查永远不会触发
+if ab_dev_flags_present "${B}/bin/abroadd" >/dev/null; then
   echo "✗ 发布构建的 abroadd 里还有开发参数" >&2
   exit 1
 fi

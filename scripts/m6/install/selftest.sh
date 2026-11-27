@@ -203,6 +203,9 @@ printf 'user\tno\npf.enabled\tDisabled\n' >"${TMP}/sa"; printf 'user\tno\npf.ena
 env -u M6I_TEST_SRC -u M6I_TEST_APP -u M6I_TEST_DIR bash -c ". scripts/m6/install/lib.sh; m6i_sys_cmp '${TMP}/sa' '${TMP}/sb'" >/dev/null 2>&1 && ok "M6-11b. pf 是否启用无法判断时不算不一致" || bad "M6-11b. pf 是否启用无法判断时被当成不一致"
 env -u M6I_TEST_SRC -u M6I_TEST_APP -u M6I_TEST_DIR bash -c ". scripts/m6/install/lib.sh; m6i_sys_cmp '${TMP}/sa' '${TMP}/sc'" >/dev/null 2>&1 && bad "M6-11b. pf 启用状态变了没被发现" || ok "M6-11b. pf 启用状态变了会被发现"
 
+# 2026-11-27：真机路径上“是不是开发构建”的判断（测试模式跳过它），由公共函数的自测覆盖
+scripts/lib/buildcheck-selftest.sh >"${TMP}/bc" 2>&1 && ok "“是不是开发构建”的判断（$(grep -c '^✓' "${TMP}/bc") 项，含退出码 2 的假程序）" || bad "“是不是开发构建”的判断：$(grep '^✗' "${TMP}/bc" | head -3)"
+
 echo
 [ $fails = 0 ] && echo "自测全部通过" || echo "自测：${fails} 处不通过"
 exit $((fails > 0))
