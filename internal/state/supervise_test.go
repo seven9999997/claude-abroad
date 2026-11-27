@@ -195,9 +195,9 @@ func TestSuperviseRouteHijack(t *testing.T) {
 		b := newBed(t)
 		s, _ := b.newSup()
 		mustOK(t, b.m.Enable(bg))
-		b.net.SetForeignRoute(netip.MustParsePrefix("0.0.0.0/1"), "utun9")
+		b.net.SetForeignRoute(netip.MustParsePrefix("1.0.0.0/8"), "utun9")
 		tick(t, s)
-		if b.net.Snapshot().Routes[netip.MustParsePrefix("0.0.0.0/1")] != b.tun.Name() || !b.gate.IsOpen() || b.countEvents(EvRouteRepaired) != 1 {
+		if b.net.Snapshot().Routes[netip.MustParsePrefix("1.0.0.0/8")] != b.tun.Name() || !b.gate.IsOpen() || b.countEvents(EvRouteRepaired) != 1 {
 			t.Fatal("应改回并重新开闸门")
 		}
 		mustOK(t, b.m.Restore(bg))
@@ -556,13 +556,13 @@ func TestSuperviseUtunDeadKeepsName(t *testing.T) {
 	b.noViolations()
 }
 
-// M2-9a c：别的软件加一条 8/5 经 utun9（地址探测抓不到）：一轮内关闸门、修复后仍不通过、不删改它；撤掉后重开。
+// M2-9a c：别的软件加一条 8/6 经 utun9（比我们的 8/5 更具体，地址探测抓不到；v0.72e 起 8/5 是我们自己的）：一轮内关闸门、修复后仍不通过、不删改它；撤掉后重开。
 // 加 10/8 经 utun9（内网分段）：闸门不关。
 func TestSuperviseRouteTableConflict(t *testing.T) {
 	b := newBed(t)
 	s, _ := b.newSup()
 	mustOK(t, b.m.Enable(bg))
-	p85 := netip.MustParsePrefix("8.0.0.0/5")
+	p85 := netip.MustParsePrefix("8.0.0.0/6")
 	b.net.SetForeignRoute(p85, "utun9")
 	for _, a := range ProbeAddrs {
 		if via, _ := b.net.Routes().Via(bg, a); via != b.tun.Name() {

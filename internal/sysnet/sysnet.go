@@ -11,7 +11,21 @@ import (
 	"claude-abroad/internal/pf"
 )
 
-// Routes 管理接管用的路由（例如 0.0.0.0/1 → utun）。
+// TakeoverRoutes 是接管用的路由：1.0.0.0/8 起到 255.255.255.255，和 Clash、sing-box 的自动路由同形，**不含 0.0.0.0/8**。
+// 2026-11-27 真机：用 0.0.0.0/1 时，按物理网卡限定的默认路由查找（IP_BOUND_IF 绑物理网卡的拨号要走它）拿 0.0.0.0 去匹配，
+// 落到经我们 utun 的 0/1 上，答“not in table”，虚拟机对第一跳的拨号全部 ENETUNREACH、启用回滚。0.0.0.0/8 不是可路由的目的，
+// 不经 utun 也没有出去的流量（pf 的最后一条照样拦下）。
+var TakeoverRoutes = []netip.Prefix{
+	netip.MustParsePrefix("1.0.0.0/8"), netip.MustParsePrefix("2.0.0.0/7"), netip.MustParsePrefix("4.0.0.0/6"),
+	netip.MustParsePrefix("8.0.0.0/5"), netip.MustParsePrefix("16.0.0.0/4"), netip.MustParsePrefix("32.0.0.0/3"),
+	netip.MustParsePrefix("64.0.0.0/2"), netip.MustParsePrefix("128.0.0.0/1"),
+}
+
+// LegacyTakeoverRoutes 是旧版本（v0.72e 之前）加的接管路由里、新集合没有的那条：恢复和应急程序顺带删掉
+// （Delete 先确认它经我们的 utun 才删，不在或不是我们的直接跳过）。
+var LegacyTakeoverRoutes = []netip.Prefix{netip.MustParsePrefix("0.0.0.0/1")}
+
+// Routes 管理接管用的路由（TakeoverRoutes → utun）。
 type Routes interface {
 	// Add 成功返回时，dst 必须经 ifName（M2-7e 约定）：
 	//   - 已存在且接口相同：返回 ErrExists（调用方按成功处理）；

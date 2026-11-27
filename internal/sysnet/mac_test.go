@@ -535,3 +535,23 @@ func TestSimRouteViaGateway(t *testing.T) {
 		t.Fatalf("经网关添加后应落在 utun7：%q %v", via, err)
 	}
 }
+
+// 接管路由覆盖 1.0.0.0–255.255.255.255、互不重叠、不含 0.0.0.0/8（按物理网卡限定的默认路由查找拿 0.0.0.0 匹配，
+// 0.0.0.0/8 被我们的路由盖住时绑物理网卡的拨号全部不可达，2026-11-27 真机）。
+func TestTakeoverRoutesCoverage(t *testing.T) {
+	next := uint64(1 << 24) // 1.0.0.0
+	for _, p := range TakeoverRoutes {
+		a := p.Addr().As4()
+		start := uint64(a[0])<<24 | uint64(a[1])<<16 | uint64(a[2])<<8 | uint64(a[3])
+		if start != next || p != p.Masked() {
+			t.Fatalf("%s 不接着上一段（期望从 %d 开始）", p, next)
+		}
+		next = start + 1<<(32-p.Bits())
+		if p.Contains(netip.MustParseAddr("0.0.0.0")) {
+			t.Fatalf("%s 盖住了 0.0.0.0", p)
+		}
+	}
+	if next != 1<<32 {
+		t.Fatalf("没覆盖到 255.255.255.255：止于 %d", next)
+	}
+}

@@ -17,7 +17,7 @@ import (
 
 // 接管用的路由和 DNS（设计 4.1）。
 var (
-	TakeoverRoutes = []netip.Prefix{netip.MustParsePrefix("0.0.0.0/1"), netip.MustParsePrefix("128.0.0.0/1")}
+	TakeoverRoutes = sysnet.TakeoverRoutes // 不含 0.0.0.0/8，见 sysnet.TakeoverRoutes
 	TakeoverDNS    = netip.MustParseAddr("198.18.0.2")
 )
 
@@ -504,7 +504,7 @@ func (m *Machine) undoTakeover(ctx context.Context) error {
 	if err := ignoreNotFound(m.D.DNS.Remove(ctx)); err != nil {
 		return err
 	}
-	for _, dst := range TakeoverRoutes {
+	for _, dst := range append(slices.Clone(TakeoverRoutes), sysnet.LegacyTakeoverRoutes...) {
 		if err := ignoreNotFound(m.D.Routes.Delete(ctx, dst)); err != nil {
 			return err
 		}

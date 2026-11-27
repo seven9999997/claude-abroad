@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"slices"
 	"strings"
 
 	"claude-abroad/internal/claudeproc"
@@ -216,7 +217,7 @@ func Run(ctx context.Context, d Deps) int {
 	if err := ignoreNotFound(d.DNS.Remove(ctx)); err != nil {
 		return fail(say, 5, "删除本项目的 DNS 设置", err)
 	}
-	for _, dst := range state.TakeoverRoutes {
+	for _, dst := range append(slices.Clone(state.TakeoverRoutes), sysnet.LegacyTakeoverRoutes...) {
 		if err := ignoreNotFound(d.Routes.Delete(ctx, dst)); err != nil {
 			return fail(say, 5, "删除接管路由 "+dst.String(), err)
 		}

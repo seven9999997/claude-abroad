@@ -13,16 +13,35 @@
 /sbin/pfctl -o none -a com.apple/250.abroad -f -
 /sbin/pfctl -s info
 /sbin/pfctl -s rules
-/sbin/route -n add -net 0.0.0.0/1 198.18.0.1
+/sbin/route -n add -net 1.0.0.0/8 198.18.0.1
 /sbin/route -n add -net 128.0.0.0/1 198.18.0.1
-/sbin/route -n change -net 0.0.0.0/1 198.18.0.1
-/sbin/route -n delete -net 0.0.0.0/1
+/sbin/route -n add -net 16.0.0.0/4 198.18.0.1
+/sbin/route -n add -net 2.0.0.0/7 198.18.0.1
+/sbin/route -n add -net 32.0.0.0/3 198.18.0.1
+/sbin/route -n add -net 4.0.0.0/6 198.18.0.1
+/sbin/route -n add -net 64.0.0.0/2 198.18.0.1
+/sbin/route -n add -net 8.0.0.0/5 198.18.0.1
+/sbin/route -n change -net 1.0.0.0/8 198.18.0.1
+/sbin/route -n delete -net 1.0.0.0/8
 /sbin/route -n delete -net 128.0.0.0/1
+/sbin/route -n delete -net 16.0.0.0/4
+/sbin/route -n delete -net 2.0.0.0/7
+/sbin/route -n delete -net 32.0.0.0/3
+/sbin/route -n delete -net 4.0.0.0/6
+/sbin/route -n delete -net 64.0.0.0/2
+/sbin/route -n delete -net 8.0.0.0/5
 /sbin/route -n get 0.0.0.1
+/sbin/route -n get 1.0.0.1
 /sbin/route -n get 1.1.1.1
 /sbin/route -n get 128.0.0.1
 /sbin/route -n get 129.0.0.1
+/sbin/route -n get 16.0.0.1
 /sbin/route -n get 198.18.0.2
+/sbin/route -n get 2.0.0.1
+/sbin/route -n get 32.0.0.1
+/sbin/route -n get 4.0.0.1
+/sbin/route -n get 64.0.0.1
+/sbin/route -n get 8.0.0.1
 /sbin/route -n get default
 /usr/bin/defaults delete /Library/Preferences/.GlobalPreferences AppleLanguages
 /usr/bin/defaults read /Library/Preferences/.GlobalPreferences AppleLanguages

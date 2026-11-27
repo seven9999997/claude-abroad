@@ -158,7 +158,7 @@ func ParseRouteGet(out []byte) (string, error) {
 	return "", ErrUnknownOutput
 }
 
-// Present 实现 Routes：两条 /1 里各取一个地址，都经我们的 utun 才算在。
+// Present 实现 Routes：接管路由每一段各取一个地址，都经我们的 utun 才算在。
 func (m MacRoutes) Present(ctx context.Context) (bool, error) {
 	if m.Iface == nil {
 		return false, errors.New("没有配置我们的 utun 名")
@@ -167,7 +167,8 @@ func (m MacRoutes) Present(ctx context.Context) (bool, error) {
 	if want == "" {
 		return false, nil
 	}
-	for _, a := range []netip.Addr{netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("129.0.0.1")} {
+	for _, dst := range TakeoverRoutes { // 每一段各查一个地址
+		a := dst.Addr().Next()
 		via, err := m.Via(ctx, a)
 		if errors.Is(err, ErrNotFound) {
 			return false, nil

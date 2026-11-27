@@ -57,7 +57,7 @@ func TestEnableSnapshotFakes(t *testing.T) {
 	ctl := snapPF(t, map[int][4]int64{5: {12, 0, 0, 0}})
 	net := sysnet.NewFake(sysnet.FakeState{Default: "en0", Routes: map[netip.Prefix]string{}})
 	rt := net.Routes()
-	_ = rt.Add(context.Background(), netip.MustParsePrefix("0.0.0.0/1"), "utun7")
+	_ = rt.Add(context.Background(), netip.MustParsePrefix("1.0.0.0/8"), "utun7")
 	_ = rt.Add(context.Background(), netip.MustParsePrefix("128.0.0.0/1"), "utun7")
 	net.SetForeignRoute(netip.MustParsePrefix("8.8.0.0/16"), "utun3") // 别的隧道占着一段公网路由
 	s := TakeEnableSnapshot(context.Background(), SnapshotDeps{PF: ctl, Routes: rt, OurUtun: func() string { return "utun7" },
@@ -69,7 +69,7 @@ func TestEnableSnapshotFakes(t *testing.T) {
 	if s.FirstHopKind != "ip" || s.FirstHopRouteIface != "utun3" {
 		t.Fatalf("去第一跳：%s %s", s.FirstHopKind, s.FirstHopRouteIface)
 	}
-	if s.HalfRouteIfaces["0/1"] != "utun7" || s.HalfRouteIfaces["128/1"] != "utun7" {
+	if s.HalfRouteIfaces["1/8–64/2"] != "utun7" || s.HalfRouteIfaces["128/1"] != "utun7" {
 		t.Fatalf("两条 /1：%v", s.HalfRouteIfaces)
 	}
 	if len(s.ForeignTunnels) != 1 || s.ForeignTunnels[0] != "utun3" || s.DialBoundIface != "en0" {
@@ -114,7 +114,7 @@ func TestEnableFailureSnapshotRecorded(t *testing.T) {
 	for _, ev := range status(t, d).Events {
 		if ev.Source == "enable" && ev.Kind == "snapshot" {
 			found = true
-			if !strings.Contains(ev.Detail, "pf 已启用") || !strings.Contains(ev.Detail, "0/1 走 utun") {
+			if !strings.Contains(ev.Detail, "pf 已启用") || !strings.Contains(ev.Detail, "1/8–64/2 走 utun") {
 				t.Errorf("快照事件：%s", ev.Detail)
 			}
 		}

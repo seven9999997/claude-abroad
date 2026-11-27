@@ -257,8 +257,8 @@ var pfAllowed = []*regexp.Regexp{
 }
 
 var netAllowed = []*regexp.Regexp{
-	regexp.MustCompile(`^/sbin/route -n (add|change) -net (0\.0\.0\.0/1|128\.0\.0\.0/1) 198\.18\.0\.1$`),
-	regexp.MustCompile(`^/sbin/route -n delete -net (0\.0\.0\.0/1|128\.0\.0\.0/1)$`),
+	regexp.MustCompile(`^/sbin/route -n (add|change) -net (1\.0\.0\.0/8|2\.0\.0\.0/7|4\.0\.0\.0/6|8\.0\.0\.0/5|16\.0\.0\.0/4|32\.0\.0\.0/3|64\.0\.0\.0/2|128\.0\.0\.0/1) 198\.18\.0\.1$`),
+	regexp.MustCompile(`^/sbin/route -n delete -net (0\.0\.0\.0/1|1\.0\.0\.0/8|2\.0\.0\.0/7|4\.0\.0\.0/6|8\.0\.0\.0/5|16\.0\.0\.0/4|32\.0\.0\.0/3|64\.0\.0\.0/2|128\.0\.0\.0/1)$`),
 	regexp.MustCompile(`^/sbin/route -n get [0-9.]+$`),
 	regexp.MustCompile(`^/usr/sbin/netstat -rn -f inet$`),
 	// 冲突检查的只读命令（M2-8 的只读白名单）。
@@ -327,8 +327,8 @@ func TestCommandAudit(t *testing.T) {
 	for !e.sys.PF.Active(pf.DefaultAnchor) && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
-	// 别的软件把 0.0.0.0/1 改到 utun9：监护用 route change 改回（让 change 出现在命令清单里，M2-9b-2 第 0 步）。
-	n01 := netip.MustParsePrefix("0.0.0.0/1")
+	// 别的软件把 1.0.0.0/8 改到 utun9：监护用 route change 改回（让 change 出现在命令清单里，M2-9b-2 第 0 步）。
+	n01 := netip.MustParsePrefix("1.0.0.0/8")
 	ours := status(t, d).Utun
 	e.sys.Net.SetForeignRoute(n01, "utun9")
 	deadline = time.Now().Add(3 * time.Second)
@@ -336,7 +336,7 @@ func TestCommandAudit(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	if e.sys.Net.Snapshot().Routes[n01] != ours {
-		t.Fatal("监护没有把 0.0.0.0/1 改回")
+		t.Fatal("监护没有把 1.0.0.0/8 改回")
 	}
 	d.abandon()
 	e.d = nil

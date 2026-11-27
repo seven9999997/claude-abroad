@@ -82,7 +82,7 @@ type SnapshotDeps struct {
 const SnapshotTimeout = 5 * time.Second
 
 // halfProbes 是两条 /1 各取的探测地址（同冲突检查的 RouteProbes）。
-var halfProbes = []struct{ name, addr string }{{"0/1", "1.1.1.1"}, {"128/1", "129.0.0.1"}}
+var halfProbes = []struct{ name, addr string }{{"1/8–64/2", "1.1.1.1"}, {"128/1", "129.0.0.1"}}
 
 var ifNameRe = regexp.MustCompile(`^[a-z][a-z0-9]{0,15}$`)
 
@@ -232,8 +232,8 @@ func (s EnableSnapshot) Summary() string {
 		parts = append(parts, "读不出第一跳")
 	}
 	if len(s.HalfRouteIfaces) > 0 {
-		parts = append(parts, fmt.Sprintf("0/1 走 %s、128/1 走 %s（我们的 utun %s）",
-			orDash(s.HalfRouteIfaces["0/1"]), orDash(s.HalfRouteIfaces["128/1"]), orDash(s.OurUtun)))
+		parts = append(parts, fmt.Sprintf("1/8–64/2 走 %s、128/1 走 %s（我们的 utun %s）",
+			orDash(s.HalfRouteIfaces["1/8–64/2"]), orDash(s.HalfRouteIfaces["128/1"]), orDash(s.OurUtun)))
 	}
 	if len(s.ForeignTunnels) > 0 {
 		parts = append(parts, "别的隧道占着路由："+strings.Join(s.ForeignTunnels, "、"))

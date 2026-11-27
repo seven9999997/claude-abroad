@@ -215,7 +215,10 @@ func TestOrder(t *testing.T) {
 		t.Fatalf("退出码 %d：%s", code, e.out.String())
 	}
 	want := []string{"claude.preview", "claude.kill", "pf.flush", "pf.release 11", "pf.release 12", "pf.release 77",
-		"dns.remove", "route.delete 0.0.0.0/1", "route.delete 128.0.0.0/1", "ipv6.restore Wi-Fi automatic",
+		"dns.remove", "route.delete 1.0.0.0/8", "route.delete 2.0.0.0/7", "route.delete 4.0.0.0/6", "route.delete 8.0.0.0/5",
+		"route.delete 16.0.0.0/4", "route.delete 32.0.0.0/3", "route.delete 64.0.0.0/2", "route.delete 128.0.0.0/1",
+		"route.delete 0.0.0.0/1", // 旧版本留下的那条（v0.72e）
+		"ipv6.restore Wi-Fi automatic",
 		"locale.system", "locale.user", "locale.autotz", "locale.tz Asia/Shanghai"}
 	if strings.Join(e.r.seq, "|") != strings.Join(want, "|") {
 		t.Fatalf("调用序列：\n%v\n应为：\n%v", e.r.seq, want)
