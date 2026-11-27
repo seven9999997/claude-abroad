@@ -973,6 +973,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var build: BuildinfoInfo?
     public var stateFormat: Int64?
     public var busy: Bool?
+    public var starting: Bool?
     public var uninstall: DaemonUninstallFlags?
     enum CodingKeys: String, CodingKey {
         case state = "state"
@@ -1007,6 +1008,7 @@ public struct DaemonStatus: Codable, Sendable {
         case build = "build"
         case stateFormat = "state_format"
         case busy = "busy"
+        case starting = "starting"
         case uninstall = "uninstall"
     }
 }

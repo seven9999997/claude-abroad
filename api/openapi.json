@@ -1712,6 +1712,9 @@
           "stack": {
             "$ref": "#/components/schemas/StackProxyStats"
           },
+          "starting": {
+            "type": "boolean"
+          },
           "state": {
             "type": "string"
           },

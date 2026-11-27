@@ -3,12 +3,14 @@ package daemon
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"claude-abroad/internal/api"
 	"claude-abroad/internal/buildinfo"
 	"claude-abroad/internal/pf"
 	"claude-abroad/internal/state"
@@ -123,4 +125,46 @@ func TestStopStartKeepsState(t *testing.T) {
 			}
 		})
 	}
+}
+
+// 2026-11-27 真机：原地升级后马上操作被回“忙”，文字却是“已经有一个启用、停用或恢复在进行”。启动检查没结束时，
+// /v1/status 的 starting 为真；被拒的改动类请求仍是 409 busy，文字换成 StartingBusyText；不忙的请求照常进行。
+// 启动检查结束后 starting 为假，忙时回原来的文字。
+func TestStartingBusyText(t *testing.T) {
+	e := newEnv(t)
+	d := e.start(e.opts())
+	if st := status(t, d); st.Starting {
+		t.Fatal("启动检查结束后 starting 应为假")
+	}
+	d.startupHold.Store(true)
+	hold := func(fn func()) {
+		t.Helper()
+		if err := d.m.Exclusive(func() error { fn(); return nil }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hold(func() {
+		if st := status(t, d); !st.Starting || !st.Busy {
+			t.Errorf("启动中且占着忙标记：starting=%v busy=%v", st.Starting, st.Busy)
+		}
+		code, b := call(t, d, "POST", "/v1/enable", nil)
+		eb := codeOf(t, b)
+		if code != http.StatusConflict || eb.Code != api.CodeBusy || eb.Error != StartingBusyText {
+			t.Errorf("启动中被拒：%d %s", code, b)
+		}
+	})
+	if code, b := call(t, d, "POST", "/v1/enable", nil); code != http.StatusOK {
+		t.Fatalf("启动中、不忙时启用照常进行：%d %s", code, b)
+	}
+	d.startupHold.Store(false)
+	if st := status(t, d); st.Starting {
+		t.Fatal("启动检查结束后 starting 应为假")
+	}
+	hold(func() {
+		code, b := call(t, d, "POST", "/v1/enable", nil)
+		eb := codeOf(t, b)
+		if code != http.StatusConflict || eb.Code != api.CodeBusy || eb.Error == StartingBusyText || !strings.Contains(eb.Error, "已经有一个") {
+			t.Errorf("启动后忙：%d %s", code, b)
+		}
+	})
 }

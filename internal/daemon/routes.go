@@ -1,7 +1,9 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -181,8 +183,78 @@ func (d *Daemon) guard(rt api.Route, fn http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
+		if r.Method != http.MethodGet && !d.startupSettled() {
+			sw := &startingBusyWriter{ResponseWriter: w}
+			fn(sw, r)
+			sw.finish()
+			return
+		}
 		fn(w, r)
 	}
+}
+
+// StartingBusyText 是后台服务刚启动、启动检查（监护第一轮、地区待还原重试第一轮）还没结束时，改动类请求被回 409 busy 的文字
+// （2026-11-27 真机：原地升级后马上“应用主代理”，提示成“已经有一个启用、停用或恢复在进行”，让人摸不着头脑）。
+const StartingBusyText = "后台服务刚启动，正在做启动检查：请几秒后再试。"
+
+// startingBusyWriter 在启动检查没结束时包住改动类请求的应答：409 且代码是 busy 的，把文字换成 StartingBusyText，
+// 其余字段和别的应答原样写出（只有 409 会先缓存再写）。
+type startingBusyWriter struct {
+	http.ResponseWriter
+	status int
+	hold   bool
+	buf    bytes.Buffer
+}
+
+func (w *startingBusyWriter) WriteHeader(code int) {
+	if w.status != 0 {
+		return
+	}
+	w.status = code
+	if code == http.StatusConflict {
+		w.hold = true
+		return
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *startingBusyWriter) Write(b []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	if w.hold {
+		return w.buf.Write(b)
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *startingBusyWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok && !w.hold {
+		f.Flush()
+	}
+}
+
+func (w *startingBusyWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// finish 写出缓存的 409 应答（busy 的换文字）。
+func (w *startingBusyWriter) finish() {
+	if !w.hold {
+		return
+	}
+	body := w.buf.Bytes()
+	var m map[string]json.RawMessage
+	if json.Unmarshal(body, &m) == nil {
+		var code api.ErrorCode
+		if json.Unmarshal(m["code"], &code) == nil && code == api.CodeBusy {
+			txt, _ := json.Marshal(StartingBusyText)
+			m["error"] = txt
+			if nb, err := json.Marshal(m); err == nil {
+				body = append(nb, '\n')
+			}
+		}
+	}
+	w.ResponseWriter.WriteHeader(http.StatusConflict)
+	_, _ = w.ResponseWriter.Write(body)
 }
 
 // AllowedAfterUninstall 是卸载完成后仍然允许的改动类接口（回国和再次卸载是幂等的；设备体检只读）。

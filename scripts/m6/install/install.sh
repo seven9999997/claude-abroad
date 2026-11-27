@@ -149,6 +149,12 @@ place_scripts() {
   for f in "${INST_SCRIPTS[@]}"; do m6i_do cp "$(script_src "$f")" "$(P "${INST}/$f")" || return 1; done
 }
 
+# settle_note：结尾等后台服务的启动检查结束（busy、starting 都为假，最多 30 秒；只读查询）。2026-11-27 真机：升级后马上
+# 在应用里操作被回“忙”。等不到不算失败，只提示。
+settle_note() {
+  m6i_wait_settled 30 || m6i_log "注意：后台服务还在做启动检查，几秒后再操作（现在操作可能提示“忙”）。"
+}
+
 # ================= 原地升级（v0.71，docs/app-install-plan.md 第 2 节）=================
 # 只换程序、镜像、清单、版本号、安装目录里的脚本、两份 plist（内容变了才换）；状态目录、日志目录、_abroad 一个字节都不碰。
 
@@ -407,6 +413,7 @@ do_upgrade() {
   fi
   m6i_do rm -f "$(P "${M6I_SNAP}")/${UPG_MARK}"
   trap - EXIT
+  settle_note
   m6i_log "升级完成：${U_OLD} → ${U_NEW}，主代理和设置已保留。"
   exit 0
 }
@@ -566,6 +573,7 @@ else
 fi
 m6i_do rm -f "$(P "${M6I_SNAP}")/installing"
 trap - EXIT
+settle_note
 m6i_log "安装完成（开发构建：不结束 Claude 进程、解析锁只锁测试域名、不写 Claude Code 的托管设置、回国拦截只拦测试段）。"
 m6i_say WAIT "以你自己的身份（不要 sudo）打开应用：open ${M6I_APP}；卸载：sudo scripts/m6/install/uninstall.sh"
 exit 0

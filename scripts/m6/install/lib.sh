@@ -228,18 +228,27 @@ m6i_snap_system() {
 # 自测：M6I_TEST_STATUS 指一份假的状态（文件不在、没给时当作不响应）；其中的 build、state_format 按安装目录里的
 # build.json 改写（模拟“后台服务报告的是它自己的版本”；没有 build.json 时去掉 build，模拟加版本号之前的老安装）。
 # M6I_STATUS_PHASE=after（升级后重启时）且给了 M6I_TEST_STATUS_BAD=version|integrity|state 时，按它改坏应答。
+# M6I_STATUS_PHASE=settle（结尾等启动检查时）且给了 M6I_TEST_STARTING=<n|always> 时，前 n 次（或一直）应答 starting=true
+# （次数记在 M6I_TEST_STATUS 旁边的 .settle 文件里）。
 m6i_status() {
   case "${M6I_MODE}" in
     real) curl -sS -m 10 --unix-socket "${M6I_SOCK}/api.sock" http://abroadd/v1/status 2>/dev/null ;;
     dry) return 1 ;;
     test)
       [ -n "${M6I_TEST_STATUS:-}" ] && [ -f "${M6I_TEST_STATUS}" ] || return 1
-      local bad=""
+      local bad="" starting=""
       [ "${M6I_STATUS_PHASE:-}" = after ] && bad="${M6I_TEST_STATUS_BAD:-}"
-      /usr/bin/python3 -I - "${M6I_TEST_STATUS}" "$(P "${M6I_INSTALL}")/build.json" "${bad}" <<'PY'
+      [ "${M6I_STATUS_PHASE:-}" = settle ] && starting="${M6I_TEST_STARTING:-}"
+      /usr/bin/python3 -I - "${M6I_TEST_STATUS}" "$(P "${M6I_INSTALL}")/build.json" "${bad}" "${starting}" <<'PY'
 import json, os, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
-bj, bad = sys.argv[2], sys.argv[3]
+bj, bad, starting = sys.argv[2], sys.argv[3], sys.argv[4]
+if starting:
+    cf = sys.argv[1] + ".settle"
+    n = int(open(cf).read()) if os.path.exists(cf) else 0
+    open(cf, "w").write(str(n + 1))
+    if starting == "always" or n < int(starting):
+        d["starting"] = True
 if os.path.exists(bj):
     b = json.load(open(bj, encoding="utf-8"))
     d["build"] = {"commit": b["commit"], "build_time": b["build_time"], "dirty": b["dirty"]}
@@ -256,6 +265,27 @@ print(json.dumps(d))
 PY
       ;;
   esac
+}
+
+# m6i_wait_settled <秒>：安装、升级的结尾等后台服务的启动检查结束（/v1/status 的 busy、starting 都为假；只读查询）。
+# 2026-11-27 真机：原地升级后马上在应用里操作，被回“忙”。等到返回 0；等不到返回 1（不算失败，调用方只提示）。
+# 空跑只打印这条查询；自测没给 M6I_TEST_STATUS 时不等，给了时不睡眠、最多查 <秒> 次。
+m6i_wait_settled() {
+  local end=$((SECONDS + $1)) n=0 st M6I_STATUS_PHASE=settle
+  case "${M6I_MODE}" in
+    dry) m6i_say QUERY "curl --unix-socket ${M6I_SOCK}/api.sock http://abroadd/v1/status（等 busy、starting 都为假，最多 $1 秒）"; return 0 ;;
+    test) [ -n "${M6I_TEST_STATUS:-}" ] || return 0 ;;
+  esac
+  while :; do
+    if st=$(m6i_status) && [ "$(printf '%s' "${st}" | /usr/bin/python3 -I -c 'import json,sys
+d=json.load(sys.stdin); print("settled" if not d.get("busy") and not d.get("starting") else "")' 2>/dev/null)" = settled ]; then
+      return 0
+    fi
+    n=$((n + 1))
+    if [ "${M6I_MODE}" = test ]; then [ "${n}" -lt "$1" ] || return 1; continue; fi
+    [ "${SECONDS}" -lt "${end}" ] || return 1
+    sleep 1
+  done
 }
 
 # m6i_upgrade_decide <状态接口的应答（可以是空）> <新包的 build.json> <状态文件> <允许版本不明 0|1>。

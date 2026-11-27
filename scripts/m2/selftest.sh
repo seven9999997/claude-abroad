@@ -5,6 +5,7 @@
 #   d. 上一次的 abroadd 状态文件还在时，--check-only 拦下；
 #   e. 系统代理开着的样本，--check-only 拦下；关着的样本不拦；
 #   trap：中途非零退出时执行（假的）restore，正常退出或已还原时不执行。
+#   perm：镜像源头是 0600 时，按 run.sh 复制后测试用户也读得到（2026-11-27 真机）。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "${ROOT}"
@@ -107,5 +108,25 @@ if grep -q -- '--launch-control' scripts/m2/launchd.plist.tmpl scripts/m2/run.sh
 else
   ok "启动 abroadd 的参数里没有 --launch-control（不打开启动管控）"
 fi
+# ---- 2026-11-27 真机：镜像源头是 0600，复制后虚拟机（以测试用户运行）要读得到 ----
+# 按 run.sh 里的原样两行（复制镜像、改镜像权限）在临时目录里真跑一遍（m2_do 换成直接执行），核对所有人可读、组和其他人不可写。
+cpl=$(grep -m1 -F 'm2_do cp -R guest/out/. "${M2_INSTALL}/image/"' scripts/m2/run.sh)
+chl=$(grep -m1 -F 'm2_do chmod -R go-w,a+rX "${M2_INSTALL}/image"' scripts/m2/run.sh)
+if [ -z "$cpl" ] || [ -z "$chl" ]; then
+  bad "perm. run.sh 里找不到复制镜像或改镜像权限的那一行"
+elif ! awk -v a="$cpl" -v b="$chl" '$0 == a { x = NR } $0 == b { y = NR } END { exit !(x && y && x < y) }' scripts/m2/run.sh; then
+  bad "perm. 改镜像权限应在复制镜像之后"
+else
+  PW="${TMP}/perm"; mkdir -p "${PW}/repo/guest/out" "${PW}/inst/image"
+  for f in Image initramfs.gz modloop rootfs.img; do echo "img $f" >"${PW}/repo/guest/out/$f"; chmod 600 "${PW}/repo/guest/out/$f"; done
+  (cd "${PW}/repo" && M2_INSTALL="${PW}/inst" && m2_do() { "$@"; } && eval "$cpl" && eval "$chl")
+  pbad=""
+  for f in Image initramfs.gz modloop rootfs.img; do
+    m=$(stat -f '%Lp' "${PW}/inst/image/$f"); [ $((0$m & 044)) = 36 ] && [ $((0$m & 022)) = 0 ] || pbad="${pbad} $f=$m"
+  done
+  m=$(stat -f '%Lp' "${PW}/inst/image"); [ $((0$m & 055)) = 45 ] || pbad="${pbad} image/=$m"
+  [ -z "$pbad" ] && ok "perm. 源头镜像 0600，按 run.sh 复制后所有人可读（组和其他人不可写）" || bad "perm. 复制后读不到：${pbad}"
+fi
+
 [ $fails = 0 ] && echo "✓ 自测全部通过" || echo "✗ 自测有 $fails 处没过"
 exit $((fails > 0))

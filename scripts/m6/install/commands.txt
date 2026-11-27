@@ -44,6 +44,8 @@ CHANGE ^rm -rf /Library/Application Support/claude-abroad-install-snap（对照�
 QUERY ^curl --unix-socket /var/run/claude-abroad/api\.sock http://abroadd/v1/status（应为 RESTORED、prepare\.done、integrity\.ok）$
 QUERY ^curl --unix-socket /var/run/claude-abroad/api\.sock http://abroadd/v1/status（return_block 应为 on、active、test，nets=192\.0\.2\.0/24,2001:db8:abd::/48）$
 QUERY ^pfctl -a com\.apple/250\.abroad -s rules$
+# 安装、升级的结尾等后台服务的启动检查结束（2026-11-27 真机：升级后马上操作被回“忙”）；等不到只提示。
+QUERY ^curl --unix-socket /var/run/claude-abroad/api\.sock http://abroadd/v1/status（等 busy、starting 都为假，最多 30 秒）$
 # ---- 原地升级（install.sh --upgrade，v0.71）：只碰安装目录里的程序、镜像、清单、版本号、脚本、prev/ 和两份 plist；
 # 不碰 state/、日志目录、_abroad，也不碰 pf、DNS、网络服务（核对见 check-commands.sh 的第三份空跑）。
 QUERY ^curl --unix-socket /var/run/claude-abroad/api\.sock http://abroadd/v1/status（(已回国或已停用、没有正在进行的操作、状态格式相同、版本更新|版本是新的、完整性校验通过、状态和升级前一样)）$

@@ -122,6 +122,8 @@ type Daemon struct {
 	resolverMu   sync.Mutex
 	// 地区待还原重试循环跑完的轮数（startupSettled 用）。
 	regionRounds atomic.Int64
+	// 测试用：为真时把启动检查当作还没结束（startupSettled 返回假）。
+	startupHold atomic.Bool
 
 	opts    Options
 	store   *state.Store
@@ -436,7 +438,7 @@ func (d *Daemon) stopInternals(closeGate bool) {
 // startupSettled 报告启动后的后台工作（监护的第一轮、接了地区时待还原重试的第一轮）是否都已跑完。
 // 这两样会短暂占用状态机的忙标记：刚启动时的请求可能被回“忙”（正确行为，应用和命令行提示重试）；测试要等它为真再发请求。
 func (d *Daemon) startupSettled() bool {
-	if d.sup == nil || d.sup.Rounds() < 1 {
+	if d.startupHold.Load() || d.sup == nil || d.sup.Rounds() < 1 {
 		return false
 	}
 	return !d.regionOn() || d.regionRounds.Load() >= 1
@@ -529,6 +531,9 @@ type Status struct {
 	StateFormat int             `json:"state_format,omitempty"`
 	// Busy：状态机此刻有操作占着忙标记（监护的轮次也会短暂占用）；原地升级只在没有时进行。
 	Busy bool `json:"busy,omitempty"`
+	// Starting：后台服务刚启动，启动检查（监护第一轮、地区待还原重试第一轮）还没结束（2026-11-27 真机）。这期间
+	// 改动类请求可能被回 409 busy（文字是 StartingBusyText）；安装、升级结尾等它变假，应用可以在按钮旁边显示“正在启动”。
+	Starting bool `json:"starting,omitempty"`
 	// Uninstall：一键卸载进行中、已经卸载过（总是给）。
 	Uninstall *UninstallFlags `json:"uninstall,omitempty"`
 }
@@ -590,6 +595,7 @@ func (d *Daemon) Status() Status {
 	bi := buildinfo.Get()
 	st.Build, st.StateFormat = &bi, buildinfo.StateFormat
 	st.Busy = d.m.Busy()
+	st.Starting = !d.startupSettled()
 	st.Uninstall = &UninstallFlags{Running: d.uninstalling.Load(), Done: d.uninstalled()}
 	return st
 }

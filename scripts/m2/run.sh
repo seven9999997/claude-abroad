@@ -184,6 +184,8 @@ for f in abroad-vm abroadd abroad-dev; do m2_do cp "${BIN}/${f}" "${INSTBIN}/${f
 m2_do cp -R guest/out/. "${M2_INSTALL}/image/"
 m2_do chown -R root:wheel "${M2_INSTALL}"
 m2_do chmod -R go-w "${M2_INSTALL}"
+# 虚拟机以测试用户运行，要能读镜像（构建出来的镜像是 0600；2026-11-27 真机：挂载 rootfs.img 报 Operation not supported）
+m2_do chmod -R go-w,a+rX "${M2_INSTALL}/image"
 m2_user_create
 m2_do mkdir -p "${VMDIR}"
 m2_do chown "${M2_USER}" "${VMDIR}"

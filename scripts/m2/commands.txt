@@ -8,6 +8,7 @@
 ^cp -R guest/out/\. /Library/Application Support/claude-abroad-m2/image/$
 ^chown -R root:wheel /Library/Application Support/claude-abroad-m2$
 ^chmod -R go-w /Library/Application Support/claude-abroad-m2$
+^chmod -R go-w,a\+rX /Library/Application Support/claude-abroad-m2/image$
 ^dscl \. -(create|delete) /(Users|Groups)/_abroadm2( .*)?$
 ^dscacheutil -flushcache$
 ^chown _abroadm2 /var/run/claude-abroad-m2/vm$

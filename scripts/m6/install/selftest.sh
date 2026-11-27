@@ -24,6 +24,7 @@
 #   s. payload.sh 的布局、--from 安装和升级、摘要对不上拒绝、--check-only --upgrade 只读；升级的空跑和命令核对及反例；
 #   u. B0：应用经系统密码框执行的命令（Swift golden）用 /bin/sh 真跑：命令行不对时 31、输入文件被改过时 32；
 #   t. 应用的交接：老安装记录里有 app 时，升级后属主改成执行 sudo 的用户、记录里删掉 app；再卸载时对照一致、应用留着。
+#   settle. 结尾等启动检查结束（2026-11-27 真机）：starting 先真后假时等到假才报完成；一直为真时提示、退出码 0。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "${ROOT}" || exit 1
@@ -672,6 +673,40 @@ UM=$(mkcase); setup_old "$UM" && {
     if why=$(readable "$UM$I"/image/* "$UM$I"/bin/*); then ok "perm. 原地升级：新镜像是 0600，升级后所有人可读"; else bad "perm. 升级后读不到：$why"; fi
   else bad "perm. 升级失败：$(tail -2 "$UM/up.err")"; fi
 }
+
+# ---- 2026-11-27 真机：升级后马上操作被回“忙”。安装、升级的结尾等启动检查结束（busy、starting 都为假，最多 30 秒）；
+# 等不到不算失败，只提示 ----
+settle_case() { # settle_case <说明> <install|upgrade> <M6I_TEST_STARTING> <期望的查询次数或空> <期望提示 0|1>
+  local name=$1 kind=$2 starting=$3 want_n=$4 want_note=$5 d st rc n
+  d=$(mkcase); st="$d.status"; mkstatus "$st" RESTORED
+  if [ "$kind" = upgrade ]; then
+    setup_old "$d" || return
+    M6I_TEST_STARTING=$starting upg "$d" "$P2" "$st"; rc=$?
+    out="$d/up.err"
+  else
+    M6I_TEST_STARTING=$starting M6I_TEST_DIR="$d" M6I_TEST_STATUS="$st" M6I_YES=1 bash "${INSTALL}" >"$d/install.out" 2>"$d/install.err"; rc=$?
+    out="$d/install.err"
+  fi
+  n=$(cat "$st.settle" 2>/dev/null || echo 0)
+  [ "$rc" = 0 ] || { bad "settle. ${name}：退出码 ${rc}：$(tail -2 "$out")"; return; }
+  grep -qE '(升级|安装)完成' "$out" || { bad "settle. ${name}：没有报完成"; return; }
+  if [ -n "$want_n" ] && [ "$n" != "$want_n" ]; then bad "settle. ${name}：查了 ${n} 次，应为 ${want_n}"; return; fi
+  if [ "$want_note" = 1 ]; then
+    grep -q '后台服务还在做启动检查，几秒后再操作' "$out" && ok "settle. ${name}：退出码 0，结尾提示还在做启动检查（查了 ${n} 次）" || bad "settle. ${name}：没有提示"
+  else
+    if grep -q '后台服务还在做启动检查' "$out"; then bad "settle. ${name}：不该提示"; return; fi
+    # 等待在报完成之前：查询次数正好是 starting 为真的次数加一，说明一直查到为假才往下走
+    ok "settle. ${name}：等到 starting 为假（查了 ${n} 次）才报完成，没有提示"
+  fi
+}
+settle_case "原地升级，先 starting=true 3 次再 false" upgrade 3 4 0
+settle_case "原地升级，一直 starting=true" upgrade always 30 1
+settle_case "全新安装，先 starting=true 2 次再 false" install 2 3 0
+settle_case "全新安装，一直 starting=true" install always 30 1
+SB=$(mkcase); mkstatus "$SB.status" RESTORED ',"busy":true'
+setup_old "$SB" && { upg "$SB" "$P2" "$SB.status"; rc=$?
+  # 升级前的检查遇到 busy 会拒绝（10）：这里只核对拒绝时不会走到结尾的等待
+  [ "$rc" = 10 ] && [ ! -e "$SB.status.settle" ] && ok "settle. 升级前就忙：照旧拒绝（10），不走结尾的等待" || bad "settle. 升级前就忙：rc=$rc"; }
 
 # 2026-11-27：真机路径上“是不是开发构建”的判断（测试模式跳过它），由公共函数的自测覆盖
 scripts/lib/buildcheck-selftest.sh >"${TMP}/bc" 2>&1 && ok "“是不是开发构建”的判断（$(grep -c '^✓' "${TMP}/bc") 项，含退出码 2 的假程序）" || bad "“是不是开发构建”的判断：$(grep '^✗' "${TMP}/bc" | head -3)"

@@ -102,6 +102,9 @@ install -o root -g wheel -m 0755 "$SRC_BIN" "$R1DIR/abroad-vm" || m0_die "复制
 for f in $IMAGES; do
   install -o root -g wheel -m 0644 "$SRC_IMG/$f" "$R1DIR/img/$f" || m0_die "复制 $f 失败"
 done
+# 虚拟机以临时用户运行，要能读镜像（构建出来的镜像是 0600；2026-11-27 真机以 _abroad 拉起时挂载 rootfs.img 报
+# Operation not supported）。上面 install -m 0644 已经给了读权限，这里和安装脚本一致再兜一次，只作用于镜像目录。
+chmod -R go-w,a+rX "$R1DIR/img" || m0_die "改镜像权限失败"
 codesign -d --entitlements - "$R1DIR/abroad-vm" 2>/dev/null | grep -q com.apple.security.virtualization ||
   m0_die "复制后的 abroad-vm 丢了虚拟化授权"
 m0_log "已复制 abroad-vm 和镜像到 $R1DIR（授权仍在）："
