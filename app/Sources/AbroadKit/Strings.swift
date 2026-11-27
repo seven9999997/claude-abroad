@@ -431,7 +431,7 @@ public enum L10n {
     public static func notifyProtectionLost(_ reason: String, _ detail: String) -> String {
         "代理流量已关闭：" + reason + (detail.isEmpty ? "" : "（" + detail + "）")
     }
-    /// 闸门原因代码的名称（不认识的代码原样显示）。
+    /// 闸门原因代码的名称（不认识的代码显示“其他原因”，不回显代码）。
     public static func gateReasonName(_ code: String) -> String {
         switch code {
         case "takeover": return "本机接管出了问题"
@@ -441,8 +441,30 @@ public enum L10n {
         case "main_proxy_switch": return "正在更换主代理"
         case "vm": return "虚拟机没有运行或不健康"
         case "integrity": return "程序文件不完整（要重新安装）"
-        default: return code
+        default: return gateReasonOther
         }
+    }
+    public static let gateReasonOther = "其他原因"
+    /// state 这个原因按状态说（已停用、正在启用……）。
+    public static func gateStateReason(_ state: String) -> String {
+        switch state {
+        case "DISABLED": return "已停用"
+        case "ENABLING": return "正在启用"
+        case "RESTORING": return "正在回国"
+        case "RESTORED": return "已回国"
+        default: return gateReasonName("state")
+        }
+    }
+    /// 首页的“关闭原因”一行：原因一律经文字表转成中文（state 按状态说，不认识的写“其他原因”，同样的只写一次）；
+    /// 已回国时不显示（顶部已有回国拦截的横幅、状态写着“已回国”），没有原因时也不显示。
+    public static func homeGateLine(reasons: [String], state: String) -> String? {
+        guard state != "RESTORED", !reasons.isEmpty else { return nil }
+        var names: [String] = []
+        for r in reasons {
+            let n = r == "state" ? gateStateReason(state) : gateReasonName(r)
+            if !names.contains(n) { names.append(n) }
+        }
+        return gateReasons + "：" + names.joined(separator: "、")
     }
     public static let confirmNotNeededDone = "这次不需要确认，已完成"
     public static let confirmSubmitting = "正在执行…"
@@ -463,7 +485,6 @@ public enum L10n {
     public static func exitLine(_ ip: String, _ place: String) -> String { mainExit + "：" + ip + "（" + place + "）" }
     public static func exitNoteLine(_ note: String) -> String { mainExit + "：" + note }
     public static func placeLine(_ place: String, _ tz: String) -> String { place + (tz.isEmpty ? "" : "，" + tz) }
-    public static func gateReasonsLine(_ r: [String]) -> String { gateReasons + "：" + r.joined(separator: "、") }
     public static func regionLine(_ tz: String, _ lang: String) -> String { region + "：" + tz + "，" + lang }
     public static func sourceLine(kind: String, nodes: Int, updated: String) -> String {
         (kind == "subscription" ? addSubscription : addLocalFile) + " · \(nodes) 个节点 · 更新于 " + updated
@@ -561,11 +582,20 @@ extension L10n {
         case 7: return "这个操作在以后的版本提供"
         case 31: return "已安装的命令行不对（不是 root 的或别人可写），没有执行"
         case 32: return "输入文件在确认后被改动过，请重新操作"
+        case 34: return "没能建立管理员的临时目录，没有执行"
         default: return "执行失败（退出码 \(code)）"
         }
     }
+    /// 两步合成的命令里前一步失败：停在第几步、后面的没有执行。
+    public static func privStoppedAt(_ n: Int, of total: Int, step: String) -> String {
+        n < total ? "停在第 \(n) 步（abroad \(step)），后面的步骤没有执行" : "第 \(n) 步（abroad \(step)）失败"
+    }
+    /// 失败了、但命令行什么都没有输出。
+    public static let privNoOutput = "命令行没有给出说明（标准输出和标准错误都是空的）"
     /// 确认框的标题（做什么）。
-    public static func privTitle(_ op: SensitiveOperation) -> String {
+    /// names：节点、来源的 ID → 名字（确认框里显示名字，找不到才显示 ID；交给命令行的参数仍是 ID）。
+    public static func privTitle(_ op: SensitiveOperation, names: [String: String] = [:]) -> String {
+        let nm = { (id: String) in names[id].flatMap { $0.isEmpty ? nil : $0 } ?? id }
         switch op {
         case .enable: return "启用（接管本机网络）"
         case .restore, .restoreWith: return "回国（恢复本机网络）"
@@ -574,9 +604,9 @@ extension L10n {
         case .regionAuto: return "地区改为跟随出口"
         case let .addSourceFile(_, name), let .addSourceURLFile(_, name, _): return "添加主代理来源“\(name)”"
         case let .addNodeFile(_, name): return "添加节点“\(name)”"
-        case let .removeSource(id): return "删除主代理来源 \(id)"
-        case let .mainUse(node, via): return via.isEmpty ? "主代理换成节点 \(node)" : "主代理换成节点 \(node)（经 \(via.joined(separator: " → "))）"
-        case let .lanConfirm(node): return "确认局域网节点 \(node)"
+        case let .removeSource(id): return "删除主代理来源 \(nm(id))"
+        case let .mainUse(node, via): return via.isEmpty ? "主代理换成节点 \(nm(node))" : "主代理换成节点 \(nm(node))（经 \(via.map(nm).joined(separator: " → "))）"
+        case let .lanConfirm(node): return "确认局域网节点 \(nm(node))"
         case let .exitAdd(tag, kind, _): return "添加分流出口 \(tag)（\(kind)）"
         case let .exitRemove(tag): return "删除分流出口 \(tag)"
         case let .appSet(app, action): return "应用 \(app) 改为 \(action)"

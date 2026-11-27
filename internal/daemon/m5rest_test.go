@@ -153,10 +153,11 @@ func (f *fakeMainVM) Health(context.Context) (VMHealth, error) {
 	if f.unreachable {
 		return VMHealth{}, ErrVMNotReady
 	}
-	return VMHealth{BootID: f.boot, Version: "agent-1.0", Kernel: "6.12", UptimeS: 42, Engines: map[string]EngineView{
-		"sing-box": {State: "running", Restarts: 1, Since: time.Unix(1_800_000_000, 0)},
-		"mihomo":   {State: "backoff", Restarts: 3, LastError: "dial 203.0.113.8:443 failed"},
-	}}, nil
+	eng := f.engines
+	if eng == nil { // 默认两个引擎都在运行（下发主代理之后等它就绪要看这个）
+		eng = map[string]EngineView{"sing-box": {State: "running"}, "mihomo": {State: "running"}}
+	}
+	return VMHealth{BootID: f.boot, Version: "agent-1.0", Kernel: "6.12", UptimeS: 42, Engines: eng}, nil
 }
 
 // 验收 e：引擎与虚拟机的状态。
@@ -165,6 +166,12 @@ func TestEnginesAPI(t *testing.T) {
 	m.addYAML(t, "本地", mainNodesYAML)
 	m.enableWith(t, "exit")
 	m.d.exitLoop.round(context.Background()) // 记下启动标识
+	m.vm.mu.Lock()
+	m.vm.engines = map[string]EngineView{
+		"sing-box": {State: "running", Restarts: 1, Since: time.Unix(1_800_000_000, 0)},
+		"mihomo":   {State: "backoff", Restarts: 3, LastError: "dial 203.0.113.8:443 failed"},
+	}
+	m.vm.mu.Unlock()
 	code, b := call(t, m.d, "GET", "/v1/engines", nil)
 	var v EnginesView
 	if code != 200 || json.Unmarshal(b, &v) != nil || !v.Reachable || v.Version != "agent-1.0" || len(v.Engines) != 2 || v.Engines[0].Name != "mihomo" || v.BootChanged {

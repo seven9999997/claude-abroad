@@ -61,8 +61,8 @@ struct HomeView: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 8) {
                 Text(model.phase.title).font(.system(size: 20, weight: .bold))
-                if let st = model.status, let reasons = st.gate.reasons, !reasons.isEmpty, model.phase != .abroad {
-                    Text(L10n.gateReasonsLine(reasons)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                if let st = model.status, model.phase != .abroad, let line = L10n.homeGateLine(reasons: st.gate.reasons ?? [], state: st.state) {
+                    Text(line).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 facts
             }

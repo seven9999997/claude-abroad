@@ -22,7 +22,8 @@
 #   p. 退回也失败（21，prev 和标记留着）；再运行 --upgrade 接着退回；标记在时卸载照常；
 #   q. 中断后退回；  r. 升级后卸载和安装前一致；应用不在安装记录里时不参与卸载对照；
 #   s. payload.sh 的布局、--from 安装和升级、摘要对不上拒绝、--check-only --upgrade 只读；升级的空跑和命令核对及反例；
-#   u. B0：应用经系统密码框执行的命令（Swift golden）用 /bin/sh 真跑：命令行不对时 31、输入文件被改过时 32；
+#   u. B0：应用经系统密码框执行的命令（Swift golden）用 /bin/sh 真跑：命令行不对时 31、输入文件被改过时 32；命令行失败时
+#      标准错误在 ---STDERR--- 之后带回，两步命令第一步失败时第二步不执行、输出只标到第一步；
 #   t. 应用的交接：老安装记录里有 app 时，升级后属主改成执行 sudo 的用户、记录里删掉 app；再卸载时对照一致、应用留着。
 #   settle. 结尾等启动检查结束（2026-11-27 真机）：starting 先真后假时等到假才报完成；一直为真时提示、退出码 0。
 set -uo pipefail
@@ -583,6 +584,27 @@ if [ -s "${GOLD}" ]; then
   mkfake; rm "${UD}/inst/bin/abroad"; out=$(runpriv "${SUM}")
   [ "${out}" = RESULT=31 ] && ok "u. 没有已安装的命令行：退出码 31" || bad "u. 没有命令行：${out}"
   grep -q '= 0 \]' <<<"$(cmdof addsource)" && ok "u. golden 里属主条件是 root（uid 0）" || bad "u. golden 里没有属主是 root 的条件"
+  # 2026-11-27 真机：失败时应用里“命令行的输出”是空的（出错写在标准错误）。现在每步的标准错误单独存、结束时放在 ---STDERR--- 之后。
+  mkerr() { # 假命令行：main use 往标准错误写一段话、以 1 退出；其余成功
+    rm -rf "${UD}/inst" "${UD}/ran"; mkdir -p "${UD}/inst/bin"
+    cat >"${UD}/inst/bin/abroad" <<EOS
+#!/bin/sh
+echo "\$3 \$4" >>"${UD}/ran"
+if [ "\$4" = use ]; then echo '没有叫 n1 的节点（标准错误里的话）' >&2; exit 1; fi
+echo '{"ok":true}'
+EOS
+    chmod 755 "${UD}/inst/bin/abroad" "${UD}/inst/bin" "${UD}/inst"
+  }
+  runtwo() { cmdof mainuse-apply | sed -e "s|@INST@|${UD}/inst|g" -e "s|@STG@|${UD}/stg|g" -e "s|\")\" = 0 \]|\")\" = $(id -u) ]|" -e 's|/usr/sbin/chown root:wheel "\$S" \&\& ||' >"${UD}/cmd2.sh"; /bin/sh "${UD}/cmd2.sh"; }
+  mkerr; out=$(runtwo); rc=$?
+  errpart=$(printf '%s\n' "${out}" | awk '/^---STDERR---$/ { f = 1; next } f && !/^---STEP / && !/^RESULT=/')
+  [ ${rc} = 0 ] && [ "$(printf '%s\n' "${out}" | tail -1)" = RESULT=1 ] && [ "${errpart}" = '没有叫 n1 的节点（标准错误里的话）' ] &&
+    [ "$(cat "${UD}/ran")" = "main use" ] && ! grep -q -- '---STEP main apply---' <<<"${out}" && [ "$(grep -c -- '---STEP main use---' <<<"${out}")" = 2 ] && [ ! -e "${UD}/stg" ] &&
+    ok "u. 命令行失败：标准错误里的话在 ---STDERR--- 之后原样带回；两步命令第一步失败时第二步没执行、输出只标到第一步；临时目录不留" ||
+    bad "u. 标准错误没带回或第二步执行了：rc=${rc} ran=$(cat "${UD}/ran" 2>/dev/null | tr '\n' ' ') out=$(tr '\n' '|' <<<"${out}")"
+  mkfake; out=$(runtwo)
+  [ "$(printf '%s\n' "${out}" | tail -1)" = RESULT=0 ] && [ "$(grep -c '^{"ok":true}$' <<<"${out}")" = 2 ] && grep -qx -- '---STEP main apply---' <<<"${out}" && grep -qx -- '---STDERR---' <<<"${out}" &&
+    ok "u. 两步都成功：依次标明两步，各自的标准输出都在" || bad "u. 两步成功：$(tr '\n' '|' <<<"${out}")"
 else
   bad "u. 没有 ${GOLD}（由 swift 测试 privilegedCommandGolden 生成）"
 fi

@@ -225,5 +225,5 @@ func (f *fakeVM) PushExits(_ context.Context, xs []daemon.StoredExit) ([]daemon.
 	return out, nil
 }
 func (f *fakeVM) Health(context.Context) (daemon.VMHealth, error) {
-	return daemon.VMHealth{BootID: f.boot, Version: "agent-1.0", Engines: map[string]daemon.EngineView{"mihomo": {State: "running"}}}, nil
+	return daemon.VMHealth{BootID: f.boot, Version: "agent-1.0", Engines: map[string]daemon.EngineView{"sing-box": {State: "running"}, "mihomo": {State: "running"}}}, nil
 }

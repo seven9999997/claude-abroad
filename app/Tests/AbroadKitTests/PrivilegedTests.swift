@@ -141,10 +141,12 @@ func goldenCommands() throws -> String {
     let lines = c.split(separator: "\n").map(String.init)
     #expect(lines[1] == "A='@INST@/bin/abroad'; S='@STG@'")
     #expect(lines[2].hasPrefix("for p in \"$A\" '@INST@/bin' '@INST@'; do") && lines[2].contains("/usr/bin/stat -f %u") && lines[2].contains("& 022") && lines[2].contains("RESULT=31"))
-    #expect(lines[3] == "\"$A\" --yes --json 'main' 'apply'; rc=$?; [ $rc = 0 ] || { /bin/rm -rf \"$S\"; echo \"RESULT=$rc\"; exit 0; }")
+    // 先建 root 的临时目录（各步的标准输出、标准错误写在里面），建不起来退出码 34
+    #expect(lines[3].hasPrefix("/bin/rm -rf \"$S\" && /bin/mkdir -m 700 \"$S\" && /usr/sbin/chown root:wheel \"$S\" && ") && lines[3].contains("RESULT=34"))
+    #expect(lines[5] == "\"$A\" --yes --json 'main' 'apply' >\"$S/o1\" 2>\"$S/e1\"; rc=$?; [ $rc = 0 ] || { echo '---STEP main apply---'; f \"$S/o1\"; echo '---STDERR---'; echo '---STEP main apply---'; f \"$S/e1\"; /bin/rm -rf \"$S\"; echo \"RESULT=$rc\"; exit 0; }")
     // 第 4 条：输入文件先复制到 root 的临时目录、核对摘要，对不上退出码 32；交给命令行的是副本
     let a = try PrivilegedCommand.build([PrivilegedStep(.addNodeFile(path: "/tmp/n.yaml", name: "家里"))], paths: samplePaths, digests: ["/tmp/n.yaml": zeroDigest])
-    #expect(a.contains("/bin/mkdir -m 700 \"$S\" && /usr/sbin/chown root:wheel \"$S\" && /bin/cp '/tmp/n.yaml' '@STG@/in1'"))
+    #expect(a.contains("/bin/mkdir -m 700 \"$S\" && /usr/sbin/chown root:wheel \"$S\" && ") && a.contains("\n/bin/cp '/tmp/n.yaml' '@STG@/in1'"))
     #expect(a.contains("/usr/bin/shasum -a 256 '@STG@/in1'") && a.contains("= '\(zeroDigest)' ]") && a.contains("RESULT=32"))
     #expect(a.contains("--yes --json 'main' 'add-node' '--file' '@STG@/in1' '--name' '家里'") && !a.contains("--file '/tmp/n.yaml'"))
     // 没有摘要不拼命令

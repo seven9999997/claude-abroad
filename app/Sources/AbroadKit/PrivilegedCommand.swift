@@ -5,7 +5,10 @@
 // 命令依次做：
 // 1. 检查已安装的命令行、bin、安装目录：存在、不是符号链接、属主 root、组和其他人不可写；不满足退出码 31，什么都不执行；
 // 2. 有输入文件时：复制到属主 root、0700 的临时目录，核对点“执行”那一刻算出的 SHA-256；对不上退出码 32，什么都不改；
-// 3. 以 root 运行 abroad --yes --json <子命令>（多步时前一步失败就停）；删临时目录；最后一行 RESULT=<退出码>。
+// 3. 以 root 运行 abroad --yes --json <子命令>（多步时前一步失败就停）：每一步的标准输出、标准错误分别写进 root 临时目录
+//    里的文件（do shell script 只返回标准输出，命令行的出错写在标准错误，不这样就丢了）；
+// 4. 结束时依次输出：每一步一行 ---STEP <子命令>--- 加它的标准输出，一行 ---STDERR---，每一步一行 ---STEP <子命令>---
+//    加它的标准错误，删临时目录，最后一行 RESULT=<退出码>。只列出执行到的步骤：前一步失败时后面的步骤不出现（看得出停在哪一步）。
 // 每条路都以 0 退出（结果在 RESULT 行里），这样标准输出总能拿回来；只有取消密码框、系统层面的失败才是 AppleScript 的错误。
 import Foundation
 
@@ -101,6 +104,12 @@ public enum PrivilegedCommand {
     /// 我们自己的退出码（命令行的是 0–7）。
     public static let exitBadInstall = 31
     public static let exitInputChanged = 32
+    /// root 的临时目录建不起来（没有执行命令行）。
+    public static let exitStagingFailed = 34
+    /// 输出里标准错误那一段的开头。
+    public static let stderrMarker = "---STDERR---"
+    /// 输出里每一步的开头（子命令是白名单里的固定文字）。
+    public static func stepMarker(_ sub: PrivilegedSubcommand) -> String { "---STEP " + sub.rawValue + "---" }
     /// 交给命令行时输入文件在临时目录里的名字。
     public static let stagedInputName = "in"
 
@@ -150,8 +159,12 @@ public enum PrivilegedCommand {
             guard acceptable(p) else { throw PrivilegedCommandError.badCharacter }
         }
         lines.append(checkLine(paths))
+        lines.append("/bin/rm -rf \"$S\" && /bin/mkdir -m 700 \"$S\" && /usr/sbin/chown root:wheel \"$S\" && [ ! -L \"$S\" ] " +
+            "|| { /bin/rm -rf \"$S\"; echo 'RESULT=\(exitStagingFailed)'; exit 0; }")
+        // f：原样输出一个文件，没以换行结尾时补一个（下一行的标记要从行首开始）
+        lines.append("f() { [ -s \"$1\" ] || return 0; /bin/cat \"$1\"; [ -z \"$(/usr/bin/tail -c 1 \"$1\")\" ] || echo; }")
         var staged = 0
-        var runs: [String] = []
+        var runs: [(PrivilegedSubcommand, String)] = []
         for s in steps {
             guard let sub = PrivilegedSubcommand.matching(s.op.arguments) else {
                 throw PrivilegedCommandError.notWhitelisted(s.op.arguments.joined(separator: " "))
@@ -162,16 +175,27 @@ public enum PrivilegedCommand {
                 guard let sum = digests[src], sum.count == 64, sum.allSatisfy({ $0.isHexDigit }) else { throw PrivilegedCommandError.missingDigest }
                 staged += 1
                 let dst = paths.staging + "/" + stagedInputName + "\(staged)"
-                lines.append(stageLine(src: src, dst: dst, sha: sum.lowercased(), first: staged == 1))
+                lines.append(stageLine(src: src, dst: dst, sha: sum.lowercased()))
                 args = args.map { $0 == src ? dst : $0 }
             }
-            runs.append((["\"$A\"", "--yes", "--json"] + args.map(shellQuote)).joined(separator: " "))
+            runs.append((sub, (["\"$A\"", "--yes", "--json"] + args.map(shellQuote)).joined(separator: " ")))
         }
-        for r in runs {
-            lines.append(r + "; rc=$?; [ $rc = 0 ] || { /bin/rm -rf \"$S\"; echo \"RESULT=$rc\"; exit 0; }")
+        for (i, r) in runs.enumerated() {
+            let n = i + 1
+            lines.append(r.1 + " >\"$S/o\(n)\" 2>\"$S/e\(n)\"; rc=$?; [ $rc = 0 ] || { " + emit(runs.prefix(n).map(\.0)) + "; }")
         }
-        lines.append("/bin/rm -rf \"$S\"; echo 'RESULT=0'; exit 0")
+        lines.append("rc=0; " + emit(runs.map(\.0)))
         return lines.joined(separator: "\n")
+    }
+
+    /// 结束：依次输出执行到的各步的标准输出、分隔行、各步的标准错误，删临时目录，最后一行 RESULT=$rc。
+    static func emit(_ ran: [PrivilegedSubcommand]) -> String {
+        var parts: [String] = []
+        for (i, sub) in ran.enumerated() { parts.append("echo '\(stepMarker(sub))'; f \"$S/o\(i + 1)\"") }
+        parts.append("echo '\(stderrMarker)'")
+        for (i, sub) in ran.enumerated() { parts.append("echo '\(stepMarker(sub))'; f \"$S/e\(i + 1)\"") }
+        parts.append("/bin/rm -rf \"$S\"; echo \"RESULT=$rc\"; exit 0")
+        return parts.joined(separator: "; ")
     }
 
     /// 第一段：已安装的命令行、bin、安装目录都要存在、不是符号链接、属主 root、组和其他人不可写。
@@ -181,10 +205,9 @@ public enum PrivilegedCommand {
             "|| { echo 'RESULT=\(exitBadInstall)'; exit 0; }; done; [ -f \"$A\" ] || { echo 'RESULT=\(exitBadInstall)'; exit 0; }"
     }
 
-    /// 复制输入文件到 root 的临时目录并核对摘要；对不上就停、删掉临时目录。
-    static func stageLine(src: String, dst: String, sha: String, first: Bool) -> String {
-        let mk = first ? "/bin/rm -rf \"$S\" && /bin/mkdir -m 700 \"$S\" && /usr/sbin/chown root:wheel \"$S\" && " : ""
-        return mk + "/bin/cp " + shellQuote(src) + " " + shellQuote(dst) +
+    /// 复制输入文件到 root 的临时目录（这时已经建好）并核对摘要；对不上就停、删掉临时目录。
+    static func stageLine(src: String, dst: String, sha: String) -> String {
+        "/bin/cp " + shellQuote(src) + " " + shellQuote(dst) +
             " && [ \"$(/usr/bin/shasum -a 256 " + shellQuote(dst) + " | /usr/bin/cut -c1-64)\" = " + shellQuote(sha) + " ] " +
             "|| { /bin/rm -rf \"$S\"; echo 'RESULT=\(exitInputChanged)'; exit 0; }"
     }
@@ -228,12 +251,61 @@ public enum PrivilegedCommand {
         return lines.joined(separator: "\n")
     }
 
-    /// 解析输出：最后一行 RESULT=<退出码>，其余是命令行的输出（--json 时是最终的应答）。
+    /// 解析输出：最后一行 RESULT=<退出码>，其余是命令行的输出（--json 时是最终的应答）。body 是标准输出那一段。
     public static func parse(_ out: String) -> (exit: Int, body: String)? {
+        parseOutput(out).map { ($0.exit, $0.stdout) }
+    }
+
+    /// 解析输出（见文件头第 4 步）：JSON 只从标准输出段取，错误文字从标准错误段取。没有分隔行时（安装、升级、卸载的命令把
+    /// 标准错误并进了标准输出；或在第一步之前就停了）全部算标准输出。
+    public static func parseOutput(_ out: String) -> PrivilegedOutput? {
         var lines = out.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         while let l = lines.last, l.isEmpty { lines.removeLast() }
         guard let last = lines.last, last.hasPrefix("RESULT="), let n = Int(last.dropFirst("RESULT=".count)) else { return nil }
         lines.removeLast()
-        return (n, lines.joined(separator: "\n"))
+        var o = PrivilegedOutput(exit: n)
+        var inErr = false
+        var cur: String?
+        var outBuf: [String] = [], errBuf: [(String?, [String])] = []
+        for l in lines {
+            if l == stderrMarker { inErr = true; cur = nil; continue }
+            if l.hasPrefix("---STEP "), l.hasSuffix("---"), let sub = PrivilegedSubcommand(rawValue: String(l.dropFirst(8).dropLast(3))) {
+                cur = sub.rawValue
+                if inErr { errBuf.append((cur, [])) } else { o.steps.append(sub.rawValue) }
+                continue
+            }
+            if inErr {
+                if errBuf.isEmpty { errBuf.append((nil, [])) }
+                errBuf[errBuf.count - 1].1.append(l)
+            } else {
+                outBuf.append(l)
+            }
+        }
+        o.stdout = outBuf.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        o.stepErrors = errBuf.map { ($0.0 ?? "", $0.1.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)) }
+            .filter { !$0.1.isEmpty }.map { PrivilegedOutput.StepText(step: $0.0, text: $0.1) }
+        return o
     }
+}
+
+/// 提权命令的输出（PrivilegedCommand.parseOutput）。
+public struct PrivilegedOutput: Sendable, Equatable {
+    public struct StepText: Sendable, Equatable {
+        public var step: String
+        public var text: String
+    }
+    public var exit: Int
+    /// 各步的标准输出（去掉标记）。
+    public var stdout = ""
+    /// 执行到的步骤（按顺序；前一步失败时后面的不在里面）。
+    public var steps: [String] = []
+    /// 各步标准错误里的文字（空的不列）。
+    public var stepErrors: [StepText] = []
+
+    public init(exit: Int) { self.exit = exit }
+
+    /// 标准错误的文字（各步依次）。
+    public var stderr: String { stepErrors.map(\.text).joined(separator: "\n") }
+    /// 失败时停在哪一步（执行到的最后一步）；没执行任何一步、或成功时为 nil。
+    public var failedStep: String? { exit == 0 ? nil : steps.last }
 }

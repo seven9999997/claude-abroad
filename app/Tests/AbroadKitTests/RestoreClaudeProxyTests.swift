@@ -27,7 +27,7 @@ private func restoreEnv(current: Bool?, testMode: Bool = false, conflicts: Strin
     #expect(s0.request?.claudeProxy == nil && s0.claudeProxyLines.isEmpty && s0.claudeProxyRequest == nil)
     s0.claudeProxyOn = true // 没有这一块时勾选不起作用
     await s0.userTappedExecute()
-    #expect(r0.calls.first?.command.contains("--yes --json 'restore'; rc=$?") == true)
+    #expect(r0.calls.first?.command.contains("--yes --json 'restore' >\"$S/o1\"") == true)
     for cur in [false, true] {
         let (_, s, _, _) = await restoreEnv(current: cur)
         #expect(s.request?.claudeProxy?.current == cur && s.claudeProxyOn == cur, "初值等于现状")
@@ -41,7 +41,7 @@ private func restoreEnv(current: Bool?, testMode: Bool = false, conflicts: Strin
     #expect(SensitiveOperation.restoreWith(killBrowsers: true, claudeProxy: true).arguments == ["restore", "--kill-browsers", "--claude-proxy", "on"])
     #expect(SensitiveOperation.restoreWith(killBrowsers: false, claudeProxy: false).terminalCommand == "sudo abroad restore --claude-proxy off")
     for (cur, tick, want) in [(false, true, "'restore' '--kill-browsers' '--claude-proxy' 'on'"), (true, false, "'restore' '--kill-browsers' '--claude-proxy' 'off'"),
-                              (false, false, "'restore' '--kill-browsers'; rc"), (true, true, "'restore' '--kill-browsers'; rc")] {
+                              (false, false, "'restore' '--kill-browsers' >\"$S/o1\""), (true, true, "'restore' '--kill-browsers' >\"$S/o1\"")] {
         let (_, s, r, t) = await restoreEnv(current: cur)
         s.killBrowsers = true
         s.claudeProxyOn = tick

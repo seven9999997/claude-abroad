@@ -95,7 +95,8 @@ public final class PrivilegedSession: ObservableObject {
     public func present(_ steps: [SensitiveOperation], tempFiles: [URL] = [], host: PrivilegedHost = .main, terminal: TerminalPrompt,
                         onTerminal: @escaping @MainActor (TerminalPrompt) -> Void, onDone: @escaping @MainActor () async -> Void) async {
         guard request == nil, let first = steps.first else { return }
-        var r = PrivilegedRequest(steps: steps, title: steps.map(L10n.privTitle).joined(separator: "，然后"), lines: steps.flatMap(L10n.privConsequences),
+        let names = await nodeNames(steps)
+        var r = PrivilegedRequest(steps: steps, title: steps.map { L10n.privTitle($0, names: names) }.joined(separator: "，然后"), lines: steps.flatMap(L10n.privConsequences),
                                   inputFiles: steps.compactMap(\.inputFile), tempFiles: tempFiles)
         r.host = host
         if let now = await currentLine(first) { r.lines.insert(now, at: 0) }
@@ -127,6 +128,23 @@ public final class PrivilegedSession: ObservableObject {
         terminalPrompt = terminal
         request = r
         phase = .confirming
+    }
+
+    /// 标题里要显示名字的节点、来源：读来源列表（只读接口），ID → 名字；读不到时为空（标题退回 ID）。
+    func nodeNames(_ steps: [SensitiveOperation]) async -> [String: String] {
+        let need = steps.contains {
+            switch $0 {
+            case .mainUse, .lanConfirm, .removeSource: return true
+            default: return false
+            }
+        }
+        guard need, case .ok(let srcs) = await client.sources() else { return [:] }
+        var m: [String: String] = [:]
+        for s in srcs {
+            m[s.id] = s.name
+            for n in s.nodes ?? [] { m[n.id] = n.name }
+        }
+        return m
     }
 
     /// 回国时第四道的请求值：没有这一块、或勾选等于现状时 nil（保持，命令里不带 --claude-proxy）；否则是勾选的值。
@@ -261,17 +279,35 @@ public final class PrivilegedSession: ObservableObject {
         case .failed(let why):
             phase = .done(ok: false, message: L10n.privUnavailable, output: why)
         case .finished(let out):
-            if let (code, body) = PrivilegedCommand.parse(out) {
+            if let o = PrivilegedCommand.parseOutput(out) {
+                let code = o.exit
                 var msg = service.map { L10n.serviceExit(code, $0) } ?? L10n.privExit(code)
-                if service == nil, request?.isRestore == true, let m = restoreMessage(code: code, body: body) {
+                if service == nil, request?.isRestore == true, let m = restoreMessage(code: code, body: o.stdout) {
                     msg = m.message
                     warning = m.warning
                 }
-                phase = .done(ok: code == 0, message: msg, output: body)
+                phase = .done(ok: code == 0, message: msg, output: Self.outputText(o, total: request?.steps.count ?? 0))
             } else {
                 phase = .done(ok: false, message: L10n.privUnavailable, output: out)
             }
         }
+    }
+
+    /// 结果下面附的输出：失败时先写停在哪一步（多步时）、再写标准错误里的说明，没有说明时给标准输出；成功时给标准输出
+    /// （标准错误里有提示时附在后面）。失败时一定有内容（“见下面的输出”下面不能是空的）。
+    static func outputText(_ o: PrivilegedOutput, total: Int) -> String {
+        let multi = total > 1 || o.steps.count > 1
+        let errs = o.stepErrors.map { multi && !$0.step.isEmpty ? $0.step + "：" + $0.text : $0.text }.joined(separator: "\n")
+        if o.exit == 0 {
+            return [o.stdout, errs].filter { !$0.isEmpty }.joined(separator: "\n")
+        }
+        var parts: [String] = []
+        if multi, let st = o.failedStep, let i = o.steps.firstIndex(of: st) {
+            parts.append(L10n.privStoppedAt(i + 1, of: max(total, o.steps.count), step: st))
+        }
+        if !errs.isEmpty { parts.append(errs) } else if !o.stdout.isEmpty { parts.append(o.stdout) }
+        if parts.isEmpty || errs.isEmpty && o.stdout.isEmpty { parts.append(L10n.privNoOutput) }
+        return parts.joined(separator: "\n")
     }
 
     /// 回国的结果里第四道的部分（v0.72）：命令行 --json 的输出里有 claude_proxy_change（成功）或带 conflicts 的错误应答。

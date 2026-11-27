@@ -2,31 +2,41 @@
 umask 077
 A='@INST@/bin/abroad'; S='@STG@'
 for p in "$A" '@INST@/bin' '@INST@'; do [ -e "$p" ] && [ ! -L "$p" ] && [ "$(/usr/bin/stat -f %u "$p")" = 0 ] && [ $(( 0$(/usr/bin/stat -f %Lp "$p") & 022 )) = 0 ] || { echo 'RESULT=31'; exit 0; }; done; [ -f "$A" ] || { echo 'RESULT=31'; exit 0; }
-/bin/rm -rf "$S" && /bin/mkdir -m 700 "$S" && /usr/sbin/chown root:wheel "$S" && /bin/cp '@IN@' '@STG@/in1' && [ "$(/usr/bin/shasum -a 256 '@STG@/in1' | /usr/bin/cut -c1-64)" = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' ] || { /bin/rm -rf "$S"; echo 'RESULT=32'; exit 0; }
-"$A" --yes --json 'main' 'add-source' '--url-file' '@STG@/in1' '--name' '订阅'; rc=$?; [ $rc = 0 ] || { /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
-/bin/rm -rf "$S"; echo 'RESULT=0'; exit 0
+/bin/rm -rf "$S" && /bin/mkdir -m 700 "$S" && /usr/sbin/chown root:wheel "$S" && [ ! -L "$S" ] || { /bin/rm -rf "$S"; echo 'RESULT=34'; exit 0; }
+f() { [ -s "$1" ] || return 0; /bin/cat "$1"; [ -z "$(/usr/bin/tail -c 1 "$1")" ] || echo; }
+/bin/cp '@IN@' '@STG@/in1' && [ "$(/usr/bin/shasum -a 256 '@STG@/in1' | /usr/bin/cut -c1-64)" = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' ] || { /bin/rm -rf "$S"; echo 'RESULT=32'; exit 0; }
+"$A" --yes --json 'main' 'add-source' '--url-file' '@STG@/in1' '--name' '订阅' >"$S/o1" 2>"$S/e1"; rc=$?; [ $rc = 0 ] || { echo '---STEP main add-source---'; f "$S/o1"; echo '---STDERR---'; echo '---STEP main add-source---'; f "$S/e1"; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
+rc=0; echo '---STEP main add-source---'; f "$S/o1"; echo '---STDERR---'; echo '---STEP main add-source---'; f "$S/e1"; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0
 ### restore-kill
 umask 077
 A='@INST@/bin/abroad'; S='@STG@'
 for p in "$A" '@INST@/bin' '@INST@'; do [ -e "$p" ] && [ ! -L "$p" ] && [ "$(/usr/bin/stat -f %u "$p")" = 0 ] && [ $(( 0$(/usr/bin/stat -f %Lp "$p") & 022 )) = 0 ] || { echo 'RESULT=31'; exit 0; }; done; [ -f "$A" ] || { echo 'RESULT=31'; exit 0; }
-"$A" --yes --json 'restore' '--kill-browsers'; rc=$?; [ $rc = 0 ] || { /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
-/bin/rm -rf "$S"; echo 'RESULT=0'; exit 0
+/bin/rm -rf "$S" && /bin/mkdir -m 700 "$S" && /usr/sbin/chown root:wheel "$S" && [ ! -L "$S" ] || { /bin/rm -rf "$S"; echo 'RESULT=34'; exit 0; }
+f() { [ -s "$1" ] || return 0; /bin/cat "$1"; [ -z "$(/usr/bin/tail -c 1 "$1")" ] || echo; }
+"$A" --yes --json 'restore' '--kill-browsers' >"$S/o1" 2>"$S/e1"; rc=$?; [ $rc = 0 ] || { echo '---STEP restore---'; f "$S/o1"; echo '---STDERR---'; echo '---STEP restore---'; f "$S/e1"; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
+rc=0; echo '---STEP restore---'; f "$S/o1"; echo '---STDERR---'; echo '---STEP restore---'; f "$S/e1"; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0
 ### mainuse-apply
 umask 077
 A='@INST@/bin/abroad'; S='@STG@'
 for p in "$A" '@INST@/bin' '@INST@'; do [ -e "$p" ] && [ ! -L "$p" ] && [ "$(/usr/bin/stat -f %u "$p")" = 0 ] && [ $(( 0$(/usr/bin/stat -f %Lp "$p") & 022 )) = 0 ] || { echo 'RESULT=31'; exit 0; }; done; [ -f "$A" ] || { echo 'RESULT=31'; exit 0; }
-"$A" --yes --json 'main' 'use' 'n1' '--via' 'n2'; rc=$?; [ $rc = 0 ] || { /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
-"$A" --yes --json 'main' 'apply'; rc=$?; [ $rc = 0 ] || { /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
-/bin/rm -rf "$S"; echo 'RESULT=0'; exit 0
+/bin/rm -rf "$S" && /bin/mkdir -m 700 "$S" && /usr/sbin/chown root:wheel "$S" && [ ! -L "$S" ] || { /bin/rm -rf "$S"; echo 'RESULT=34'; exit 0; }
+f() { [ -s "$1" ] || return 0; /bin/cat "$1"; [ -z "$(/usr/bin/tail -c 1 "$1")" ] || echo; }
+"$A" --yes --json 'main' 'use' 'n1' '--via' 'n2' >"$S/o1" 2>"$S/e1"; rc=$?; [ $rc = 0 ] || { echo '---STEP main use---'; f "$S/o1"; echo '---STDERR---'; echo '---STEP main use---'; f "$S/e1"; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
+"$A" --yes --json 'main' 'apply' >"$S/o2" 2>"$S/e2"; rc=$?; [ $rc = 0 ] || { echo '---STEP main use---'; f "$S/o1"; echo '---STEP main apply---'; f "$S/o2"; echo '---STDERR---'; echo '---STEP main use---'; f "$S/e1"; echo '---STEP main apply---'; f "$S/e2"; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
+rc=0; echo '---STEP main use---'; f "$S/o1"; echo '---STEP main apply---'; f "$S/o2"; echo '---STDERR---'; echo '---STEP main use---'; f "$S/e1"; echo '---STEP main apply---'; f "$S/e2"; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0
 ### restore-cp-on
 umask 077
 A='@INST@/bin/abroad'; S='@STG@'
 for p in "$A" '@INST@/bin' '@INST@'; do [ -e "$p" ] && [ ! -L "$p" ] && [ "$(/usr/bin/stat -f %u "$p")" = 0 ] && [ $(( 0$(/usr/bin/stat -f %Lp "$p") & 022 )) = 0 ] || { echo 'RESULT=31'; exit 0; }; done; [ -f "$A" ] || { echo 'RESULT=31'; exit 0; }
-"$A" --yes --json 'restore' '--claude-proxy' 'on'; rc=$?; [ $rc = 0 ] || { /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
-/bin/rm -rf "$S"; echo 'RESULT=0'; exit 0
+/bin/rm -rf "$S" && /bin/mkdir -m 700 "$S" && /usr/sbin/chown root:wheel "$S" && [ ! -L "$S" ] || { /bin/rm -rf "$S"; echo 'RESULT=34'; exit 0; }
+f() { [ -s "$1" ] || return 0; /bin/cat "$1"; [ -z "$(/usr/bin/tail -c 1 "$1")" ] || echo; }
+"$A" --yes --json 'restore' '--claude-proxy' 'on' >"$S/o1" 2>"$S/e1"; rc=$?; [ $rc = 0 ] || { echo '---STEP restore---'; f "$S/o1"; echo '---STDERR---'; echo '---STEP restore---'; f "$S/e1"; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
+rc=0; echo '---STEP restore---'; f "$S/o1"; echo '---STDERR---'; echo '---STEP restore---'; f "$S/e1"; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0
 ### restore-kill-cp-off
 umask 077
 A='@INST@/bin/abroad'; S='@STG@'
 for p in "$A" '@INST@/bin' '@INST@'; do [ -e "$p" ] && [ ! -L "$p" ] && [ "$(/usr/bin/stat -f %u "$p")" = 0 ] && [ $(( 0$(/usr/bin/stat -f %Lp "$p") & 022 )) = 0 ] || { echo 'RESULT=31'; exit 0; }; done; [ -f "$A" ] || { echo 'RESULT=31'; exit 0; }
-"$A" --yes --json 'restore' '--kill-browsers' '--claude-proxy' 'off'; rc=$?; [ $rc = 0 ] || { /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
-/bin/rm -rf "$S"; echo 'RESULT=0'; exit 0
+/bin/rm -rf "$S" && /bin/mkdir -m 700 "$S" && /usr/sbin/chown root:wheel "$S" && [ ! -L "$S" ] || { /bin/rm -rf "$S"; echo 'RESULT=34'; exit 0; }
+f() { [ -s "$1" ] || return 0; /bin/cat "$1"; [ -z "$(/usr/bin/tail -c 1 "$1")" ] || echo; }
+"$A" --yes --json 'restore' '--kill-browsers' '--claude-proxy' 'off' >"$S/o1" 2>"$S/e1"; rc=$?; [ $rc = 0 ] || { echo '---STEP restore---'; f "$S/o1"; echo '---STDERR---'; echo '---STEP restore---'; f "$S/e1"; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0; }
+rc=0; echo '---STEP restore---'; f "$S/o1"; echo '---STDERR---'; echo '---STEP restore---'; f "$S/e1"; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0

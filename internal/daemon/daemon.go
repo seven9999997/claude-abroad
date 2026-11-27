@@ -633,6 +633,8 @@ func opErrCode(err error, status int) api.ErrorCode {
 		return api.CodeUninstalled
 	case isMainPushErr(err):
 		return api.CodeMainPushFailed
+	case isMainNotReady(err):
+		return api.CodeMainUnreachable
 	}
 	return api.DefaultCode(status)
 }

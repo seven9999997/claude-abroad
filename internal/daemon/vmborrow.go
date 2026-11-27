@@ -4,9 +4,13 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"claude-abroad/internal/api"
+	"claude-abroad/internal/managedproxy"
 	"claude-abroad/internal/redact"
 	"claude-abroad/internal/state"
 	"claude-abroad/internal/usererror"
@@ -259,7 +263,10 @@ func vmErrText(err error) string {
 	var vu *VMUnavailable
 	var pe *MainPushError
 	var pf *ProbeFailure
+	var mr *MainNotReadyError
 	switch {
+	case errors.As(err, &mr):
+		return mr.Error()
 	case errors.As(err, &vu):
 		return vu.Reason
 	case errors.As(err, &pe):
@@ -304,6 +311,8 @@ func writeVMErr(w http.ResponseWriter, action string, err error, probeStatus int
 			next = "请等虚拟机恢复后再试。"
 		}
 		writeErr(w, http.StatusServiceUnavailable, api.ErrorBody{Code: api.CodeVMUnavailable, Error: usererror.New("启动虚拟机", vu.Reason, next, err).Error()})
+	case isMainNotReady(err):
+		writeErr(w, probeStatus, api.ErrorBody{Code: api.CodeMainUnreachable, Error: usererror.New(action, err.Error(), "请确认主代理节点可用，稍后再试；虚拟机已经关闭，本机网络没有改动。", err).Error()})
 	case errors.As(err, &pe):
 		writeErr(w, http.StatusBadGateway, api.ErrorBody{Code: api.CodeMainPushFailed, Error: usererror.New(action, pe.Error(), "请检查选择的节点；虚拟机已经关闭，本机网络没有改动。", err).Error()})
 	case errors.As(err, &pf) && pf.OnlyChannel:
@@ -337,11 +346,12 @@ func (d *Daemon) pushForProbe(ctx context.Context, op string, u vmUse) error {
 	}
 	d.borrowStep(op, BorrowPushing, "")
 	d.exitPushMu.Lock()
-	defer d.exitPushMu.Unlock()
-	if err := d.pushManagedLocked(ctx, vm, "应用主代理", false); err != nil {
+	err := d.pushManagedLocked(ctx, vm, "应用主代理", false)
+	d.exitPushMu.Unlock()
+	if err != nil {
 		return &MainPushError{Err: err}
 	}
-	return nil
+	return d.waitMainReady(ctx) // 下发之后等主代理就绪再检查
 }
 
 // mainPushVM 包住状态机用的虚拟机：启用第 ④ 步（状态文件是 ENABLING）虚拟机就绪之后按保存的选择下发主代理
@@ -359,11 +369,147 @@ func (v mainPushVM) Start(ctx context.Context) error {
 	if v.d == nil || v.d.fileState() != state.Enabling {
 		return nil
 	}
+	undo := v.d.mainRecordSnapshot()
 	if err := v.d.ensureMainPushed(ctx); err != nil {
 		// 包成面向用户的错误：状态机按第 ④ 步失败回滚，Wrap 取得到这里的原因（应答代码 main_push_failed）。
 		return usererror.New("把主代理配置下发到虚拟机", reasonOf(err), "", &MainPushError{Err: err})
+	}
+	if v.d.managedMain() {
+		// 第 ⑤ 步紧接着经主代理检查出口：先等它就绪。没就绪按第 ④ 步失败回滚（应答代码 main_unreachable）。
+		if err := v.d.waitMainReady(ctx); err != nil {
+			undo() // 回到启用前：“已下发”记录、待下发的选择都还原（虚拟机按回滚停掉）
+			return usererror.New("等主代理在虚拟机里就绪", err.Error(), "", err)
+		}
 	}
 	return nil
 }
 
 func (v mainPushVM) Stop(ctx context.Context) error { return v.inner.Stop(ctx) }
+
+// 下发主代理之后等它在虚拟机里就绪（2026-11-27 真机：借用时下发后立即检查，出口检查全是“虚拟机拒绝了数据流”，
+// 主代理引擎还没起来）。agent 的 health 报告各引擎的状态：出口 main 要 sing-box 和 mihomo 都是 running 才能开流
+// （internal/agent 的 MainExits），所以按 health 轮询，连续两次都可用才算就绪（刚起来又退出的不算）。
+var (
+	mainReadyTimeout = 30 * time.Second       // 测试改短
+	mainReadyPoll    = 500 * time.Millisecond // 轮询间隔
+)
+
+// mainReadyStreak 是连续几次读到“可用”才算就绪。
+const mainReadyStreak = 2
+
+// MainNotReadyError 是下发之后主代理在时限内没有就绪（应答代码 main_unreachable）。Reason 是 agent 报告的原因（已脱敏）。
+type MainNotReadyError struct {
+	Wait   time.Duration
+	Reason string
+}
+
+func (e *MainNotReadyError) Error() string {
+	return "主代理在虚拟机里 " + strconv.FormatFloat(e.Wait.Seconds(), 'f', -1, 64) + " 秒内没有就绪：" + e.Reason
+}
+
+func isMainNotReady(err error) bool {
+	var mr *MainNotReadyError
+	return errors.As(err, &mr)
+}
+
+var engineStateText = map[string]string{
+	"stopped":      "没有运行",
+	"checking":     "正在校验配置",
+	"check_failed": "配置校验没有通过",
+	"starting":     "正在启动",
+	"backoff":      "意外退出，正在等待重启",
+	"":             "没有报告状态",
+}
+
+// mainEngineWhy 是主代理还不能用的原因（能用时为空）：先看转发引擎 sing-box，再看主代理引擎 mihomo。
+func mainEngineWhy(h VMHealth) string {
+	for _, e := range []struct{ key, name string }{{"sing-box", "转发引擎（sing-box）"}, {"mihomo", "主代理引擎（mihomo）"}} {
+		v := h.Engines[e.key]
+		if v.State == "running" {
+			continue
+		}
+		st, ok := engineStateText[v.State]
+		if !ok {
+			st = "还没有运行"
+		}
+		why := e.name + st
+		if le := strings.TrimSpace(redact.String(v.LastError)); le != "" {
+			why += "（" + le + "）"
+		}
+		return why
+	}
+	return ""
+}
+
+// waitMainReady 在下发主代理之后、检查出口之前调用：每 mainReadyPoll 读一次 agent 的 health，主代理引擎连续报告
+// 可用才返回；mainReadyTimeout 内没有就绪返回 *MainNotReadyError（原因取最后一次 agent 报告的）。读不了 health 的
+// 虚拟机（开发工具的假实现）不等。
+func (d *Daemon) waitMainReady(ctx context.Context) error {
+	hr, ok := d.opts.Sys.MainVM.(healthReporter)
+	if !ok {
+		return nil
+	}
+	wait := mainReadyTimeout
+	deadline := time.Now().Add(wait)
+	why, streak := "还没有读到虚拟机的健康状态", 0
+	for {
+		hctx, cancel := context.WithTimeout(ctx, ExitVMTimeout)
+		h, err := hr.Health(hctx)
+		cancel()
+		switch {
+		case err != nil:
+			streak, why = 0, "读不到虚拟机的健康状态"
+		default:
+			if w := mainEngineWhy(h); w != "" {
+				streak, why = 0, w
+			} else if streak++; streak >= mainReadyStreak {
+				return nil
+			}
+		}
+		if !time.Now().Before(deadline) || ctx.Err() != nil {
+			return &MainNotReadyError{Wait: wait, Reason: why}
+		}
+		t := time.NewTimer(min(mainReadyPoll, max(time.Until(deadline), 0)))
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return &MainNotReadyError{Wait: wait, Reason: why}
+		case <-t.C:
+		}
+	}
+}
+
+// mainRecordSnapshot 记下“已下发”记录和待下发的选择这两个文件的原样，返回还原它们的函数（启用第 ④ 步在下发之后失败时用）。
+func (d *Daemon) mainRecordSnapshot() func() {
+	if d.main == nil {
+		return func() {}
+	}
+	type saved struct {
+		b  []byte
+		ok bool
+	}
+	names := []string{"applied.json", "pending.json"}
+	snap := map[string]saved{}
+	d.main.mu.Lock()
+	for _, n := range names {
+		b, err := os.ReadFile(d.main.file(n))
+		snap[n] = saved{b, err == nil}
+	}
+	d.main.mu.Unlock()
+	return func() {
+		d.main.mu.Lock()
+		for _, n := range names {
+			if sv := snap[n]; sv.ok {
+				_ = managedproxy.Write(d.main.file(n), sv.b)
+			} else {
+				_ = os.Remove(d.main.file(n))
+			}
+		}
+		d.main.mu.Unlock()
+		if a, _ := d.main.applied(); a != nil {
+			d.setPushedMain(a.Store.Selected)
+		} else {
+			d.setPushedMain("")
+		}
+	}
+}

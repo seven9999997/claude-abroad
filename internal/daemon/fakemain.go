@@ -60,7 +60,7 @@ func (*FakeMainVM) PushExits(_ context.Context, xs []StoredExit) ([]AgentExit, e
 	return out, nil
 }
 func (f *FakeMainVM) Health(context.Context) (VMHealth, error) {
-	return VMHealth{BootID: "fake-boot", Version: "fake", Engines: map[string]EngineView{"mihomo": {State: "running"}}}, nil
+	return VMHealth{BootID: "fake-boot", Version: "fake", Engines: map[string]EngineView{"sing-box": {State: "running"}, "mihomo": {State: "running"}}}, nil
 }
 
 // ErrFakeNoFetch 是假系统里抓取订阅的结果（不碰网络）。

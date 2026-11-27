@@ -33,6 +33,7 @@ type fakeMainVM struct {
 	hopPrivate  int64
 	unreachable bool
 	gateSeen    []bool
+	engines     map[string]EngineView // health 里的引擎（nil 时两个都在运行）
 }
 
 func (f *fakeMainVM) log(s string) { f.line = append(f.line, s) }

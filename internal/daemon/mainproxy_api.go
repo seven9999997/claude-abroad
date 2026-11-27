@@ -398,7 +398,7 @@ func (d *Daemon) switchMain(w http.ResponseWriter, r *http.Request, p mainPlan, 
 	defer d.exitPushMu.Unlock()
 	old, _ := d.main.applied()
 	oldBase, oldBaseErr := os.ReadFile(bs.Path) // 更换前的基准（保存失败时整体回退要用；没有时为空）
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 2*MainPushTimeout+ExitCheckTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 2*MainPushTimeout+mainReadyTimeout+ExitCheckTimeout)
 	defer cancel()
 	d.gate.AddReason(gatesm.ReasonMainSwitch, "正在更换主代理")
 	done := func() {
@@ -437,6 +437,11 @@ func (d *Daemon) switchMain(w http.ResponseWriter, r *http.Request, p mainPlan, 
 		return
 	}
 	d.setPushedMain(p.store.Selected) // 补齐二：接下来的检查结果记在新节点名下
+	// 和借用、启用一样：agent 等到端口可连才应答，但引擎可能随即退出、转发引擎也可能没在运行，先等主代理就绪再检查。
+	if err := d.waitMainReady(ctx); err != nil {
+		fail(http.StatusUnprocessableEntity, "等新的主代理在虚拟机里就绪", err)
+		return
+	}
 	base, err := bs.Probe(ctx, req.Rule)
 	if err != nil {
 		// 第一跳域名解析到了局域网地址（网关不放行，v2.3 偏差的结论）：给出能照着做的提示。
