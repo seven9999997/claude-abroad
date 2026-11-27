@@ -268,12 +268,17 @@ func (d *Daemon) handleClaudeProxyGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Daemon) handleClaudeProxyPut(w http.ResponseWriter, r *http.Request) {
-	var req ClaudeProxySetting
-	b, _ := io.ReadAll(io.LimitReader(r.Body, 64<<10))
-	if json.Unmarshal(b, &req) != nil {
+	// 严格解析（architect 建议改 1）：缺 enabled 或有别的字段一律 400——否则 {} 或拼错的字段名会被当成“关闭”执行。
+	var strict struct {
+		Enabled *bool `json:"enabled"`
+	}
+	dec := json.NewDecoder(io.LimitReader(r.Body, 64<<10))
+	dec.DisallowUnknownFields()
+	if dec.Decode(&strict) != nil || strict.Enabled == nil || dec.More() {
 		writeErr(w, http.StatusBadRequest, api.ErrorBody{Error: "请求体不合法：只认 {\"enabled\": true|false}", Field: "enabled"})
 		return
 	}
+	req := ClaudeProxySetting{Enabled: *strict.Enabled}
 	if !d.cpAvailable() {
 		writeErr(w, http.StatusNotImplemented, api.ErrorBody{Error: usererror.New("切换第四道", "这次安装没有打开启动管控", "第四道只在打开了启动管控的安装里有。", nil).Error()})
 		return

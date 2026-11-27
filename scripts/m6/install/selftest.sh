@@ -169,13 +169,33 @@ F=$(mkcase); DRY_RUN=1 M6I_TEST_DIR="$F" bash "${INSTALL}" >/dev/null 2>&1 && ba
 plain bash "${INSTALL}" >/dev/null 2>"${TMP}/g5" && bad "g. 不用 sudo 的真实安装没被拒绝" || { grep -q 'sudo' "${TMP}/g5" && ok "g. 不用 sudo 的真实安装被拒绝" || bad "g. 拒绝的说明不对"; }
 
 # ---- h. 空跑和命令核对 ----
-for p in "$I" "$SNAP"; do [ -e "$p" ] && bad "h. 运行前 $p 就存在（不该在开发机上出现）"; done
+# 这台 Mac 真装着开发版时（architect 2026-11-27）：“运行前这些路径不在”跳过并说明；“空跑没写系统路径”改成比较空跑前后这些
+# 路径的状态（存在与否、大小、修改时间、顶层目录的列表），一样就算没写。没装过的机器上行为和以前完全一样。
+# M6I_SELFTEST_INSTALLED_PATH 只给自测的自测用：换成一个不存在的路径，验证“没装过”的分支照常执行。
+SYSP=("$I" "$SNAP" /var/run/claude-abroad /Library/LaunchDaemons/com.claude-abroad.dev.abroadd.plist)
+INSTALLED=0
+[ -e "${M6I_SELFTEST_INSTALLED_PATH:-$I}" ] && INSTALLED=1
+skips=0
+skip() { echo "- 跳过：$*"; skips=$((skips + 1)); }
+syssnap() { local p; for p in "${SYSP[@]}"; do
+  if [ -e "$p" ]; then printf '%s\t%s\n' "$p" "$(stat -f '%z %m %p' "$p" 2>/dev/null)"; [ -d "$p" ] && ls -la "$p" 2>/dev/null | tail -n +2; else printf '%s\t无\n' "$p"; fi
+done; }
+if [ "${INSTALLED}" = 1 ]; then
+  skip "h. 运行前 ${I}、${SNAP} 不存在：这台 Mac 装着开发版，这一项要在没装过的机器上验证"
+else
+  for p in "$I" "$SNAP"; do [ -e "$p" ] && bad "h. 运行前 $p 就存在（不该在开发机上出现）"; done
+fi
+syssnap >"${TMP}/sys.before"
 plain DRY_RUN=1 bash "${INSTALL}" >"${TMP}/i.dry" 2>/dev/null && ok "h. 安装空跑退出码 0" || bad "h. 安装空跑退出码非零"
 plain DRY_RUN=1 bash "${UNINSTALL}" >"${TMP}/u.dry" 2>/dev/null && ok "h. 卸载空跑退出码 0" || bad "h. 卸载空跑退出码非零"
-for p in "$I" "$SNAP" /var/run/claude-abroad /Library/LaunchDaemons/com.claude-abroad.dev.abroadd.plist; do
-  [ -e "$p" ] && bad "h. 空跑写了 $p"
-done
-ok "h. 空跑没有写任何系统路径"
+syssnap >"${TMP}/sys.after"
+if [ "${INSTALLED}" = 1 ]; then
+  cmp -s "${TMP}/sys.before" "${TMP}/sys.after" && ok "h. 空跑前后系统路径的状态没有变化（这台 Mac 装着开发版，按前后对照判断）" || bad "h. 空跑改动了系统路径：$(diff "${TMP}/sys.before" "${TMP}/sys.after" | head -5)"
+else
+  w=0
+  for p in "${SYSP[@]}"; do [ -e "$p" ] && { bad "h. 空跑写了 $p"; w=1; }; done
+  [ $w = 0 ] && ok "h. 空跑没有写任何系统路径"
+fi
 scripts/m6/install/check-commands.sh "${TMP}/i.dry" "${TMP}/u.dry" >"${TMP}/cc" && ok "h. 命令核对通过" || bad "h. 命令核对不通过：$(cat "${TMP}/cc")"
 neg() { # neg <名字> <install 输出> <uninstall 输出> [源码目录]
   if M6I_CC_SRC_DIR="${4:-}" scripts/m6/install/check-commands.sh "$2" "$3" >/dev/null 2>&1; then bad "h. 反例没被拦下：$1"; else ok "h. 反例被拦下：$1"; fi
@@ -207,5 +227,6 @@ env -u M6I_TEST_SRC -u M6I_TEST_APP -u M6I_TEST_DIR bash -c ". scripts/m6/instal
 scripts/lib/buildcheck-selftest.sh >"${TMP}/bc" 2>&1 && ok "“是不是开发构建”的判断（$(grep -c '^✓' "${TMP}/bc") 项，含退出码 2 的假程序）" || bad "“是不是开发构建”的判断：$(grep '^✗' "${TMP}/bc" | head -3)"
 
 echo
+[ "${skips:-0}" -gt 0 ] && echo "跳过 ${skips} 项（原因见上面“- 跳过”各行；不算失败）"
 [ $fails = 0 ] && echo "自测全部通过" || echo "自测：${fails} 处不通过"
 exit $((fails > 0))

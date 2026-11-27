@@ -560,3 +560,33 @@ func TestClaudeProxyAfterUninstallAndForeignSameName(t *testing.T) {
 		t.Fatal("卸载之后不应写分片、不应监听")
 	}
 }
+
+// architect 建议改 1：请求体严格解析。缺 enabled、拼错字段名、多余字段一律 400，开关不变（开着时不被误关，关着时不被误开）。
+func TestClaudeProxyPutStrictBody(t *testing.T) {
+	e := newCPSEnv(t)
+	d := e.start()
+	bad := []string{`{}`, `{"enable":true}`, `{"enabled":true,"x":1}`, `{"enabled":null}`, `{"enabled":true}{"enabled":false}`, `not json`}
+	check := func(wantOn bool) {
+		t.Helper()
+		for _, body := range bad {
+			code, b, err := callRaw(d, "PUT", "/v1/settings/claude-proxy", []byte(body))
+			if err != nil || code != http.StatusBadRequest || codeOf(t, b).Field != "enabled" {
+				t.Fatalf("%s：应 400 且 field=enabled：%d %s %v", body, code, b, err)
+			}
+			if d.cpOn.Load() != wantOn {
+				t.Fatalf("%s：开关被改了（应为 %v）", body, wantOn)
+			}
+		}
+	}
+	check(false)
+	if code, b := putCP(t, d, true); code != 200 {
+		t.Fatalf("打开：%d %s", code, b)
+	}
+	check(true)
+	if code, b := putCP(t, d, false); code != 200 {
+		t.Fatalf("关掉：%d %s", code, b)
+	}
+	if d.cpOn.Load() {
+		t.Fatal("合法请求应能关掉")
+	}
+}
