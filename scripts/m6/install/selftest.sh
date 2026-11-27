@@ -10,7 +10,18 @@
 #   e. 安装中途失败：自动卸载，回到安装前；
 #   f. 前提不满足时不改任何东西：已经装过、上一次没走完、用户已存在、走查脚本的状态还在、缺构建产物；
 #   g. 模式护栏：测试变量离开自测目录被拒绝；自测目录必须是绝对路径、自己拥有的；自测和空跑不能同时用；
-#   h. 空跑：退出码 0，不写任何文件；命令核对通过；反例（多出的命令、安装里碰网络、顺序错、源码里的禁止命令）都被拦下。
+#   h. 空跑：退出码 0，不写任何文件；命令核对通过；反例（多出的命令、安装里碰网络、顺序错、源码里的禁止命令）都被拦下；
+# 原地升级（v0.71，docs/app-install-plan.md 2.6）：
+#   i. 升级成功（已回国、已停用）：程序、镜像、清单、版本号换成新的，安装目录有脚本；state/、日志目录逐字节不变；
+#      只停、启 abroadd；不碰 pf、网络、DNS、专用用户；
+#   j. plist 变了才换（guard 的换了时重新注册一次）；
+#   k. 已启用、启用中、回国中、借用中、忙、卸载中、已卸载、状态文件坏了、不响应：退出码 10，什么都不改；
+#   l. 不降级（11）；一样时什么都不做（0）；  m. 状态格式不一样（13），老安装读 state.json 的 version；
+#   n. 版本不明：非交互要 --accept-unknown-version（否则 14）；
+#   o. 每一步注入失败、重启后应答不对：退回旧版本（20），和升级前逐字节一样；
+#   p. 退回也失败（21，prev 和标记留着）；再运行 --upgrade 接着退回；标记在时卸载照常；
+#   q. 中断后退回；  r. 升级后卸载和安装前一致；应用不在安装记录里时不参与卸载对照；
+#   s. payload.sh 的布局、--from 安装和升级、摘要对不上拒绝、--check-only --upgrade 只读；升级的空跑和命令核对及反例。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "${ROOT}" || exit 1
@@ -31,6 +42,7 @@ mkdir -p "${SRC}/bin" "${SRC}/image" "${TMP}/App.app/Contents/MacOS"
 for f in abroad abroad-rescue abroadd abroad-guard abroad-vm; do printf '#!/bin/sh\n# %s\n' "$f" >"${SRC}/bin/$f"; chmod +x "${SRC}/bin/$f"; done
 for f in Image initramfs.gz modloop rootfs.img; do printf 'img %s\n' "$f" >"${SRC}/image/$f"; done
 echo '{"version":1,"files":{}}' >"${SRC}/integrity.json"
+echo '{"commit":"1111111aaaaa","build_time":"20261101T000000Z","dirty":false,"state_format":1}' >"${SRC}/build.json"
 echo 'app' >"${TMP}/App.app/Contents/MacOS/ClaudeAbroad"
 echo '<plist/>' >"${TMP}/App.app/Contents/Info.plist"
 export M6I_TEST_SRC="${SRC}" M6I_TEST_APP="${TMP}/App.app"
@@ -253,6 +265,257 @@ if M6I_TEST_SYS_SNAP="${TMP}/sys.on" M6I_TEST_PF_REFS="${REFS_PFD}" uninst "$S";
 [ ! -e "$S$SNAP" ] && ok "only-snap. 快照被删" || bad "only-snap. 快照没删"
 grep -q '只剩安装前的快照' "$S/uninstall.err" && grep -q '进程名：pfd' "$S/uninstall.err" && ok "only-snap. 只重做对照，并说明 pf 由 pfd 持有" || bad "only-snap. 输出不对：$(cat "$S/uninstall.err")"
 cmp -s "$S/sys.log" "$S/sys.log.1" && ok "only-snap. 再卸载没有执行任何系统命令" || bad "only-snap. 再卸载执行了系统命令：$(diff "$S/sys.log.1" "$S/sys.log")"
+
+# ================= 原地升级（v0.71，docs/app-install-plan.md 2.6 的 i–s）=================
+# 每个场景：先用旧 payload 真装一份，在 state/ 里放假的主代理、规则、开关、记录，再用新 payload 真升级（系统命令只记 SYS:，
+# 状态接口是假的 JSON 文件：报告的版本按安装目录里的 build.json 改写）。
+# mkpayload <目录> <提交号> <构建时间> [状态格式]：假的 payload（程序内容带版本，便于核对换没换）。
+mkpayload() {
+  local d=$1 f
+  mkdir -p "$d/bin" "$d/image"
+  for f in abroad abroad-rescue abroadd abroad-guard abroad-vm; do printf '#!/bin/sh\n# %s %s\n' "$f" "$2" >"$d/bin/$f"; chmod +x "$d/bin/$f"; done
+  for f in Image initramfs.gz modloop rootfs.img; do printf 'img %s %s\n' "$f" "$2" >"$d/image/$f"; done
+  printf '{"version":1,"files":{},"v":"%s"}\n' "$2" >"$d/integrity.json"
+  printf '{"commit":"%s","build_time":"%s","dirty":false,"state_format":%s}\n' "$2" "$3" "${4:-1}" >"$d/build.json"
+}
+P1="${TMP}/p1"; mkpayload "$P1" 1111111aaaaa 20261101T000000Z
+P2="${TMP}/p2"; mkpayload "$P2" 2222222bbbbb 20261127T080000Z
+P0="${TMP}/p0"; mkpayload "$P0" 0000000ccccc 20261001T000000Z
+PF="${TMP}/pf"; mkpayload "$PF" 3333333ddddd 20261128T000000Z 2
+# 假的状态接口应答
+mkstatus() { # mkstatus <文件> <状态> [额外的 JSON 片段，逗号开头]
+  printf '{"state":"%s","prepare":{"done":true},"integrity":{"checked":true,"ok":true},"return_block":{"on":true,"active":true,"test":true},"uninstall":{"running":false,"done":false}%s}\n' "$2" "${3:-}" >"$1"
+}
+PL="${TMP}/payload" # payload.sh 组装的（s 里核对它的布局）
+scripts/dev/payload.sh --src "$P2" --out "$PL" >"${TMP}/pl.out" 2>&1
+ST_R="${TMP}/st.restored"; mkstatus "$ST_R" RESTORED
+ST_D="${TMP}/st.disabled"; mkstatus "$ST_D" DISABLED
+# 装好旧版并放进假的状态（主代理来源和选择、规则、开关、首次准备标记、解析锁和托管设置的记录、分流出口、地区）
+setup_old() { # setup_old <目录> [payload]
+  M6I_TEST_DIR="$1" M6I_TEST_SRC="${2:-$P1}" M6I_YES=1 bash "${INSTALL}" >"$1/install.out" 2>"$1/install.err" || { bad "升级的准备：安装失败：$(cat "$1/install.err")"; return 1; }
+  local s="$1$I/state"
+  mkdir -p "$s/store/proxy" "$s/abroadd/secrets"
+  echo '{"version":1,"state":"RESTORED","step":0}' >"$s/abroadd/state.json"
+  echo '{"version":1,"sources":[{"id":"s1"}],"selected":"n1"}' >"$s/store/proxy/sources.json"
+  echo '{"digest":"d1"}' >"$s/store/proxy/applied.json"
+  echo 'version: 1' >"$s/abroadd/rules.yaml"
+  echo '{"on":false}' >"$s/abroadd/allow-lan.json"
+  echo '2026-11-27T00:00:00Z' >"$s/abroadd/prepared"
+  echo '{"version":1,"domains":["lock-test.claude-abroad.invalid"]}' >"$s/abroadd/resolver-lock.json"
+  echo '{"tag":"jp"}' >"$s/abroadd/secrets/exit-jp.json"
+  echo '{"timezone":"Asia/Tokyo"}' >"$s/abroadd/region.json"
+  mkdir -p "$1/var/log/claude-abroad" && echo 'old log' >"$1/var/log/claude-abroad/abroadd.log"
+}
+# hashes <目录> <子树>：子树下每个文件一行（相对路径、摘要）
+hashes() { (cd "$1$2" 2>/dev/null && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256) ; }
+# 安装目录里除 state/ 以外的东西 + 两份 plist + 应用（升级会碰的全部）
+upgset() { { (cd "$1$I" && find . -path ./state -prune -o -print | LC_ALL=C sort; find . -path ./state -prune -o -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256)
+  shasum -a 256 "$1/Library/LaunchDaemons/"*.plist | sed "s|$1||"; hashes "$1" /Applications; } 2>/dev/null; }
+upg() { # upg <目录> <payload> <状态文件> [参数…]
+  local d=$1 src=$2 st=$3; shift 3
+  M6I_TEST_DIR="$d" M6I_TEST_SRC="$src" M6I_TEST_STATUS="$st" bash "${INSTALL}" --upgrade --yes "$@" >"$d/up.out" 2>"$d/up.err"
+}
+
+# ---- i. 升级成功（已回国、已停用）----
+for which in RESTORED DISABLED; do
+  U=$(mkcase); setup_old "$U" || continue
+  st=$ST_R; [ $which = DISABLED ] && st=$ST_D
+  hashes "$U" "$I/state" >"$U/state.before"; hashes "$U" /var/log/claude-abroad >"$U/log.before"
+  cp "$U/sys.log" "$U/sys.log.0"
+  if upg "$U" "$P2" "$st"; then ok "i. ${which}：升级退出码 0"; else bad "i. ${which}：升级失败 rc=$?：$(cat "$U/up.err")"; fi
+  okfiles=1
+  for f in bin/abroad bin/abroad-rescue bin/abroadd bin/abroad-guard bin/abroad-vm image/Image image/initramfs.gz image/modloop image/rootfs.img integrity.json build.json; do
+    cmp -s "$P2/$f" "$U$I/$f" || { okfiles=0; bad "i. ${which}：$f 没换成新的"; }
+  done
+  [ $okfiles = 1 ] && ok "i. ${which}：程序、镜像、清单、版本号都换成了新的"
+  [ -f "$U$I/scripts/m6/install/uninstall.sh" ] && [ -f "$U$I/scripts/m6/install/lib.sh" ] && [ -f "$U$I/scripts/lib/common.sh" ] && ok "i. ${which}：安装目录里有卸载要用的脚本" || bad "i. ${which}：安装目录里没有脚本"
+  hashes "$U" "$I/state" >"$U/state.after"; hashes "$U" /var/log/claude-abroad >"$U/log.after"
+  cmp -s "$U/state.before" "$U/state.after" && [ -s "$U/state.before" ] && ok "i. ${which}：state/ 逐字节没变（主代理、规则、开关、记录都在）" || bad "i. ${which}：state/ 变了：$(diff "$U/state.before" "$U/state.after" | head -3)"
+  cmp -s "$U/log.before" "$U/log.after" && ok "i. ${which}：日志目录没变" || bad "i. ${which}：日志目录变了"
+  [ ! -e "$U$I/prev" ] && [ ! -e "$U$SNAP/upgrading" ] && ok "i. ${which}：prev 和升级标记都不在" || bad "i. ${which}：prev 或标记还在"
+  newsys=$(diff "$U/sys.log.0" "$U/sys.log" | sed -n 's/^> //p')
+  [ "$(grep launchctl <<<"$newsys")" = "SYS: launchctl bootout system/com.claude-abroad.dev.abroadd
+SYS: launchctl bootstrap system $U/Library/LaunchDaemons/com.claude-abroad.dev.abroadd.plist" ] &&
+    ok "i. ${which}：plist 没变时只停、启 abroadd，不碰 guard" || bad "i. ${which}：launchctl 不对：$(grep launchctl <<<"$newsys")"
+  grep -qE 'SYS: (pfctl|networksetup|scutil|dscl|dscacheutil)' <<<"$newsys" && bad "i. ${which}：升级碰了网络或专用用户" || ok "i. ${which}：升级没有碰 pf、网络、DNS、专用用户"
+  grep -q '升级完成：1111111aaaaa（构建于 20261101T000000Z） → 2222222bbbbb' "$U/up.err" && ok "i. ${which}：输出写明从哪个版本升到哪个" || bad "i. ${which}：输出不对：$(tail -2 "$U/up.err")"
+done
+I_DONE=$U # 已升级到 P2 的一份，后面 l、r 用
+
+# ---- j. plist 变了才换 ----
+J=$(mkcase); setup_old "$J"
+cp "$J/sys.log" "$J/sys.log.0"
+M6I_EXIT_HOST=exit-check.example M6I_TEST_DIR="$J" M6I_TEST_SRC="$P2" M6I_TEST_STATUS="$ST_R" bash "${INSTALL}" --upgrade --yes >"$J/up.out" 2>"$J/up.err"; rc=$?
+newsys=$(diff "$J/sys.log.0" "$J/sys.log" | sed -n 's/^> //p')
+[ $rc = 0 ] && grep -q 'exit-check.example' "$J/Library/LaunchDaemons/com.claude-abroad.dev.abroadd.plist" && ! grep -q 'launchctl bootout system/com.claude-abroad.dev.guard' <<<"$newsys" &&
+  ok "j. abroadd 的参数变了：只换 abroadd 的 plist，guard 不动" || bad "j. abroadd 的 plist：rc=$rc $(grep launchctl <<<"$newsys")"
+J2=$(mkcase); setup_old "$J2"
+echo '<!-- 老版本 -->' >>"$J2/Library/LaunchDaemons/com.claude-abroad.dev.guard.plist"
+cp "$J2/sys.log" "$J2/sys.log.0"
+upg "$J2" "$P2" "$ST_R"; rc=$?
+newsys=$(diff "$J2/sys.log.0" "$J2/sys.log" | sed -n 's/^> //p')
+[ $rc = 0 ] && ! grep -q '老版本' "$J2/Library/LaunchDaemons/com.claude-abroad.dev.guard.plist" &&
+  [ "$(grep launchctl <<<"$newsys" | sed "s|$J2||")" = "SYS: launchctl bootout system/com.claude-abroad.dev.abroadd
+SYS: launchctl bootout system/com.claude-abroad.dev.guard
+SYS: launchctl bootstrap system /Library/LaunchDaemons/com.claude-abroad.dev.guard.plist
+SYS: launchctl bootstrap system /Library/LaunchDaemons/com.claude-abroad.dev.abroadd.plist" ] &&
+  ok "j. guard 的 plist 变了：换掉并像开机一样重新注册一次（在 abroadd 之前）" || bad "j. guard 的 plist：rc=$rc $(grep launchctl <<<"$newsys")"
+
+# ---- k. 状态不允许：拒绝、什么都不改 ----
+refuse() { # refuse <说明> <状态文件或空> <期望退出码> <期望的说明> [payload] [额外参数…]
+  local what=$1 st=$2 want=$3 msg=$4 src=${5:-$P2} K
+  shift 5 2>/dev/null || shift $#
+  K=$(mkcase); setup_old "$K" || return
+  upgset "$K" >"$K/set.before"; hashes "$K" "$I/state" >"$K/state.before"; cp "$K/sys.log" "$K/sys.log.0"
+  upg "$K" "$src" "$st" "$@"; local rc=$?
+  upgset "$K" >"$K/set.after"; hashes "$K" "$I/state" >"$K/state.after"
+  if [ $rc = "$want" ] && grep -q -- "$msg" "$K/up.err" && cmp -s "$K/set.before" "$K/set.after" && cmp -s "$K/state.before" "$K/state.after" &&
+    cmp -s "$K/sys.log" "$K/sys.log.0" && [ ! -e "$K$SNAP/upgrading" ]; then
+    ok "${what}：退出码 ${want}，什么都没改"
+  else
+    bad "${what}：rc=$rc $(grep -v '^$' "$K/up.err" | tail -2)"
+  fi
+}
+for s in ENABLED ENABLING RESTORING; do mkstatus "${TMP}/st.$s" "$s"; done
+mkstatus "${TMP}/st.borrow" RESTORED ',"borrow":{"phase":"starting"}'
+mkstatus "${TMP}/st.busy" RESTORED ',"busy":true'
+printf '{"state":"RESTORED","uninstall":{"running":true,"done":false}}\n' >"${TMP}/st.uning"
+printf '{"state":"RESTORED","uninstall":{"running":false,"done":true}}\n' >"${TMP}/st.uned"
+printf '{"state":"UNKNOWN","corrupt":true}\n' >"${TMP}/st.corrupt"
+refuse "k. 已启用" "${TMP}/st.ENABLED" 10 "已启用时不能升级：请先停用"
+refuse "k. 启用中" "${TMP}/st.ENABLING" 10 "正在启用"
+refuse "k. 回国中" "${TMP}/st.RESTORING" 10 "正在回国"
+refuse "k. 借用虚拟机中" "${TMP}/st.borrow" 10 "正在借用虚拟机"
+refuse "k. 一直忙" "${TMP}/st.busy" 10 "正在进行别的操作"
+refuse "k. 卸载中" "${TMP}/st.uning" 10 "正在一键卸载"
+refuse "k. 已卸载" "${TMP}/st.uned" 10 "已经一键卸载过"
+refuse "k. 状态文件坏了" "${TMP}/st.corrupt" 10 "读不出来"
+refuse "k. 后台服务不响应" "${TMP}/nosuch" 10 "后台服务没有响应"
+# ---- l. 不降级；一样时什么都不做 ----
+refuse "l. 要装的比后台旧（不降级）" "$ST_R" 11 "不降级" "$P0"
+refuse "l. 已经是这个版本" "$ST_R" 0 "已经是这个版本，什么都不做" "$P1"
+# ---- m. 状态格式不一样 ----
+refuse "m. 状态格式变了" "$ST_R" 13 "状态格式变了（旧 1、新 2）" "$PF"
+# ---- n. 版本不明（老安装：没有 build.json 和脚本）----
+old_install() { rm -f "$1$I/build.json"; rm -rf "$1$I/scripts"; }
+N=$(mkcase); setup_old "$N"; old_install "$N"
+upgset "$N" >"$N/set.before"; cp "$N/sys.log" "$N/sys.log.0"
+upg "$N" "$P2" "$ST_R"; rc=$?
+upgset "$N" >"$N/set.after"
+[ $rc = 14 ] && grep -q '版本不明' "$N/up.err" && grep -q -- '--accept-unknown-version' "$N/up.err" && cmp -s "$N/set.before" "$N/set.after" && cmp -s "$N/sys.log" "$N/sys.log.0" &&
+  ok "n. 版本不明、非交互、没加 --accept-unknown-version：退出码 14，什么都没改" || bad "n. 版本不明：rc=$rc $(tail -2 "$N/up.err")"
+upg "$N" "$P2" "$ST_R" --accept-unknown-version; rc=$?
+[ $rc = 0 ] && cmp -s "$P2/build.json" "$N$I/build.json" && [ -f "$N$I/scripts/m6/install/uninstall.sh" ] && grep -q '版本不明 → 2222222bbbbb' "$N/up.err" &&
+  ok "n. 加上 --accept-unknown-version：升级成功，补上了版本号和脚本" || bad "n. 加上 --accept-unknown-version：rc=$rc $(tail -2 "$N/up.err")"
+# 状态格式缺失时读 state.json 的 version：1 继续、2 拒绝
+N2=$(mkcase); setup_old "$N2"; old_install "$N2"
+echo '{"version":2,"state":"RESTORED","step":0}' >"$N2$I/state/abroadd/state.json"
+upg "$N2" "$P2" "$ST_R" --accept-unknown-version; rc=$?
+[ $rc = 13 ] && grep -q '状态文件的版本也读不出或不是 1' "$N2/up.err" && [ ! -e "$N2$I/build.json" ] && ok "m. 老安装、状态文件版本是 2：退出码 13，什么都没改" || bad "m. 老安装的状态格式：rc=$rc $(tail -2 "$N2/up.err")"
+
+# ---- o. 注入失败后退回旧版本 ----
+rollback_case() { # rollback_case <说明> <老安装 0|1> <环境变量赋值…>
+  local what=$1 old=$2 R; shift 2
+  R=$(mkcase); setup_old "$R" || return
+  [ "$old" = 1 ] && old_install "$R"
+  upgset "$R" >"$R/set.before"; hashes "$R" "$I/state" >"$R/state.before"
+  local extra=(); [ "$old" = 1 ] && extra=(--accept-unknown-version)
+  env "$@" M6I_TEST_DIR="$R" M6I_TEST_SRC="$P2" M6I_TEST_STATUS="$ST_R" bash "${INSTALL}" --upgrade --yes ${extra[@]+"${extra[@]}"} >"$R/up.out" 2>"$R/up.err"; local rc=$?
+  upgset "$R" >"$R/set.after"; hashes "$R" "$I/state" >"$R/state.after"
+  if [ $rc = 20 ] && grep -q '升级失败，已退回旧版本' "$R/up.err" && cmp -s "$R/set.before" "$R/set.after" && cmp -s "$R/state.before" "$R/state.after" &&
+    [ ! -e "$R$I/prev" ] && [ ! -e "$R$SNAP/upgrading" ] && [ "$(grep launchctl "$R/sys.log" | tail -1 | sed "s|$R||")" = "SYS: launchctl bootstrap system /Library/LaunchDaemons/com.claude-abroad.dev.abroadd.plist" ]; then
+    ok "o. ${what}：退出码 20，程序、镜像、清单、plist 和升级前逐字节一样，state/ 没变，最后重启了 abroadd"
+  else
+    bad "o. ${what}：rc=$rc $(grep -v '^$' "$R/up.err" | tail -2) $(diff "$R/set.before" "$R/set.after" | head -3)"
+  fi
+}
+for step in stop move place plist start verify; do rollback_case "在“${step}”注入失败" 0 M6I_TEST_FAIL_AT=$step; done
+rollback_case "老安装（没有版本号和脚本）在“place”注入失败：新放的版本号和脚本被删掉" 1 M6I_TEST_FAIL_AT=place
+rollback_case "老安装在“verify”注入失败" 1 M6I_TEST_FAIL_AT=verify
+for b in version integrity state; do rollback_case "重启后的应答不对（${b}）" 0 M6I_TEST_STATUS_BAD=$b; done
+# guard 的 plist 换过之后失败：放回旧的、重新注册 guard
+R=$(mkcase); setup_old "$R"; echo '<!-- 老版本 -->' >>"$R/Library/LaunchDaemons/com.claude-abroad.dev.guard.plist"
+upgset "$R" >"$R/set.before"
+M6I_TEST_FAIL_AT=start M6I_TEST_DIR="$R" M6I_TEST_SRC="$P2" M6I_TEST_STATUS="$ST_R" bash "${INSTALL}" --upgrade --yes >/dev/null 2>"$R/up.err"; rc=$?
+upgset "$R" >"$R/set.after"
+[ $rc = 20 ] && cmp -s "$R/set.before" "$R/set.after" && [ "$(grep -c 'launchctl bootstrap system .*guard.plist' "$R/sys.log")" = 3 ] &&
+  ok "o. guard 的 plist 换过之后失败：放回旧的 plist，并重新注册了 guard" || bad "o. guard 的 plist 退回：rc=$rc $(grep -c 'bootstrap .*guard' "$R/sys.log")"
+
+# ---- p. 退回也失败；再运行一次 --upgrade 接着退回 ----
+R=$(mkcase); setup_old "$R"; upgset "$R" >"$R/set.before"; hashes "$R" "$I/state" >"$R/state.before"
+M6I_TEST_FAIL_AT=start,rollback M6I_TEST_DIR="$R" M6I_TEST_SRC="$P2" M6I_TEST_STATUS="$ST_R" bash "${INSTALL}" --upgrade --yes >/dev/null 2>"$R/up.err"; rc=$?
+[ $rc = 21 ] && [ -d "$R$I/prev" ] && [ -f "$R$SNAP/upgrading" ] && grep -q 'docs/emergency.md' "$R/up.err" && grep -q '退回旧版本也没有完成' "$R/up.err" &&
+  ok "p. 退回也失败：退出码 21，prev 和升级标记留着，指向 docs/emergency.md" || bad "p. 退回也失败：rc=$rc $(tail -2 "$R/up.err")"
+upg "$R" "$P2" "$ST_R"; rc=$?
+upgset "$R" >"$R/set.after"; hashes "$R" "$I/state" >"$R/state.after"
+[ $rc = 20 ] && grep -q '上一次升级没有走完' "$R/up.err" && cmp -s "$R/set.before" "$R/set.after" && cmp -s "$R/state.before" "$R/state.after" && [ ! -e "$R$I/prev" ] && [ ! -e "$R$SNAP/upgrading" ] &&
+  ok "p. 再运行一次 --upgrade：先接着退回，回到升级前，退出码 20" || bad "p. 接着退回：rc=$rc $(tail -2 "$R/up.err")"
+# 升级标记还在时，全新安装拒绝（安装目录已经存在），卸载照常删掉整个安装目录（含 prev）
+R2=$(mkcase); setup_old "$R2"
+M6I_TEST_FAIL_AT=start,rollback M6I_TEST_DIR="$R2" M6I_TEST_SRC="$P2" M6I_TEST_STATUS="$ST_R" bash "${INSTALL}" --upgrade --yes >/dev/null 2>&1
+uninst "$R2"; rc=$?
+[ $rc = 0 ] && [ ! -e "$R2$I" ] && [ ! -e "$R2$SNAP" ] && ok "p. 升级标记在时卸载照常走完（prev 随安装目录一起删）" || bad "p. 升级标记在时卸载：rc=$rc $(tail -2 "$R2/uninstall.err")"
+
+# ---- q. 中断 ----
+for step in move place; do
+  R=$(mkcase); setup_old "$R"; upgset "$R" >"$R/set.before"
+  M6I_TEST_KILL_AT=$step M6I_TEST_DIR="$R" M6I_TEST_SRC="$P2" M6I_TEST_STATUS="$ST_R" bash "${INSTALL}" --upgrade --yes >/dev/null 2>"$R/up.err"; rc=$?
+  upgset "$R" >"$R/set.after"
+  [ $rc = 20 ] && grep -q '状态 130' "$R/up.err" && cmp -s "$R/set.before" "$R/set.after" && ok "q. 在“${step}”被中断：退回旧版本" || bad "q. 在“${step}”被中断：rc=$rc $(tail -2 "$R/up.err")"
+done
+
+# ---- r. 升级后再卸载：和安装前的快照一致 ----
+R=$(mkcase); tree "$R" >"$R/before.tree"
+setup_old "$R"; rm -rf "$R$I/state/store/proxy" "$R$I/state/abroadd/secrets"
+upg "$R" "$P2" "$ST_R" || bad "r. 升级失败"
+uninst "$R"; rc=$?
+tree "$R" >"$R/after.tree"
+[ $rc = 0 ] && diff -q "$R/before.tree" "$R/after.tree" >/dev/null && ok "r. 升级后卸载：和安装前一致" || bad "r. 升级后卸载：rc=$rc $(diff "$R/before.tree" "$R/after.tree" | head -3) $(tail -2 "$R/uninstall.err")"
+# 卸载对照里应用那一行只在安装记录里有它时参与：应用是安装之后才放进去的（记录里没有）→ 不算不一致
+R=$(mkcase); M6I_TEST_DIR="$R" M6I_TEST_SRC="$P1" M6I_YES=1 bash "${INSTALL}" --from "$PL" >/dev/null 2>&1 || true
+[ -d "$R$SNAP" ] && mkdir -p "$R/Applications/ClaudeAbroad.app" && echo later >"$R/Applications/ClaudeAbroad.app/x"
+uninst "$R"; rc=$?
+[ $rc = 0 ] && [ -f "$R/Applications/ClaudeAbroad.app/x" ] && ok "r. 应用不在安装记录里：卸载不删它，也不因它不一致" || bad "r. 应用不在记录里：rc=$rc $(tail -3 "$R/uninstall.err")"
+
+# ---- s. --from 和 payload ----
+[ -f "$PL/payload.sha256" ] && [ -f "$PL/scripts/m6/install/install.sh" ] && [ -f "$PL/scripts/lib/common.sh" ] &&
+  [ "$(wc -l <"$PL/payload.sha256" | tr -d ' ')" = 15 ] && ok "s. payload.sh：布局对，15 个文件都有摘要" || bad "s. payload.sh：$(cat "${TMP}/pl.out")"
+scripts/dev/payload.sh --src "${TMP}/nosuch" --out "${TMP}/pl2" >/dev/null 2>&1 && bad "s. payload.sh：缺文件时没有失败" || ok "s. payload.sh：缺文件时失败"
+S=$(mkcase); M6I_TEST_DIR="$S" M6I_YES=1 bash "$PL/scripts/m6/install/install.sh" --from "$PL" >"$S/i.out" 2>"$S/i.err"; rc=$?
+[ $rc = 0 ] && [ ! -e "$S/Applications/ClaudeAbroad.app" ] && cmp -s "$PL/bin/abroadd" "$S$I/bin/abroadd" && cmp -s "$PL/scripts/m6/install/uninstall.sh" "$S$I/scripts/m6/install/uninstall.sh" &&
+  ok "s. 从 payload 里的脚本、--from 安装：装上了，没复制应用，安装目录的脚本来自 payload" || bad "s. --from 安装：rc=$rc $(tail -2 "$S/i.err")"
+cp -R "$PL" "${TMP}/plbad" && echo tampered >>"${TMP}/plbad/bin/abroad-vm"
+S=$(mkcase); tree "$S" >"$S/before.tree"
+M6I_TEST_DIR="$S" M6I_YES=1 bash "${INSTALL}" --from "${TMP}/plbad" >/dev/null 2>"$S/i.err"; rc=$?
+tree "$S" >"$S/after.tree"
+[ $rc = 3 ] && grep -q 'payload.sha256 和里面的文件对不上' "$S/i.err" && diff -q "$S/before.tree" "$S/after.tree" >/dev/null && [ ! -s "$S/sys.log" ] &&
+  ok "s. payload 被改过（摘要对不上）：拒绝，什么都没改" || bad "s. payload 被改过：rc=$rc"
+cp -R "$PL" "${TMP}/plnosum" && rm "${TMP}/plnosum/payload.sha256"
+S=$(mkcase); M6I_TEST_DIR="$S" M6I_YES=1 bash "${INSTALL}" --from "${TMP}/plnosum" >/dev/null 2>"$S/i.err"; rc=$?
+[ $rc = 3 ] && grep -q '没有 payload.sha256' "$S/i.err" && ok "s. --from 的目录里没有 payload.sha256：拒绝" || bad "s. 没有 payload.sha256：rc=$rc"
+M6I_TEST_DIR="$S" bash "${INSTALL}" --from relative >/dev/null 2>&1; [ $? = 2 ] && ok "s. --from 要绝对路径" || bad "s. --from 相对路径没被拒绝"
+grep -q '"${M6I_FROM:-0}" = 1 ] ||' scripts/m6/install/lib.sh && ok "s. --from 时真实模式不要求 SUDO_USER（仍要求 root；源码核对）" || bad "s. --from 时仍要求 SUDO_USER"
+# 升级用 payload（含 payload.sha256）
+S=$(mkcase); setup_old "$S"
+M6I_TEST_DIR="$S" M6I_TEST_STATUS="$ST_R" bash "$PL/scripts/m6/install/install.sh" --upgrade --from "$PL" --yes >/dev/null 2>"$S/up.err"; rc=$?
+[ $rc = 0 ] && cmp -s "$PL/build.json" "$S$I/build.json" && ok "s. --upgrade --from payload：升级成功" || bad "s. --upgrade --from：rc=$rc $(tail -2 "$S/up.err")"
+# --check-only --upgrade：只读
+S=$(mkcase); setup_old "$S"; upgset "$S" >"$S/set.before"; cp "$S/sys.log" "$S/sys.log.0"
+M6I_TEST_DIR="$S" M6I_TEST_SRC="$P2" M6I_TEST_STATUS="$ST_R" bash "${INSTALL}" --check-only --upgrade >/dev/null 2>"$S/c.err"; rc=$?
+upgset "$S" >"$S/set.after"
+[ $rc = 0 ] && grep -q '可以升级' "$S/c.err" && cmp -s "$S/set.before" "$S/set.after" && cmp -s "$S/sys.log" "$S/sys.log.0" && ok "s. --check-only --upgrade：报告可以升级，什么都没改" || bad "s. --check-only --upgrade：rc=$rc"
+
+# ---- 升级的空跑和命令核对 ----
+plain DRY_RUN=1 bash "${INSTALL}" --upgrade >"${TMP}/up.dry" 2>/dev/null && ok "升级空跑退出码 0" || bad "升级空跑退出码非零"
+scripts/m6/install/check-commands.sh "${TMP}/i.dry" "${TMP}/u.dry" "${TMP}/up.dry" >"${TMP}/cc3" && ok "升级的命令核对通过" || bad "升级的命令核对不通过：$(cat "${TMP}/cc3")"
+negu() { if scripts/m6/install/check-commands.sh "${TMP}/i.dry" "${TMP}/u.dry" "$2" >/dev/null 2>&1; then bad "升级的反例没被拦下：$1"; else ok "升级的反例被拦下：$1"; fi; }
+for c in 'pfctl -a com.apple/250.abroad -F all' 'networksetup -setv6automatic Wi-Fi' 'scutil remove State:/Network/Service/claude-abroad/DNS' 'dscl . -delete /Users/_abroad'; do
+  { cat "${TMP}/up.dry"; echo "CHANGE: $c"; } >"${TMP}/nu"; negu "升级里出现 ${c%% *}" "${TMP}/nu"
+done
+{ cat "${TMP}/up.dry"; echo 'CHANGE: rm -rf /Library/Application Support/claude-abroad/state'; } >"${TMP}/nu"; negu "升级里删状态目录" "${TMP}/nu"
+grep -v 'launchctl bootstrap system .*abroadd.plist' "${TMP}/up.dry" | awk '{ print } /^CHANGE: launchctl bootout system\/com.claude-abroad.dev.abroadd$/ { print "CHANGE: launchctl bootstrap system /Library/LaunchDaemons/com.claude-abroad.dev.abroadd.plist" }' >"${TMP}/nu"
+negu "放新文件之前就启动 abroadd" "${TMP}/nu"
+grep -v 'launchctl bootout system/com.claude-abroad.dev.abroadd' "${TMP}/up.dry" >"${TMP}/nu"; negu "没停 abroadd 就搬旧版" "${TMP}/nu"
 
 # 2026-11-27：真机路径上“是不是开发构建”的判断（测试模式跳过它），由公共函数的自测覆盖
 scripts/lib/buildcheck-selftest.sh >"${TMP}/bc" 2>&1 && ok "“是不是开发构建”的判断（$(grep -c '^✓' "${TMP}/bc") 项，含退出码 2 的假程序）" || bad "“是不是开发构建”的判断：$(grep '^✗' "${TMP}/bc" | head -3)"

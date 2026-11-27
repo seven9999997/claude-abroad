@@ -180,8 +180,9 @@ Ctrl-C 优雅停止（先请求虚拟机关机，10 秒不停再强停），再�
 - `direct-probe.sh --lan`：按 IP 连局域网目标；按域名那一步照样跑，连不上如实记录。
 - 直连 socket 的上级目录必须是自己的、权限 0700（abroad-vm 监听前检查），脚本会建好这样的目录。
 
-## reinstall.sh：一条命令重装开发版（过渡用）
+## reinstall.sh：一条命令构建并安装或升级开发版
 
-`scripts/dev/reinstall.sh`（不要带 sudo）：构建 → 已装过就卸载（提示时输入 `uninstall`）→ 安装前检查 → 安装。需要管理员的两步由 sudo 在终端里问密码。只编排已经审过的脚本，不新增改系统的命令；任何一步失败就停下并说明下一步。卸载会清空主代理配置，结束后要重新添加来源、选节点、`sudo abroad main apply`。
+`scripts/dev/reinstall.sh`（不要带 sudo）：构建（`integrity-build.sh --dev`）→ 组装 payload（`payload.sh`）→ 打包应用 →
+**装过时原地升级**（`sudo scripts/m6/install/install.sh --upgrade`，主代理和设置都保留，v0.71）；安装目录不在、只剩安装前的快照时先卸载（只重做对照）再安装；没装过时检查后安装。需要管理员的步骤由 sudo 在终端里问密码。只编排已经审过的脚本，不新增改系统的命令；任何一步失败就停下并说明下一步（升级被拒、失败时按退出码说明：已启用先停用、不降级、状态格式变了先卸载、已退回旧版本……）。自测：`scripts/dev/reinstall-selftest.sh`（只用空跑）。
 
-这是过渡用的：等“原地升级”（`install.sh --upgrade`）做好后，已装过时改为升级，不再清空配置。自测：`scripts/dev/reinstall-selftest.sh`（只用空跑）。
+`scripts/dev/payload.sh [--src <目录>] [--out <目录>]`：在 `integrity-build.sh` 的产物上组装安装用的 payload（`scripts/dev/out/payload/`：程序、镜像、完整性清单、`build.json`、`scripts/m6/install/{install,uninstall,lib}.sh`、`scripts/lib/common.sh`、逐文件摘要 `payload.sha256`）。命令行安装、升级默认用它；阶段 B 的应用包里放的是它的副本。

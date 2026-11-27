@@ -70,6 +70,25 @@
         ],
         "type": "object"
       },
+      "BuildinfoInfo": {
+        "properties": {
+          "build_time": {
+            "type": "string"
+          },
+          "commit": {
+            "type": "string"
+          },
+          "dirty": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "build_time",
+          "commit",
+          "dirty"
+        ],
+        "type": "object"
+      },
       "ClaudecfgConflict": {
         "properties": {
           "file": {
@@ -1463,11 +1482,17 @@
             },
             "type": "array"
           },
+          "build": {
+            "$ref": "#/components/schemas/BuildinfoInfo"
+          },
           "builtin_pinned": {
             "items": {
               "type": "string"
             },
             "type": "array"
+          },
+          "busy": {
+            "type": "boolean"
           },
           "claude_code": {
             "$ref": "#/components/schemas/DaemonClaudeProxyStatus"
@@ -1547,6 +1572,13 @@
           "state": {
             "type": "string"
           },
+          "state_format": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "uninstall": {
+            "$ref": "#/components/schemas/DaemonUninstallFlags"
+          },
           "utun": {
             "type": "string"
           },
@@ -1590,6 +1622,21 @@
           "seq",
           "source",
           "time"
+        ],
+        "type": "object"
+      },
+      "DaemonUninstallFlags": {
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "running": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "done",
+          "running"
         ],
         "type": "object"
       },

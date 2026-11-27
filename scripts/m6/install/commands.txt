@@ -7,7 +7,9 @@
 CHANGE ^mkdir -p /Library/Application Support/claude-abroad-install-snap$
 CHANGE ^chmod 700 /Library/Application Support/claude-abroad-install-snap$
 CHANGE ^mkdir -p /Library/Application Support/claude-abroad/bin /Library/Application Support/claude-abroad/image$
-CHANGE ^cp <仓库>/scripts/dev/out/integrity/(bin/(abroad|abroad-rescue|abroadd|abroad-guard|abroad-vm)|image/(Image|initramfs\.gz|modloop|rootfs\.img)|integrity\.json) /Library/Application Support/claude-abroad/(bin/(abroad|abroad-rescue|abroadd|abroad-guard|abroad-vm)|image/(Image|initramfs\.gz|modloop|rootfs\.img)|integrity\.json)$
+CHANGE ^cp <仓库>/scripts/dev/out/(integrity|payload)/(bin/(abroad|abroad-rescue|abroadd|abroad-guard|abroad-vm)|image/(Image|initramfs\.gz|modloop|rootfs\.img)|integrity\.json|build\.json) /Library/Application Support/claude-abroad/(bin/(abroad|abroad-rescue|abroadd|abroad-guard|abroad-vm)|image/(Image|initramfs\.gz|modloop|rootfs\.img)|integrity\.json|build\.json)$
+CHANGE ^mkdir -p /Library/Application Support/claude-abroad/scripts/m6/install /Library/Application Support/claude-abroad/scripts/lib$
+CHANGE ^cp <仓库>/(scripts/dev/out/payload/)?scripts/(m6/install/(uninstall|lib)\.sh|lib/common\.sh) /Library/Application Support/claude-abroad/scripts/(m6/install/(uninstall|lib)\.sh|lib/common\.sh)$
 CHANGE ^chown -R root:wheel /Library/Application Support/claude-abroad$
 CHANGE ^chmod -R go-w /Library/Application Support/claude-abroad$
 CHANGE ^dscl \. -create /(Users|Groups)/_abroad( (PrimaryGroupID|UniqueID) [0-9]+| Password \*| UserShell /usr/bin/false| NFSHomeDirectory /var/empty| RealName claude-abroad| IsHidden 1)?$
@@ -28,7 +30,7 @@ CHANGE ^chown root:wheel /Library/LaunchDaemons/com\.claude-abroad\.dev\.(abroad
 CHANGE ^chmod 644 /Library/LaunchDaemons/com\.claude-abroad\.dev\.(abroadd|guard)\.plist$
 CHANGE ^launchctl bootstrap system /Library/LaunchDaemons/com\.claude-abroad\.dev\.(abroadd|guard)\.plist$
 CHANGE ^rm -f /Library/Application Support/claude-abroad-install-snap/(installing|launchd\.com\.claude-abroad\.dev\.(abroadd|guard)|plist\.com\.claude-abroad\.dev\.(abroadd|guard)|user|cli_link|app|sockdir|logdir|install_dir)$
-CHANGE ^/Library/Application Support/claude-abroad/bin/abroad uninstall$
+CHANGE ^/Library/Application Support/claude-abroad/bin/abroad( --yes)? uninstall( --kill-browsers)?$
 CHANGE ^launchctl bootout system/com\.claude-abroad\.dev\.(abroadd|guard)$
 CHANGE ^pfctl -a com\.apple/250\.abroad -F all$
 CHANGE ^scutil remove State:/Network/Service/claude-abroad/DNS$
@@ -42,3 +44,20 @@ CHANGE ^rm -rf /Library/Application Support/claude-abroad-install-snap（对照�
 QUERY ^curl --unix-socket /var/run/claude-abroad/api\.sock http://abroadd/v1/status（应为 RESTORED、prepare\.done、integrity\.ok）$
 QUERY ^curl --unix-socket /var/run/claude-abroad/api\.sock http://abroadd/v1/status（return_block 应为 on、active、test，nets=192\.0\.2\.0/24,2001:db8:abd::/48）$
 QUERY ^pfctl -a com\.apple/250\.abroad -s rules$
+# ---- 原地升级（install.sh --upgrade，v0.71）：只碰安装目录里的程序、镜像、清单、版本号、脚本、prev/ 和两份 plist；
+# 不碰 state/、日志目录、_abroad，也不碰 pf、DNS、网络服务（核对见 check-commands.sh 的第三份空跑）。
+QUERY ^curl --unix-socket /var/run/claude-abroad/api\.sock http://abroadd/v1/status（(已回国或已停用、没有正在进行的操作、状态格式相同、版本更新|版本是新的、完整性校验通过、状态和升级前一样)）$
+CHANGE ^mkdir -p /Library/Application Support/claude-abroad/prev/plists$
+CHANGE ^chmod 700 /Library/Application Support/claude-abroad/prev$
+CHANGE ^cp /Library/LaunchDaemons/com\.claude-abroad\.dev\.(abroadd|guard)\.plist /Library/Application Support/claude-abroad/prev/plists/com\.claude-abroad\.dev\.(abroadd|guard)\.plist$
+CHANGE ^mv /Library/Application Support/claude-abroad/(bin|image|integrity\.json|build\.json|scripts) /Library/Application Support/claude-abroad/prev/(bin|image|integrity\.json|build\.json|scripts)$
+CHANGE ^chown -R root:wheel /Library/Application Support/claude-abroad/(bin|image|integrity\.json|build\.json|scripts)$
+CHANGE ^chmod -R go-w /Library/Application Support/claude-abroad/(bin|image|integrity\.json|build\.json|scripts)$
+CHANGE ^mv /Applications/ClaudeAbroad\.app /Library/Application Support/claude-abroad/prev/app\.app$
+CHANGE ^rm -rf /Library/Application Support/claude-abroad/prev$
+CHANGE ^rm -f /Library/Application Support/claude-abroad-install-snap/upgrading$
+# 退回旧版本时（空跑里不出现；写在这里备查）：删新放的、把 prev 里的放回、放回 plist 和应用、重新注册服务。
+CHANGE ^rm -rf /Library/Application Support/claude-abroad/(bin|image|integrity\.json|build\.json|scripts)$
+CHANGE ^mv /Library/Application Support/claude-abroad/prev/(bin|image|integrity\.json|build\.json|scripts) /Library/Application Support/claude-abroad/(bin|image|integrity\.json|build\.json|scripts)$
+CHANGE ^cp /Library/Application Support/claude-abroad/prev/plists/com\.claude-abroad\.dev\.(abroadd|guard)\.plist /Library/LaunchDaemons/com\.claude-abroad\.dev\.(abroadd|guard)\.plist$
+CHANGE ^mv /Library/Application Support/claude-abroad/prev/app\.app /Applications/ClaudeAbroad\.app$

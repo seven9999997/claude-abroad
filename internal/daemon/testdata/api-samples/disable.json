@@ -1,6 +1,11 @@
 200
 {
   "allow_lan": true,
+  "build": {
+    "build_time": "unknown",
+    "commit": "unknown",
+    "dirty": false
+  },
   "builtin_pinned": [
     "claude.ai",
     "claude.com",
@@ -58,5 +63,10 @@
     "proxy": 0
   },
   "state": "DISABLED",
+  "state_format": 1,
+  "uninstall": {
+    "done": false,
+    "running": false
+  },
   "utun": "utun7"
 }

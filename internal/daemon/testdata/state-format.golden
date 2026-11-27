@@ -1,0 +1,261 @@
+StateFormat 1
+file abroadd/state.json json
+  root state.File(struct)
+  type state.File
+    Version json="version" int(int)
+    State json="state" state.State(string)
+    Origin json="origin,omitempty" state.State(string)
+    Step json="step" int(int)
+    PFTokens json="pf_tokens,omitempty" []string(slice)
+    PFEnablePending json="pf_enable_pending,omitempty" bool(bool)
+    Utun json="utun,omitempty" string(string)
+    IPv6Original json="ipv6_original,omitempty" map[string]sysnet.IPv6Setting(map)
+    IPv6SnapshotTaken json="ipv6_snapshot_taken,omitempty" bool(bool)
+    OrigDNS json="orig_dns,omitempty" []netip.Addr(slice)
+    Region json="region,omitzero" state.RegionFile(struct)
+  type sysnet.IPv6Setting
+    Mode json="mode" sysnet.IPv6Mode(string)
+    Address json="address,omitzero" netip.Addr(struct)
+    PrefixLen json="prefix_len,omitempty" int(int)
+    Router json="router,omitzero" netip.Addr(struct)
+  type state.RegionFile
+    Original json="original,omitempty" *sysnet.MacLocale(ptr)
+    Target json="target,omitempty" *region.Target(ptr)
+    Syncing json="syncing,omitempty" bool(bool)
+  type sysnet.MacLocale
+    Timezone json="timezone" string(string)
+    AutoTZ json="auto_tz" sysnet.OptStr(struct)
+    User json="user,omitempty" string(string)
+    UserLangs json="user_languages" sysnet.OptList(struct)
+    UserLocale json="user_locale" sysnet.OptStr(struct)
+    SysLangs json="sys_languages" sysnet.OptList(struct)
+  type sysnet.OptStr
+    Set json="set" bool(bool)
+    V json="v,omitempty" string(string)
+  type sysnet.OptList
+    Set json="set" bool(bool)
+    V json="v,omitempty" []string(slice)
+  type region.Target
+    Timezone json="timezone" string(string)
+    Lang json="lang" string(string)
+    Locale json="locale" string(string)
+    Country json="country,omitempty" string(string)
+    Source json="source" string(string)
+file abroadd/region-pending.json json
+  root state.RegionPending(struct)
+  type state.RegionPending
+    V json="v" int(int)
+    Items json="items" []string(slice)
+    Timezone json="timezone,omitempty" string(string)
+    AutoTZ json="auto_tz,omitempty" *sysnet.OptStr(ptr)
+    User json="user,omitempty" string(string)
+    UserLangs json="user_languages,omitempty" *sysnet.OptList(ptr)
+    UserLocale json="user_locale,omitempty" *sysnet.OptStr(ptr)
+    SysLangs json="sys_languages,omitempty" *sysnet.OptList(ptr)
+  type sysnet.OptStr
+    Set json="set" bool(bool)
+    V json="v,omitempty" string(string)
+  type sysnet.OptList
+    Set json="set" bool(bool)
+    V json="v,omitempty" []string(slice)
+file abroadd/baseline.json json
+  root exitcheck.Baseline(struct)
+  type exitcheck.Baseline
+    V json="v" int(int)
+    Rule json="rule" exitpolicy.Rule(string)
+    IP json="ip" string(string)
+    Country json="country" string(string)
+    Region json="region,omitempty" string(string)
+    City json="city,omitempty" string(string)
+    Timezone json="timezone,omitempty" string(string)
+    At json="at" time.Time(struct)
+file abroadd/region.json json
+  root region.Target(struct)
+  type region.Target
+    Timezone json="timezone" string(string)
+    Lang json="lang" string(string)
+    Locale json="locale" string(string)
+    Country json="country,omitempty" string(string)
+    Source json="source" string(string)
+file abroadd/rules.yaml yaml
+  root rules.file(struct)
+  type rules.file
+    Default yaml="default" string(string)
+    Rules yaml="rules" []rules.fileRule(slice)
+    OfflineAllow yaml="offline_allow" []string(slice)
+    LocalDomains yaml="local_domains" []string(slice)
+    PinnedExtra yaml="pinned_extra" []string(slice)
+    BlockUDP443 yaml="block_udp_443" bool(bool)
+    BypassExtra yaml="bypass_extra,omitempty" []string(slice)
+  type rules.fileRule
+    App yaml="app" string(string)
+    Action yaml="action" string(string)
+file abroadd/setup.json json
+  root daemon.setupFile(struct)
+  type daemon.setupFile
+    Completed json="completed" bool(bool)
+    CompletedAt json="completed_at" time.Time(struct)
+file abroadd/allow-lan.json json
+  root daemon.LANSetting(struct)
+  type daemon.LANSetting
+    AllowLAN json="allow_lan" bool(bool)
+file abroadd/claude-proxy-switch.json json
+  root daemon.claudeSwitchFile(struct)
+  type daemon.claudeSwitchFile
+    Version json="version" int(int)
+    On json="on" bool(bool)
+file abroadd/guard-params.json json
+  root guard.Params(struct)
+  type guard.Params
+    Version json="version" int(int)
+    User json="user" string(string)
+    LAN json="lan,omitempty" []string(slice)
+    VMIfs json="vm_ifs,omitempty" []string(slice)
+file abroadd/resolver-lock.json json
+  root resolverlock.record(struct)
+  type resolverlock.record
+    Version json="version" int(int)
+    Form json="form" string(string)
+    Domains json="domains" []string(slice)
+    Content json="content" string(string)
+    CreatedDir json="created_dir,omitempty" bool(bool)
+file abroadd/claude-code-settings.json json
+  root claudecfg.record(struct)
+  type claudecfg.record
+    Version json="version" int(int)
+    Port json="port" uint16(uint16)
+    Content json="content" string(string)
+    CreatedDir json="created_dir,omitempty" bool(bool)
+file abroadd/claude-domains.json json
+  root claudedomains.fileFormat(struct)
+  type claudedomains.fileFormat
+    Version json="version" int(int)
+    Entries json="entries" []claudedomains.Entry(slice)
+  type claudedomains.Entry
+    Domain json="domain" string(string)
+    Count json="count" int64(int64)
+    First json="first" time.Time(struct)
+    Last json="last" time.Time(struct)
+file abroadd/envcheck.json json
+  root envcheck.settingsFile(struct)
+  type envcheck.settingsFile
+    Disabled json="disabled" []string(slice)
+file abroadd/envcheck-history.json json
+  root envcheck.runHistFile(struct)
+  type envcheck.runHistFile
+    V json="v" int(int)
+    Entries json="entries" []envcheck.RunEntry(slice)
+  type envcheck.RunEntry
+    At json="at" time.Time(struct)
+    LastSeen json="last_seen" time.Time(struct)
+    Hard json="hard" exitcheck.Result(string)
+    Items json="items" []envcheck.RunItem(slice)
+  type envcheck.RunItem
+    ID json="id" string(string)
+    Result json="result" exitcheck.Result(string)
+file abroadd/ip-history.json json
+  root envcheck.histFile(struct)
+  type envcheck.histFile
+    V json="v" int(int)
+    Entries json="entries" []envcheck.histEntry(slice)
+  type envcheck.histEntry
+    At json="at" time.Time(struct)
+    Digest json="digest" string(string)
+file abroadd/secrets/exit-<标签>.json json
+  root daemon.StoredExit(struct)
+  type daemon.StoredExit
+    Tag json="tag" string(string)
+    Kind json="kind" exitconf.Kind(string)
+    Conf json="conf" string(string)
+file store/proxy/sources.json json
+  root managedproxy.Store(struct)
+  type managedproxy.Store
+    Version json="version" int(int)
+    Port json="port" int(int)
+    Auth json="auth" string(string)
+    Revision json="revision" string(string)
+    Selected json="selected" string(string)
+    Chain json="chain,omitempty" []string(slice)
+    Sources json="sources" []managedproxy.Source(slice)
+  type managedproxy.Source
+    ID json="id" string(string)
+    Name json="name" string(string)
+    URL json="url,omitempty" string(string)
+    Interval json="interval_hours" int(int)
+    Updated json="updated_at" time.Time(struct)
+    Attempted json="attempted_at" time.Time(struct)
+    Error json="error,omitempty" string(string)
+    Usage json="usage,omitempty" string(string)
+    Nodes json="nodes" []managedproxy.Node(slice)
+    Skipped json="skipped,omitempty" []managedproxy.NodeIssue(slice)
+  type managedproxy.Node
+    ID json="id" string(string)
+    Name json="name" string(string)
+    Type json="type" string(string)
+    Config json="config" map[string]interface {}(map)
+    UDP json="udp,omitempty" bool(bool)
+  type managedproxy.NodeIssue
+    Index json="index" int(int)
+    Name json="name,omitempty" string(string)
+    Type json="type,omitempty" string(string)
+    Reason json="reason" string(string)
+file store/proxy/applied.json json
+  root daemon.appliedRecord(struct)
+  type daemon.appliedRecord
+    Store json="store" managedproxy.Store(struct)
+    Digest json="digest" string(string)
+    Hops json="hops" usernet.MainHops(struct)
+  type managedproxy.Store
+    Version json="version" int(int)
+    Port json="port" int(int)
+    Auth json="auth" string(string)
+    Revision json="revision" string(string)
+    Selected json="selected" string(string)
+    Chain json="chain,omitempty" []string(slice)
+    Sources json="sources" []managedproxy.Source(slice)
+  type managedproxy.Source
+    ID json="id" string(string)
+    Name json="name" string(string)
+    URL json="url,omitempty" string(string)
+    Interval json="interval_hours" int(int)
+    Updated json="updated_at" time.Time(struct)
+    Attempted json="attempted_at" time.Time(struct)
+    Error json="error,omitempty" string(string)
+    Usage json="usage,omitempty" string(string)
+    Nodes json="nodes" []managedproxy.Node(slice)
+    Skipped json="skipped,omitempty" []managedproxy.NodeIssue(slice)
+  type managedproxy.Node
+    ID json="id" string(string)
+    Name json="name" string(string)
+    Type json="type" string(string)
+    Config json="config" map[string]interface {}(map)
+    UDP json="udp,omitempty" bool(bool)
+  type managedproxy.NodeIssue
+    Index json="index" int(int)
+    Name json="name,omitempty" string(string)
+    Type json="type,omitempty" string(string)
+    Reason json="reason" string(string)
+  type usernet.MainHops
+    Hops json="hops" []string(slice)
+    LAN json="lan" []usernet.MainLAN(slice)
+  type usernet.MainLAN
+    Addr json="addr" string(string)
+    Confirmed json="confirmed" bool(bool)
+file store/proxy/lan-confirm.json json
+  root []daemon.lanConfirm(slice)
+  type daemon.lanConfirm
+    Source json="source" string(string)
+    Node json="node" string(string)
+    Hop json="hop" string(string)
+file store/proxy/pending.json json
+  root map[string]string(map)
+file abroadd/prepared text
+  一行 RFC3339 时间（首次准备完成的标记）
+file abroadd/uninstalled text
+  一行 RFC3339 时间（已经一键卸载的标记）
+file abroadd/return-block-set text
+  一行回国拦截地址段的选择（pf.ReturnBlockSet）
+file abroadd/ip-history.key binary
+  出口 IP 历史的密钥
+file abroadd/state.lock lock
+  进程锁（没有内容）

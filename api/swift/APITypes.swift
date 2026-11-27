@@ -76,6 +76,17 @@ public struct ApiSecurity: Codable, Sendable {
     }
 }
 
+public struct BuildinfoInfo: Codable, Sendable {
+    public var commit: String
+    public var buildTime: String
+    public var dirty: Bool
+    enum CodingKeys: String, CodingKey {
+        case commit = "commit"
+        case buildTime = "build_time"
+        case dirty = "dirty"
+    }
+}
+
 public struct ClaudecfgConflict: Codable, Sendable {
     public var file: String
     public var `var`: String
@@ -879,6 +890,10 @@ public struct DaemonStatus: Codable, Sendable {
     public var region: DaemonRegionStatus?
     public var envcheck: EnvcheckReport?
     public var security: ApiSecurity?
+    public var build: BuildinfoInfo?
+    public var stateFormat: Int64?
+    public var busy: Bool?
+    public var uninstall: DaemonUninstallFlags?
     enum CodingKeys: String, CodingKey {
         case state = "state"
         case corrupt = "corrupt"
@@ -908,6 +923,10 @@ public struct DaemonStatus: Codable, Sendable {
         case region = "region"
         case envcheck = "envcheck"
         case security = "security"
+        case build = "build"
+        case stateFormat = "state_format"
+        case busy = "busy"
+        case uninstall = "uninstall"
     }
 }
 
@@ -925,6 +944,15 @@ public struct DaemonStreamEvent: Codable, Sendable {
         case time = "time"
         case detail = "detail"
         case dropped = "dropped"
+    }
+}
+
+public struct DaemonUninstallFlags: Codable, Sendable {
+    public var running: Bool
+    public var done: Bool
+    enum CodingKeys: String, CodingKey {
+        case running = "running"
+        case done = "done"
     }
 }
 

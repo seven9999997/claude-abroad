@@ -66,7 +66,8 @@ m6i_require_mode() {
   case "${M6I_MODE}" in
     real)
       [ "$(id -u)" = 0 ] || m6i_fatal "需要用 sudo 运行（空跑：DRY_RUN=1）"
-      [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != root ] || m6i_fatal "请用 sudo 从你自己的账号运行（需要 SUDO_USER）"
+      # --from（应用经管理员授权运行时，v0.71）没有 SUDO_USER；仍要求 root。
+      [ "${M6I_FROM:-0}" = 1 ] || { [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != root ]; } || m6i_fatal "请用 sudo 从你自己的账号运行（需要 SUDO_USER）"
       ;;
     dry | test) [ "$(id -u)" != 0 ] || m6i_fatal "空跑和自测不要用 sudo" ;;
   esac
@@ -217,4 +218,159 @@ m6i_snap_system() {
       printf 'ipv6\t%s\t%s\n' "$s" "$(networksetup -getinfo "$s" 2>/dev/null | awk -F': ' '/^IPv6: /{print $2}')"
     done
   } >"$out"
+}
+
+# ---- 原地升级（v0.71，docs/app-install-plan.md 第 2 节）----
+
+# m6i_status：取 /v1/status（只读）；后台服务不响应时没有输出、返回 1。
+# 自测：M6I_TEST_STATUS 指一份假的状态（文件不在、没给时当作不响应）；其中的 build、state_format 按安装目录里的
+# build.json 改写（模拟“后台服务报告的是它自己的版本”；没有 build.json 时去掉 build，模拟加版本号之前的老安装）。
+# M6I_STATUS_PHASE=after（升级后重启时）且给了 M6I_TEST_STATUS_BAD=version|integrity|state 时，按它改坏应答。
+m6i_status() {
+  case "${M6I_MODE}" in
+    real) curl -sS -m 10 --unix-socket "${M6I_SOCK}/api.sock" http://abroadd/v1/status 2>/dev/null ;;
+    dry) return 1 ;;
+    test)
+      [ -n "${M6I_TEST_STATUS:-}" ] && [ -f "${M6I_TEST_STATUS}" ] || return 1
+      local bad=""
+      [ "${M6I_STATUS_PHASE:-}" = after ] && bad="${M6I_TEST_STATUS_BAD:-}"
+      /usr/bin/python3 -I - "${M6I_TEST_STATUS}" "$(P "${M6I_INSTALL}")/build.json" "${bad}" <<'PY'
+import json, os, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+bj, bad = sys.argv[2], sys.argv[3]
+if os.path.exists(bj):
+    b = json.load(open(bj, encoding="utf-8"))
+    d["build"] = {"commit": b["commit"], "build_time": b["build_time"], "dirty": b["dirty"]}
+    d["state_format"] = b["state_format"]
+else:
+    d.pop("build", None)
+if bad == "version":
+    d["build"] = {"commit": "0000000", "build_time": "20000101T000000Z", "dirty": False}
+elif bad == "integrity":
+    d["integrity"] = {"checked": True, "ok": False}
+elif bad == "state":
+    d["state"] = "ENABLED"
+print(json.dumps(d))
+PY
+      ;;
+  esac
+}
+
+# m6i_upgrade_decide <状态接口的应答（可以是空）> <新包的 build.json> <状态文件> <允许版本不明 0|1>。
+# 输出 key=value 行：code（0 继续、0 且 same=1 什么都不做、10 状态不允许、11 不降级、13 状态格式不同、14 版本不明要确认、
+# 15 忙（调用方重查））、msg、old、new、before_state、before_prepare、before_rb、old_known。
+m6i_upgrade_decide() {
+  /usr/bin/python3 -I - "$@" <<'PY'
+import json, re, sys
+raw, newp, statep, accept = sys.argv[1].strip(), sys.argv[2], sys.argv[3], sys.argv[4] == "1"
+def out(code, msg="", **k):
+    print("code=%d" % code)
+    print("msg=" + msg.replace("\n", " "))
+    for a, b in k.items():
+        print("%s=%s" % (a, b))
+    sys.exit(0)
+try:
+    d = json.loads(raw) if raw else None
+except Exception:
+    d = None
+if not isinstance(d, dict):
+    out(10, "后台服务没有响应，不能原地升级。网络有异常时按 docs/emergency.md 用应急程序 sudo abroad-rescue 恢复；"
+        "也可以执行卸载脚本后重新安装。")
+nb = json.load(open(newp, encoding="utf-8"))
+new = "%s（构建于 %s%s）" % (nb["commit"], nb["build_time"], "，有未提交的改动" if nb.get("dirty") else "")
+st = d.get("state", "")
+un = d.get("uninstall") or {}
+if d.get("corrupt"):
+    out(10, "后台服务的状态文件读不出来，不能原地升级。请执行卸载脚本后重新安装。")
+if st == "ENABLED":
+    out(10, "已启用时不能升级：请先停用（sudo abroad down），升级后再启用。")
+if st in ("ENABLING", "RESTORING"):
+    out(10, "正在%s，等它完成再升级。" % ("启用" if st == "ENABLING" else "回国"))
+if st not in ("RESTORED", "DISABLED"):
+    out(10, "后台服务的状态是 %s，只有已回国或已停用时才能升级。" % (st or "未知"))
+if un.get("running"):
+    out(10, "正在一键卸载，不能升级。")
+if un.get("done"):
+    out(10, "已经一键卸载过：请执行卸载脚本（sudo scripts/m6/install/uninstall.sh）后重新安装，不能原地升级。")
+if d.get("borrow"):
+    out(10, "正在借用虚拟机（应用主代理或检查主代理），等它完成再升级。")
+if d.get("busy"):
+    out(15, "正在进行别的操作，等它完成再升级。")
+sf = d.get("state_format")
+if sf is None:
+    try:
+        sf = json.load(open(statep, encoding="utf-8")).get("version")
+    except Exception:
+        sf = None
+    if sf != 1:
+        out(13, "后台服务没有报告状态格式，状态文件的版本也读不出或不是 1：不能原地升级，请先卸载再重装（主代理和设置要重新配置）。")
+if sf != nb.get("state_format"):
+    out(13, "状态格式变了（旧 %s、新 %s），不能原地升级：请先卸载再重装（主代理和设置要重新配置）。不做迁移，是为了升级失败退回旧版本时"
+        "旧版本还能读懂状态。" % (sf, nb.get("state_format")))
+pr = (d.get("prepare") or {}).get("done")
+rb = d.get("return_block") or {}
+before = dict(before_state=st, before_prepare=pr, before_rb="%s/%s" % (rb.get("on"), rb.get("active")), new=new)
+b = d.get("build") or {}
+known = bool(re.fullmatch(r"[0-9a-f]{7,40}", str(b.get("commit", "")))) and bool(re.fullmatch(r"[0-9]{8}T[0-9]{6}Z", str(b.get("build_time", ""))))
+if not known:
+    if not accept:
+        out(14, "后台服务的版本不明（是加版本号之前装的）。", old="版本不明", old_known=0, **before)
+    out(0, "", old="版本不明", old_known=0, old_commit="", old_time="", **before)
+old = "%s（构建于 %s%s）" % (b["commit"], b["build_time"], "，有未提交的改动" if b.get("dirty") else "")
+k = dict(old=old, old_known=1, old_commit=b["commit"], old_time=b["build_time"], **before)
+if b["build_time"] == nb["build_time"] and b["commit"] == nb["commit"]:
+    out(0, "已经是这个版本，什么都不做。", same=1, **k)
+if nb["build_time"] <= b["build_time"]:
+    out(11, "后台服务（%s）不比要装的（%s）旧，不降级。" % (old, new), **k)
+out(0, "", **k)
+PY
+}
+
+# m6i_upgrade_verify <重启后的状态应答> <升级前的状态 before_state> <before_prepare> <before_rb> <期望的提交号> <期望的构建时间>：期望的提交号为空时不核对版本（退回到版本不明的旧版本时）。输出不满足的原因（满足时没有输出）。
+m6i_upgrade_verify() {
+  /usr/bin/python3 -I - "$@" <<'PY'
+import json, sys
+raw, st0, pr0, rb0, commit, btime = sys.argv[1:7]
+raw = raw.strip()
+try:
+    d = json.loads(raw) if raw else None
+except Exception:
+    d = None
+if not isinstance(d, dict):
+    print("后台服务没有响应"); sys.exit(0)
+b = d.get("build") or {}
+if commit and (b.get("commit") != commit or b.get("build_time") != btime):
+    print("后台服务的版本不对（%s %s，应为 %s %s）" % (b.get("commit"), b.get("build_time"), commit, btime)); sys.exit(0)
+i = d.get("integrity") or {}
+if commit and not (i.get("checked") and i.get("ok")):
+    print("完整性校验没有通过"); sys.exit(0)
+if d.get("corrupt") or d.get("state") != st0:
+    print("状态和升级前不一样（%s → %s）" % (st0, d.get("state"))); sys.exit(0)
+if str((d.get("prepare") or {}).get("done")) != pr0:
+    print("首次准备的结果和升级前不一样"); sys.exit(0)
+rb = d.get("return_block") or {}
+if "%s/%s" % (rb.get("on"), rb.get("active")) != rb0:
+    print("回国拦截和升级前不一样"); sys.exit(0)
+PY
+}
+
+# m6i_inject <步骤>：自测的注入点（只在自测模式生效）。M6I_TEST_FAIL_AT=<步骤,…> 让这一步失败；M6I_TEST_KILL_AT=<步骤>
+# 在这一步模拟被中断（和收到 INT/TERM 时一样以 130 退出）。
+m6i_inject() {
+  [ "${M6I_MODE}" = test ] || return 0
+  if [ "${M6I_TEST_KILL_AT:-}" = "$1" ]; then m6i_log "（自测：在 $1 模拟被中断）"; exit 130; fi
+  case ",${M6I_TEST_FAIL_AT:-}," in *",$1,"*) m6i_log "（自测：在 $1 注入失败）"; return 1 ;; esac
+  return 0
+}
+
+# m6i_wait_api <up|down> <秒>：真实模式下等状态接口响应或不再响应；空跑、自测直接返回成功。
+m6i_wait_api() {
+  [ "${M6I_MODE}" = real ] || return 0
+  local i
+  for i in $(seq 1 "$2"); do
+    if [ "$1" = up ]; then m6i_status >/dev/null && [ -S "${M6I_SOCK}/api.sock" ] && return 0
+    else m6i_status >/dev/null || return 0; fi
+    sleep 1
+  done
+  return 1
 }

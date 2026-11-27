@@ -4,14 +4,29 @@
 # 正常途径走不通时（abroadd 不在、卸载出错），按 docs/emergency.md 的步骤兜底：只撤 Claude 出国自己加的东西。
 # 可以重复执行。会话里只做空跑和自测。
 #
-#   sudo scripts/m6/install/uninstall.sh
+#   sudo scripts/m6/install/uninstall.sh [--yes] [--kill-browsers]
 #   DRY_RUN=1 scripts/m6/install/uninstall.sh
+#
+# --yes（v0.71）：正常途径执行 abroad --yes uninstall、不读终端（应用经管理员授权运行时没有终端；确认已经在应用里做过）；
+# --kill-browsers：原样传给 abroad uninstall（同时强制退出确认过的浏览器）。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "${ROOT}" || exit 1
 . scripts/m6/install/lib.sh
 
-[ $# = 0 ] || { echo "用法：sudo $0" >&2; exit 2; }
+YES=0 KILLB=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --yes) YES=1 ;;
+    --kill-browsers) KILLB=1 ;;
+    *) echo "用法：sudo $0 [--yes] [--kill-browsers]" >&2; exit 2 ;;
+  esac
+  shift
+done
+UARGS=()
+[ "${YES}" = 1 ] && UARGS+=(--yes)
+UARGS+=(uninstall)
+[ "${KILLB}" = 1 ] && UARGS+=(--kill-browsers)
 m6i_require_mode
 INST="${M6I_INSTALL}"
 STATE="${INST}/state"
@@ -27,6 +42,10 @@ if [ "${M6I_MODE}" != dry ] && [ ! -d "${SNAPD}" ]; then
   exit 0
 fi
 rec() { [ "${M6I_MODE}" = dry ] && return 0; [ -n "$(m6i_rec_get "$1")" ]; }
+# 应用那一行只在安装记录里有它时参与对照（v0.71 风险 8：应用由用户自己放进“应用程序”、或由构建脚本替换时，装卸前后它在不在、
+# 内容是什么不归脚本管）。下面第 4 段会删掉这条记录，所以先记下来。
+APP_REC=0
+rec app && APP_REC=1
 
 # 只剩快照、安装目录已经不在（上一次卸载做完了、只是对照没过，architect 2026-11-27）：只重做对照，对上了就删快照，不做别的。
 only_snap=0
@@ -41,14 +60,20 @@ normal=0
 if [ "${M6I_FROM_INSTALL:-0}" != 1 ]; then
   if [ "${M6I_MODE}" = dry ]; then
     m6i_say WAIT "在提示时输入 uninstall 确认（结束 Claude、恢复本机网络、删除解析锁和托管设置）"
-    m6i_do "${INST}/bin/abroad" uninstall
+    m6i_do "${INST}/bin/abroad" "${UARGS[@]}"
     m6i_say NOTE "下面第 3 段的兜底只在正常途径没走完时执行（空跑一并打印）"
   elif [ "${M6I_MODE}" = test ]; then
-    m6i_do sudo "${INST}/bin/abroad" uninstall
+    m6i_do sudo "${INST}/bin/abroad" "${UARGS[@]}"
     [ "${M6I_TEST_NORMAL_FAILS:-0}" = 1 ] || normal=1
   elif [ -S "${M6I_SOCK}/api.sock" ] && [ -x "${INST}/bin/abroad" ]; then
-    m6i_log "先走正常途径：abroad uninstall。提示时输入 uninstall 确认。"
-    if "${INST}/bin/abroad" uninstall </dev/tty; then normal=1; else m6i_log "abroad uninstall 没有走完，接下来按应急步骤兜底"; fi
+    if [ "${YES}" = 1 ]; then
+      m6i_log "先走正常途径：abroad ${UARGS[*]}（已经确认过，不再询问）。"
+      "${INST}/bin/abroad" "${UARGS[@]}" </dev/null && normal=1
+    else
+      m6i_log "先走正常途径：abroad uninstall。提示时输入 uninstall 确认。"
+      "${INST}/bin/abroad" "${UARGS[@]}" </dev/tty && normal=1
+    fi
+    if [ "${normal}" = 1 ]; then :; else m6i_log "abroad uninstall 没有走完，接下来按应急步骤兜底"; fi
   else
     m6i_log "后台服务不在，按应急步骤兜底"
   fi
@@ -164,7 +189,8 @@ fi
 m6i_snap_files "${SNAPD}/files.after"
 m6i_snap_system "${SNAPD}/system.after"
 m6i_pf_info "${SNAPD}/pf.after"
-diffs=$(diff "${SNAPD}/files.before" "${SNAPD}/files.after"; [ -f "${SNAPD}/system.before" ] && m6i_sys_cmp "${SNAPD}/system.before" "${SNAPD}/system.after" "${SNAPD}/pf.after")
+appf() { if [ "${APP_REC}" = 1 ]; then cat "$1"; else grep -v "^${M6I_APP}"$'\t' "$1"; fi; }
+diffs=$(diff <(appf "${SNAPD}/files.before") <(appf "${SNAPD}/files.after"); [ -f "${SNAPD}/system.before" ] && m6i_sys_cmp "${SNAPD}/system.before" "${SNAPD}/system.after" "${SNAPD}/pf.after")
 if [ -n "${diffs}" ]; then
   m6i_log "和安装前的快照不一致（快照留在 ${M6I_SNAP}，可以重试卸载或按 docs/emergency.md 处理）："
   printf '%s\n' "${diffs}" >&2

@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"claude-abroad/internal/buildinfo"
 )
 
 // M2-9b-2 i. 非 root 运行真实模式：非零退出，提示需要 root，状态目录没有被创建（不论其他参数）。
@@ -72,5 +75,32 @@ func TestRegionVMSkip(t *testing.T) {
 	}
 	if v := regionVM(realFlags{vmDir: "/x"}, lg); v == nil {
 		t.Fatal("不带参数时应接虚拟机一侧")
+	}
+}
+
+// 原地升级（v0.71）：--version 打印 JSON（提交号、构建时间、是否有未提交改动、状态格式版本号），不碰状态目录、不要 root。
+func TestVersionFlag(t *testing.T) {
+	var out, stderr bytes.Buffer
+	old := stdout
+	stdout = &out
+	defer func() { stdout = old }()
+	dir := filepath.Join(t.TempDir(), "st")
+	if rc := run([]string{"--version", "--state-dir", dir}, &stderr, nil); rc != 0 {
+		t.Fatalf("退出码 %d：%s", rc, stderr.String())
+	}
+	var v struct {
+		Commit      string `json:"commit"`
+		BuildTime   string `json:"build_time"`
+		Dirty       *bool  `json:"dirty"`
+		StateFormat int    `json:"state_format"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+		t.Fatalf("不是 JSON：%q", out.String())
+	}
+	if v.Commit != "unknown" || v.BuildTime != "unknown" || v.Dirty == nil || v.StateFormat != buildinfo.StateFormat {
+		t.Fatalf("内容不对：%s", out.String())
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatal("--version 不应创建状态目录")
 	}
 }

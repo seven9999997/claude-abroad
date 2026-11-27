@@ -99,6 +99,9 @@ func (m *Machine) lock() error {
 
 func (m *Machine) unlock() { m.busy.Store(false) }
 
+// Busy 报告此刻是否有操作占着忙标记（只读；原地升级前的检查用，v0.71）。监护的轮次也会短暂占用它。
+func (m *Machine) Busy() bool { return m.busy.Load() }
+
 // lockChange 是改动类操作的加锁：拿到忙标记后再过一次 Admit。
 func (m *Machine) lockChange() error {
 	if err := m.lock(); err != nil {

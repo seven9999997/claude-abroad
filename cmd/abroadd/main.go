@@ -12,17 +12,22 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"runtime"
 
+	"claude-abroad/internal/buildinfo"
 	"claude-abroad/internal/daemon"
 	"claude-abroad/internal/platform"
 )
 
 func main() { os.Exit(run(os.Args[1:], os.Stderr, nil)) }
+
+// stdout 是 --version 的输出（测试替换）。
+var stdout io.Writer = os.Stdout
 
 // run 是可测试的主流程；ready 非 nil 时在启动成功后收到 socket 路径，stop 由信号或测试关闭。
 func run(args []string, stderr io.Writer, ready func(sock string, stop func())) int {
@@ -42,6 +47,7 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 	launchControl := fs.Bool("launch-control", false, "打开启动管控（M6-4b-1 返工）：首次准备写入 Claude 域名解析锁和 Claude Code 的托管设置、接上第三层（发现即结束）、监听本机代理端口。只有开发安装和正式安装带它；不带时真实模式和 M6 之前完全相同")
 	rbKill := fs.Bool("return-block-kill-states", false, "回国拦截被重新加载时，只清掉目的地在 Anthropic 地址段里的连接状态（M6-11b；pfctl 在 macOS 上的效果待真机验证，验证之前默认关）")
 	sockDir := fs.String("socket-dir", "", "本地接口 socket 的目录（目录属主 root、组和其他人不能写；socket 0666，级别按对端 uid 判）；空时放在状态目录里、只认属主")
+	version := fs.Bool("version", false, "打印版本号（提交号、构建时间、状态格式版本号；JSON，和 payload 里的 build.json 相同）后退出")
 	var dev devOptions
 	if addDevFlags != nil { // 只有开发构建有（devflags_dev.go）
 		addDevFlags(fs, &dev)
@@ -52,6 +58,11 @@ func run(args []string, stderr io.Writer, ready func(sock string, stop func())) 
 	if fs.NArg() != 0 {
 		fmt.Fprintln(stderr, "多余的参数")
 		return 2
+	}
+	if *version { // 原地升级（v0.71）：安装脚本核对它和 build.json 一致
+		b, _ := json.Marshal(buildinfo.GetVersion())
+		fmt.Fprintln(stdout, string(b))
+		return 0
 	}
 	if runDev != nil {
 		if code, handled := runDev(dev, *stateDir, stderr, ready); handled {

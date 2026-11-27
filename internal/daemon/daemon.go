@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"claude-abroad/internal/api"
+	"claude-abroad/internal/buildinfo"
 	"claude-abroad/internal/claudedomains"
 	"claude-abroad/internal/console"
 	"claude-abroad/internal/envcheck"
@@ -520,6 +521,20 @@ type Status struct {
 	Env *envcheck.Report `json:"envcheck,omitempty"`
 	// M5-2：只在 GET /v1/status 里给（调用方签名校验未启用的说明、这次调用方的身份）；别的接口返回的状态不带它。
 	Security *api.Security `json:"security,omitempty"`
+	// v0.71 原地升级：后台服务的版本号（构建时写进程序；没写入时是 unknown）和状态目录的格式版本号。
+	// 安装脚本据此决定升级、什么都不做还是拒绝（不降级；格式不一样时改用卸载再重装）。
+	Build       *buildinfo.Info `json:"build,omitempty"` // 总是给（指针只为生成的类型是可选的：老版本没有这一项）
+	StateFormat int             `json:"state_format,omitempty"`
+	// Busy：状态机此刻有操作占着忙标记（监护的轮次也会短暂占用）；原地升级只在没有时进行。
+	Busy bool `json:"busy,omitempty"`
+	// Uninstall：一键卸载进行中、已经卸载过（总是给）。
+	Uninstall *UninstallFlags `json:"uninstall,omitempty"`
+}
+
+// UninstallFlags 是 /v1/status 里一键卸载的两个标记（v0.71）。
+type UninstallFlags struct {
+	Running bool `json:"running"`
+	Done    bool `json:"done"`
 }
 
 // Status 返回当前状态。
@@ -570,6 +585,10 @@ func (d *Daemon) Status() Status {
 	d.rulesStatus(&st)
 	st.Region = d.regionStatus()
 	st.Env = d.envStatus()
+	bi := buildinfo.Get()
+	st.Build, st.StateFormat = &bi, buildinfo.StateFormat
+	st.Busy = d.m.Busy()
+	st.Uninstall = &UninstallFlags{Running: d.uninstalling.Load(), Done: d.uninstalled()}
 	return st
 }
 

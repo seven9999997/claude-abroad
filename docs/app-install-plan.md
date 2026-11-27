@@ -1,6 +1,6 @@
 # 一条命令构建、应用里装好后台服务、原地升级：实施计划（交架构顾问审）
 
-> 版本：**v1**（2026-11-27）。只是计划，代码还没改。
+> 版本：**v2**（2026-11-27）。v1 经顾问审过：通过，1 条必须改（见 1.1 的 `TestStateFormatPinned`），阶段 A 可以开工；第 0 节四处拍板和风险 3 的结论回填在下面。阶段 A 已按本计划实现（实现中的偏离见第 7 节），阶段 B 还没做。
 > 依据：用户 2026-11-27 的选择“1”（原话“我不想每次安装都执行这么多命令，太啰嗦了”）；顾问 2026-11-27 的判定（分两阶段、同一份计划、分开交验收；设计都记 v0.71；“回国确认里选第四道”顺延到 v0.72；取消本机自用 pkg）。
 > 现状核对过的文件：`scripts/m6/install/{install.sh,uninstall.sh,lib.sh,selftest.sh,commands.txt,check-commands.sh,README.md}`、`scripts/dev/{reinstall.sh,integrity-build.sh,app-bundle.sh,app-test.sh}`、`internal/daemon/{daemon.go,routes.go,uninstall.go,confirm.go}`、`internal/state/{file.go,machine.go}`、`app/Sources/AbroadKit/{Authorization.swift,SetupModel.swift,PageModels.swift,Strings.swift}`、`app/Tests/AbroadKitTests/RepoTests.swift`、设计 10.3、11.2、11.4。
 > 会话里的边界：不提权（不 sudo、不弹管理员密码框）、不运行真实模式（只有自测 `M6I_TEST_DIR` 和空跑 `DRY_RUN=1`）、不碰真实系统路径（`/Library/Application Support/claude-abroad`、`/Applications/ClaudeAbroad.app`、`/Library/LaunchDaemons`、`/var/run`、`/var/log` 下我们的东西）、不改宿主机网络、不碰本机会话依赖的代理（见 `docs/LOCAL.md`）。本计划里出现的 `sudo …` 命令一律是**写给用户在真机上执行的**，会话不执行。
@@ -8,6 +8,8 @@
 ---
 
 ## 0. 结论先行（要顾问拍板的几处，详见第 5 节）
+
+> **顾问 2026-11-27 拍板**：①加只读 `GET /v1/uninstall/preview`（不签发确认码，内容同卸载第一步的预览），预览里加一句（文字表）“执行时会按当时的情况重新列出；之后新启动的 Claude 也会被结束。”，“同时强制退出浏览器”原样传给 `--kill-browsers`（阶段 B）；②payload 带 `scripts/lib/common.sh`，放在和仓库相同的相对位置；③真机验证改为“借用虚拟机进行中被拒绝”，已启用、启用中、回国中、卸载中由自测 k 覆盖；④源码检查例外只在 `PrivilegedRunner.swift`、限定为一个常量（阶段 B）。下面是 v1 的原文。
 
 1. 应用里卸载的“两步确认预览”：应用调用方不是“完全信任”，`POST /v1/actions/uninstall` 在出预览之前就 403（`routes.go` 的 `guard`）。提议照 `GET /v1/restore/preview` 的先例加只读的 `GET /v1/uninstall/preview`（不签发确认码），应用据此显示两步确认；用户确认、输密码后，root 脚本执行 `abroad --yes uninstall`（以 root 运行，是完全信任的调用方，后台自己再走一遍两步确认）。
 2. `install.sh` 依赖 `scripts/lib/common.sh`（`ab_dev_flags_missing`）。payload 里除了三个脚本还要带上它（按仓库里的相对位置放），否则得把函数复制进 `lib.sh`。提议带上（只读引用，不改它）。
@@ -22,6 +24,7 @@
 
 - 新包 `internal/buildinfo`：`Commit`、`BuildTime`（UTC，`20261127T101500Z` 这种可按字典序比较的写法）、`Dirty`（工作区有未提交改动）三个由 `-ldflags -X` 写入的变量；没写入时是 `unknown`。常量 `StateFormat = 1`（**整个状态目录**的落盘格式版本：状态文件、主代理来源和选择、规则、分流出口、地区、各开关、首次准备标记、托管设置和解析锁的记录）。
   - 测试 `TestStateFormatPinned`：表里钉住状态目录下每种落盘格式自己的版本号（`state.Version` 以及实施时 grep 出的其余版本常量），任何一个变了而 `StateFormat` 没跟着改，测试失败并提示“改了落盘格式要同时改 StateFormat，原地升级会拒绝、改用卸载重装”。
+  - **v2（顾问必须改）**：另外用反射把状态目录下每一种落盘结构的 JSON（规则文件是 YAML）字段名、标签和类型列成固定清单（golden，`internal/daemon/testdata/state-format.golden`，按结构体逐个列，内层结构体展开，自带序列化的类型只写名字），任何字段增删、改名、改标签、改类型都让测试失败，提示同时改 `StateFormat`；结构变了而 `StateFormat` 没加一时 `-update-state-format` 拒绝重写清单。反例 `TestStateFormatPinnedCounterexamples`（改字段名、改标签、改类型、改内层字段、加字段）。状态目录下的文件和 Go 类型的对照见第 7 节。现在不给那些文件补版本号。
   - 测试 `TestBuildInfoDefaults`：没写入时三项是 `unknown`/false，`Known()` 为假。
 - `scripts/dev/integrity-build.sh`：编译所有程序都带 `-X claude-abroad/internal/buildinfo.{Commit,BuildTime,Dirty}=…`（`git rev-parse --short=12 HEAD`、`date -u +%Y%m%dT%H%M%SZ`、`git status --porcelain` 非空即 dirty）；另写 `out/integrity/build.json`：`{"commit":…,"build_time":…,"dirty":…,"state_format":1}`，`build.json` 加进完整性清单。`abroadd --version` 打印同样的 JSON（`cmd/abroadd`，测试 `TestVersionFlag`）；安装脚本的前提检查核对 `abroadd --version` 和 `build.json` 一致。
 - `/v1/status` 新增（`daemon.Status`，apigen 重新生成 `app/Sources/AbroadAPI/APITypes.swift`）：
@@ -304,6 +307,7 @@ umask 077; /bin/rm -rf 'STG' && /bin/mkdir -m 700 'STG' && /usr/sbin/chown root:
 1. **卸载预览的权限**（第 0 节第 1 条）：现有 `POST /v1/actions/uninstall` 不给应用出预览。新只读接口里的预览和确认之后真正执行时之间没有确认码绑定（执行时 `abroad --yes uninstall` 会以当时的情况再算一遍），预览可能和实际结束的进程略有不同。替代：不做只读接口，应用只显示固定的说明文字。请顾问定。
 2. **真机验证“已启用被拒绝”要先启用**（第 0 节第 3 条），而启用是用户暂不测的 R1、R2。
 3. **停服务的行为**：计划假定 abroadd 正常退出（`stopInternals`）时不撤回国拦截、不释放 pf 启用引用、不改状态文件；`d.release()` 释放的是什么要在实现第一步读代码确认，`TestStopStartKeepsState` 守着。如果事实不是这样，停下来问顾问（可能要改成升级时 `kill -9` 走崩溃恢复，或者在 abroadd 里加“为升级而退出”的路径）。
+   **顾问结论（v2）**：`daemon.go` 的 `Shutdown` 不恢复网络、不清 pf、状态文件不变；`d.release()` 释放的是进程锁；pf 启用引用是内核 token，不随进程退出释放——假定成立，`TestStopStartKeepsState` 照写作守护。实现时发现：已停用状态下 utun 是进程持有的设备，abroadd 退出时随之消失，重启时按现有恢复路径重建，名字可能变（例如 utun7 → utun8），状态文件的 `utun` 和锚点里的接口名随之变；测试对已停用只允许这一个名字不同，其余逐字相同。
 4. **检查和停服务之间的窗口**：用户正好在这几秒点了启用。靠崩溃恢复和“状态和升级前不一样就退回”兜住；退回之后状态可能是“启用中断后回滚”的结果。没有加锁（加锁要改状态机，超出这次范围）。
 5. **`NSAppleScript` 的线程**：苹果文档对它在非主线程执行的说法不一；放在串行队列上执行要真机确认不出问题，不行就退回主线程执行（期间界面不响应，先显示“正在安装，请输入密码……”再调用）。`do shell script` 在本进程内执行，预期不触发“自动化”权限弹窗，也要真机确认。
 6. **`do shell script` 的环境**：没有终端（脚本不能读 `/dev/tty`，所以有 `--yes`）、`PATH` 只有系统目录、没有 `SUDO_USER`；脚本用到的 `curl`、`/usr/bin/python3`、`launchctl`、`dscl` 都在系统目录。`/usr/bin/python3` 在没装命令行工具的机器上会弹安装框（现有安装脚本同样如此）。输出只在结束后一次拿到，进行中应用只能显示“进行中”。
@@ -323,3 +327,44 @@ umask 077; /bin/rm -rf 'STG' && /bin/mkdir -m 700 'STG' && /usr/sbin/chown root:
 **阶段 B**（再交一次验收）：① `GET /v1/uninstall/preview`（等顾问定第 5 节第 1 条）→ ② `app-bundle.sh --payload`、`build-app.sh` 和自测 → ③ `ServiceInstall.swift`（命令、转义、模型）和测试 → ④ `PrivilegedRunner.swift` → ⑤ 界面和文字表 → ⑥ 源码检查和反例 → ⑦ 自测场景 t → ⑧ 文档（设计 10.3、11.2、11.4 的 B 部分、16，验收清单第 1 行和第 7 节，进度单）→ 全量验证。
 
 每个阶段交验收时附：`git diff --stat`、`go test`、`swift test`、两份自测、`check-commands.sh`、`privacy-check.sh --commit` 的输出。
+
+---
+
+## 7. 阶段 A 实现中的偏离和补充（v2）
+
+- `TestStateFormatPinned` 和 golden 放在 `internal/daemon`（不是计划写的 `internal/buildinfo`）：要列 daemon 自己的未导出落盘结构（`setupFile`、`claudeSwitchFile`、`appliedRecord`、`lanConfirm`）；其他包的未导出结构由各包一个 `PersistedFormats()`（文件名 → 零值，只给这个测试用）交出来：`resolverlock`、`claudecfg`、`claudedomains`、`envcheck`、`rules`。
+- 结尾的 `RESULT=<退出码>` 一行不在 `install.sh` 里打，留给阶段 B 应用的那条管理员命令（计划 3.4 里已经有 `echo "RESULT=$rc"`），避免两处重复。
+- 升级只对新放的几项 `chown -R`/`chmod -R`（全新安装是整个安装目录）：状态目录里 `vm/` 属 `_abroad`，整个 `chown -R` 会改坏它。
+- 命令行链接不在升级里改：安装目录的位置没变，链接一直指得对。
+- `--from` 下全新安装时日志目录还没建，先只写标准输出（升级时写 `/var/log/claude-abroad/upgrade-<时间>.log`）。
+- `reinstall.sh`：装过（安装目录在）→ 构建三步 + `sudo install.sh --upgrade`；只剩快照 → 构建三步 + 卸载 + 检查 + 安装；没装过 → 构建三步 + 检查 + 安装。升级的退出码 10/11/13/14/20/21 各有对应的下一步提示。
+- 状态目录下的文件和 Go 类型（`state/abroadd` 是 `--state-dir`，`state/store` 是 `--main-proxy-store`，`state/vm` 只有运行时的 socket、pid、控制台日志）：
+
+| 文件 | 编码 | Go 类型 |
+|---|---|---|
+| abroadd/state.json | json | `state.File` |
+| abroadd/region-pending.json | json | `state.RegionPending` |
+| abroadd/baseline.json | json | `exitcheck.Baseline` |
+| abroadd/region.json | json | `region.Target` |
+| abroadd/rules.yaml | yaml | `rules.file` |
+| abroadd/setup.json | json | `daemon.setupFile` |
+| abroadd/allow-lan.json | json | `daemon.LANSetting` |
+| abroadd/claude-proxy-switch.json | json | `daemon.claudeSwitchFile` |
+| abroadd/guard-params.json | json | `guard.Params` |
+| abroadd/resolver-lock.json | json | `resolverlock.record` |
+| abroadd/claude-code-settings.json | json | `claudecfg.record` |
+| abroadd/claude-domains.json | json | `claudedomains.fileFormat` |
+| abroadd/envcheck.json | json | `envcheck.settingsFile` |
+| abroadd/envcheck-history.json | json | `envcheck.runHistFile` |
+| abroadd/ip-history.json | json | `envcheck.histFile` |
+| abroadd/secrets/exit-<标签>.json | json | `daemon.StoredExit` |
+| store/proxy/sources.json | json | `managedproxy.Store` |
+| store/proxy/applied.json | json | `daemon.appliedRecord` |
+| store/proxy/lan-confirm.json | json | `[]daemon.lanConfirm` |
+| store/proxy/pending.json | json | `map[string]string` |
+| abroadd/prepared、abroadd/uninstalled | 文本 | 一行 RFC3339 时间 |
+| abroadd/return-block-set | 文本 | 一行 `pf.ReturnBlockSet` |
+| abroadd/ip-history.key | 二进制 | 出口 IP 历史的密钥 |
+| abroadd/state.lock | 锁 | 没有内容 |
+
+  运行目录 `/var/run/claude-abroad` 下的 `launchguard-boot`、`pf-loaded`、`guard-pf-tokens` 开机时清空，不算状态目录。fake-IP 映射的落盘（`fakedns.Pool.SaveFile`）现在没有接到 abroadd，不在状态目录里。

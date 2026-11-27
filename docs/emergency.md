@@ -8,6 +8,16 @@
 2. 终端里执行 `abroad restore`（回国）或 `sudo abroad uninstall`（卸载）；
 3. 应用被删掉时，另存的命令行还在：`sudo "/Library/Application Support/claude-abroad/bin/abroad" restore`。
 
+## 原地升级失败、退回旧版本也没有完成时（v0.71）
+
+`sudo scripts/m6/install/install.sh --upgrade` 报“退回旧版本也没有完成”（退出码 21）时：旧版本的程序、镜像、清单和 plist
+留在 `/Library/Application Support/claude-abroad/prev/`，状态目录没有被动过。
+
+1. 先再执行一次 `sudo scripts/m6/install/install.sh --upgrade`：它看到上一次没走完，会先接着退回旧版本（不会再升级）。
+2. 还是不行、而网络有异常时，按下面“应急程序”一节用 `sudo abroad-rescue` 恢复网络（它在 `prev/bin/` 里也有一份：
+   `sudo "/Library/Application Support/claude-abroad/prev/bin/abroad-rescue"`）。
+3. 想彻底回到原样时执行卸载脚本 `sudo scripts/m6/install/uninstall.sh`（会连同 `prev/` 一起删掉）。
+
 ## 应急程序：后台服务不在、或状态文件损坏时
 
 正常途径不行（命令行说连不上后台服务，或说“状态文件已损坏”）时，用应急程序 `abroad-rescue`。它以 root 按固定顺序做：

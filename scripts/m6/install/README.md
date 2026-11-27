@@ -16,7 +16,8 @@
 
 ```sh
 scripts/dev/vm-up.sh --no-panic          # 第一次：构建虚拟机镜像到 guest/out
-scripts/dev/integrity-build.sh --dev     # 开发构建 + 完整性清单 → scripts/dev/out/integrity/
+scripts/dev/integrity-build.sh --dev     # 开发构建 + 完整性清单 + 版本号（build.json）→ scripts/dev/out/integrity/
+scripts/dev/payload.sh                   # 组装 payload（程序、镜像、清单、版本号、安装脚本、逐文件摘要）→ scripts/dev/out/payload/
 scripts/dev/app-bundle.sh                # 应用包 → app/.build/bundle/ClaudeAbroad.app
 scripts/m6/install/install.sh --check-only   # 前提检查（只读）
 ```
@@ -50,10 +51,33 @@ sudo scripts/m6/install/install.sh
 
 装好后以你自己的身份打开应用：`open /Applications/ClaudeAbroad.app`。
 
+## 原地升级（v0.71）
+
+```sh
+sudo scripts/m6/install/install.sh --upgrade            # 或者直接 scripts/dev/reinstall.sh（装过时就是升级）
+scripts/m6/install/install.sh --check-only --upgrade    # 只看能不能升级（只读）
+```
+
+只换程序、镜像、完整性清单、版本号（`build.json`）、安装目录里的 `scripts/`（卸载脚本，给应用里的卸载用）和两份 plist
+（内容变了才换）；**状态目录整个保留**（主代理来源和选择、规则、分流出口、地区、各开关、首次准备标记、解析锁和托管设置的记录），
+日志目录、`_abroad` 也不动。不碰 pf、DNS、网络服务。
+
+- **只在“已回国”或“已停用”时**，并且没有正在进行的操作（不在启用中、回国中、借用虚拟机中、卸载中）。已启用时会说
+  “升级前要先停用（`sudo abroad down`），升级后再启用”。后台服务不响应时拒绝，按 [docs/emergency.md](../../../docs/emergency.md) 处理或卸载重装。
+- **不降级**：后台服务比要装的新就拒绝；一样就什么都不做。加版本号之前装的（版本不明）要多确认一次（非交互时加 `--accept-unknown-version`）。
+- **状态格式版本号**不一样时拒绝，提示先卸载再重装（不做迁移：升级失败退回旧版本时旧版本还要能读懂状态）。
+- 步骤：查状态 → 停 abroadd（它管的虚拟机随之停；pf 不动）→ 旧版搬进 `…/claude-abroad/prev/` → 放新文件 → plist 变了才换
+  （guard 的换了时重新注册一次）→ 启动 abroadd → 核对版本是新的、完整性通过、状态和升级前一样 → 删 `prev/`。
+- **任何一步失败或被中断**：把 `prev/` 里的旧版放回去、重启服务，报“升级失败，已退回旧版本”和原因（退出码 20）。退回本身也失败时
+  （退出码 21）`prev/` 留着，再执行一次 `--upgrade` 会先接着退回；网络有异常时按应急文档处理。
+- 退出码：0 完成（或已经是这个版本）、10 状态不允许、11 不降级、13 状态格式不同、14 版本不明要确认、20 已退回旧版本、21 退回没有完成、3 前提不满足。
+- 以前用安装脚本放进“应用程序”的应用（安装记录里有它）会顺带换成 `app/.build/bundle/` 里的新应用包。
+- 其他参数：`--from <payload 目录>`（默认 `scripts/dev/out/payload`；给了就不复制应用，阶段 B 的应用用它）、`--yes`（不问回车）。
+
 ## 卸载
 
 ```sh
-sudo scripts/m6/install/uninstall.sh
+sudo scripts/m6/install/uninstall.sh          # 可加 --yes（不读终端，执行 abroad --yes uninstall）、--kill-browsers
 ```
 
 1. 先走正常途径 `abroad uninstall`（提示时输入 `uninstall`）：结束 Claude（开发构建只预览）、恢复本机网络、删解析锁和托管设置。
@@ -61,7 +85,7 @@ sudo scripts/m6/install/uninstall.sh
 3. 正常途径没走完时（abroadd 不在、卸载出错），按 [docs/emergency.md](../../../docs/emergency.md) 兜底：清空自己的 pf 锚点
    `com.apple/250.abroad`、删 DNS 键、按快照把原来是“自动”的 IPv6 改回来，按 abroadd 的记录删内容一致的解析锁和托管设置。
 4. 按安装记录删掉 plist、`_abroad`、命令行链接、应用（只删安装时放的）、各个目录。
-5. 和安装前的快照逐项对照（含 pf 锚点里的规则数和 pf 是否启用）：一致就删掉快照目录；不一致时列出差异、保留快照目录，退出码非零（可以重试卸载）。卸载后，Claude 出国的 pf 启用引用和锚点规则都不留下；pf 是否启用还受系统和别的软件持有的引用影响。卸载对照时，如果安装前没启用、卸载后启用，而启用引用都属于别的程序、我们的锚点是空的，这不算不一致，会写一条说明（2026-11-27 真机）。安装目录已经不在、只剩快照时（上一次卸载做完了、只是对照没过），再执行卸载只重做对照，对上了就删快照，不做别的。
+5. 和安装前的快照逐项对照（含 pf 锚点里的规则数和 pf 是否启用；应用那一行只在安装记录里有它时参与）：一致就删掉快照目录；不一致时列出差异、保留快照目录，退出码非零（可以重试卸载）。卸载后，Claude 出国的 pf 启用引用和锚点规则都不留下；pf 是否启用还受系统和别的软件持有的引用影响。卸载对照时，如果安装前没启用、卸载后启用，而启用引用都属于别的程序、我们的锚点是空的，这不算不一致，会写一条说明（2026-11-27 真机）。安装目录已经不在、只剩快照时（上一次卸载做完了、只是对照没过），再执行卸载只重做对照，对上了就删快照，不做别的。
 
 可以重复执行；没有安装记录时什么都不做。
 
@@ -70,7 +94,8 @@ sudo scripts/m6/install/uninstall.sh
 ```sh
 DRY_RUN=1 scripts/m6/install/install.sh   >/tmp/i.out   # 空跑：只打印 CHANGE:、QUERY:、STATE:、WAIT:
 DRY_RUN=1 scripts/m6/install/uninstall.sh >/tmp/u.out
-scripts/m6/install/check-commands.sh /tmp/i.out /tmp/u.out   # 命令核对（清单在 commands.txt）
+DRY_RUN=1 scripts/m6/install/install.sh --upgrade >/tmp/up.out
+scripts/m6/install/check-commands.sh /tmp/i.out /tmp/u.out /tmp/up.out   # 命令核对（清单在 commands.txt）
 scripts/m6/install/selftest.sh             # 自测：在临时目录里真的装、真的卸，系统命令只记日志
 ```
 
