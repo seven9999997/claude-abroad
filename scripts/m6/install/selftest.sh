@@ -22,6 +22,7 @@
 #   p. 退回也失败（21，prev 和标记留着）；再运行 --upgrade 接着退回；标记在时卸载照常；
 #   q. 中断后退回；  r. 升级后卸载和安装前一致；应用不在安装记录里时不参与卸载对照；
 #   s. payload.sh 的布局、--from 安装和升级、摘要对不上拒绝、--check-only --upgrade 只读；升级的空跑和命令核对及反例；
+#   u. B0：应用经系统密码框执行的命令（Swift golden）用 /bin/sh 真跑：命令行不对时 31、输入文件被改过时 32；
 #   t. 应用的交接：老安装记录里有 app 时，升级后属主改成执行 sudo 的用户、记录里删掉 app；再卸载时对照一致、应用留着。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -528,6 +529,51 @@ T=$(mkcase); setup_old "$T"; echo old >"$T/Applications/ClaudeAbroad.app/old-mar
 M6I_TEST_SUDO_USER=alice M6I_TEST_FAIL_AT=verify M6I_TEST_DIR="$T" M6I_TEST_SRC="$P2" M6I_TEST_STATUS="$ST_R" bash "${INSTALL}" --upgrade --yes >/dev/null 2>&1; rc=$?
 upgset "$T" >"$T/set.after"
 [ $rc = 20 ] && cmp -s "$T/set.before" "$T/set.after" && [ -n "$(cat "$T$SNAP/app" 2>/dev/null)" ] && ok "t. 交接之后升级失败：旧应用放回，安装记录里的 app 还在" || bad "t. 交接后失败：rc=$rc"
+
+# ---- u. B0（v0.71b）：应用经系统密码框执行的命令（Swift 生成的 golden）真跑一遍，不提权：路径换成自测目录、属主条件换成
+#      当前用户、去掉 chown。核对：命令行不对时停在 31、输入文件在确认后被改过时停在 32，都不调用命令行、临时目录不留。----
+GOLD=app/Tests/AbroadKitTests/testdata/privileged-commands.txt
+UD=$(mktemp -d "${TMP}/priv.XXXXXX")
+cmdof() { awk -v n="### $1" '$0 == n { f = 1; next } /^### / { f = 0 } f' "${GOLD}"; }
+mkfake() { # 假的已安装命令行：记下参数、拷下 --url-file 指的文件内容
+  rm -rf "${UD}/inst" "${UD}/args" "${UD}/got"; mkdir -p "${UD}/inst/bin"
+  cat >"${UD}/inst/bin/abroad" <<EOS
+#!/bin/sh
+printf '%s\n' "\$@" >"${UD}/args"
+prev=""; for a in "\$@"; do [ "\$prev" = --url-file ] && cat "\$a" >"${UD}/got"; prev=\$a; done
+echo '{"ok":true}'
+EOS
+  chmod 755 "${UD}/inst/bin/abroad" "${UD}/inst/bin" "${UD}/inst"
+}
+runpriv() { # runpriv <摘要>：按 golden 的 addsource 拼好并用 /bin/sh 执行，输出最后一行
+  cmdof addsource | sed -e "s|@INST@|${UD}/inst|g" -e "s|@STG@|${UD}/stg|g" -e "s|@IN@|${UD}/input.txt|g" \
+    -e "s|$(printf 'a%.0s' $(seq 1 64))|$1|g" -e "s|\")\" = 0 \]|\")\" = $(id -u) ]|" -e 's|/usr/sbin/chown root:wheel "\$S" \&\& ||' >"${UD}/cmd.sh"
+  /bin/sh "${UD}/cmd.sh" | tail -1
+}
+if [ -s "${GOLD}" ]; then
+  printf 'https://sub.example/x\n' >"${UD}/input.txt"
+  SUM=$(shasum -a 256 "${UD}/input.txt" | cut -c1-64)
+  mkfake; out=$(runpriv "${SUM}")
+  [ "${out}" = RESULT=0 ] && [ "$(cat "${UD}/got" 2>/dev/null)" = "https://sub.example/x" ] && grep -qx -- "--url-file" "${UD}/args" && grep -qx "${UD}/stg/in1" "${UD}/args" &&
+    [ "$(head -2 "${UD}/args" | tr '\n' ' ')" = "--yes --json " ] && [ ! -e "${UD}/stg" ] &&
+    ok "u. 命令行对、摘要对：以 --yes --json 运行，交给命令行的是临时目录里的副本，用完删掉" || bad "u. 正常执行：${out} $(cat "${UD}/args" 2>/dev/null | tr '\n' ' ')"
+  mkfake; printf 'https://evil.example/\n' >"${UD}/input.txt"; out=$(runpriv "${SUM}")
+  [ "${out}" = RESULT=32 ] && [ ! -e "${UD}/args" ] && [ ! -e "${UD}/stg" ] && ok "u. 确认后输入文件被改过：退出码 32，没有调用命令行，临时目录不留" || bad "u. 输入文件被改：${out}"
+  printf 'https://sub.example/x\n' >"${UD}/input.txt"
+  mkfake; chmod 775 "${UD}/inst/bin"; out=$(runpriv "${SUM}")
+  [ "${out}" = RESULT=31 ] && [ ! -e "${UD}/args" ] && ok "u. bin 目录组可写：退出码 31，没有执行" || bad "u. bin 组可写：${out}"
+  mkfake; chmod 777 "${UD}/inst"; out=$(runpriv "${SUM}")
+  [ "${out}" = RESULT=31 ] && [ ! -e "${UD}/args" ] && ok "u. 安装目录别人可写：退出码 31" || bad "u. 安装目录可写：${out}"
+  mkfake; chmod 775 "${UD}/inst/bin/abroad"; out=$(runpriv "${SUM}")
+  [ "${out}" = RESULT=31 ] && [ ! -e "${UD}/args" ] && ok "u. 命令行组可写：退出码 31" || bad "u. 命令行组可写：${out}"
+  mkfake; mv "${UD}/inst/bin/abroad" "${UD}/real-abroad"; ln -s "${UD}/real-abroad" "${UD}/inst/bin/abroad"; out=$(runpriv "${SUM}")
+  [ "${out}" = RESULT=31 ] && [ ! -e "${UD}/args" ] && ok "u. 命令行是符号链接：退出码 31" || bad "u. 符号链接：${out}"
+  mkfake; rm "${UD}/inst/bin/abroad"; out=$(runpriv "${SUM}")
+  [ "${out}" = RESULT=31 ] && ok "u. 没有已安装的命令行：退出码 31" || bad "u. 没有命令行：${out}"
+  grep -q '= 0 \]' <<<"$(cmdof addsource)" && ok "u. golden 里属主条件是 root（uid 0）" || bad "u. golden 里没有属主是 root 的条件"
+else
+  bad "u. 没有 ${GOLD}（由 swift 测试 privilegedCommandGolden 生成）"
+fi
 
 # ---- 升级的空跑和命令核对 ----
 plain DRY_RUN=1 bash "${INSTALL}" --upgrade >"${TMP}/up.dry" 2>/dev/null && ok "升级空跑退出码 0" || bad "升级空跑退出码非零"

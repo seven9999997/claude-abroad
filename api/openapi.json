@@ -699,6 +699,36 @@
         ],
         "type": "object"
       },
+      "DaemonEnablePreview": {
+        "properties": {
+          "blocker": {
+            "type": "string"
+          },
+          "can_enable": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/ClaudeprocPreview"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "region": {
+            "$ref": "#/components/schemas/DaemonRegionChange"
+          }
+        },
+        "required": [
+          "can_enable",
+          "note"
+        ],
+        "type": "object"
+      },
       "DaemonEngineView": {
         "properties": {
           "last_error": {
@@ -2474,6 +2504,35 @@
         },
         "x-async": true,
         "x-level": "per_call"
+      }
+    },
+    "/v1/enable/preview": {
+      "get": {
+        "description": "启用的预览（只查看：不签发确认码、不改任何状态、不拉起虚拟机；地区会不会变、会变时要结束的 Claude 进程、现在能不能启用；v0.71b）",
+        "operationId": "enable-preview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonEnablePreview"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
       }
     },
     "/v1/engines": {

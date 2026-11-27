@@ -119,7 +119,12 @@ let exitsJSON = "{\"exits\":[{\"tag\":\"wg\",\"kind\":\"wireguard\",\"server\":\
     m.formKind = "openvpn"
     m.formFile = conf
     await m.add()
-    #expect(m.terminal?.commands == ["sudo abroad exit add vpn --kind openvpn --file \(conf.path)"])
+    // B0：配置存成只有本人能读的临时文件（用户选的文件可能在受保护的目录里），命令里只有临时文件的路径
+    let tf = try #require(m.terminal?.tempFile)
+    #expect(m.terminal?.commands == ["sudo abroad exit add vpn --kind openvpn --file \(tf.path)"])
+    #expect(try String(contentsOf: tf, encoding: .utf8) == "client\n")
+    await m.dismissTerminal()
+    #expect((FileManager.default.fileExists(atPath: tf.path)) == false)
     await m.remove("wg")
     #expect(m.terminal?.commands == ["sudo abroad exit rm wg"])
 }

@@ -1,4 +1,5 @@
-// “取得本人授权”的协议（m5-plan v2.5 决定 2）。两个实现：系统授权（等 M5-3 的 E1、E2）和现在就能用的终端退路。
+// “取得本人授权”的协议（m5-plan v2.5 决定 2）。两个实现：应用里经系统密码框执行（B0，v0.71b：PrivilegedAuthorizer，
+// 以 root 运行已安装的命令行）和终端退路（TerminalAuthorizer，拷贝命令到终端执行）。
 // 授权只是“让后台相信这是本人”的一种方式；能不能做仍由 abroadd 按级别判断。
 import Foundation
 
@@ -24,31 +25,46 @@ public enum SensitiveOperation: Sendable, Equatable {
     case ruleListRemove(kind: String, item: String)
     case udp443(on: Bool)
     case allowLAN(on: Bool)
+    /// 第四道（Claude Code 的本机代理）的开关（v0.68；B0 起应用里可以直接执行）。
+    case claudeProxy(on: Bool)
 
-    /// 在终端里执行的完整命令（不带 --yes：终端里照样打印预览、让用户确认）。
-    public var terminalCommand: String {
+    /// 命令行 abroad 之后的参数（不含 sudo）。终端命令和经系统密码框执行的命令都由它生成：参数只有这一份。
+    public var arguments: [String] {
         switch self {
-        case .enable: return "sudo abroad up"
-        case .restore: return "sudo abroad restore"
-        case .mainApply: return "sudo abroad main apply"
-        case let .regionSet(tz, lang): return "sudo abroad region set \(Self.quote(tz)) \(Self.quote(lang))"
-        case .regionAuto: return "sudo abroad region auto"
-        case let .addSourceFile(path, name): return "sudo abroad main add-source --file \(Self.quote(path)) --name \(Self.quote(name))"
-        case let .addSourceURLFile(path, name, viaHost):
-            return "sudo abroad main add-source --url-file \(Self.quote(path)) --name \(Self.quote(name))" + (viaHost ? " --via-host" : "")
-        case let .addNodeFile(path, name): return "sudo abroad main add-node --file \(Self.quote(path)) --name \(Self.quote(name))"
-        case let .removeSource(id): return "sudo abroad main rm-source \(Self.quote(id))"
-        case let .mainUse(node, via): return (["sudo abroad main use", Self.quote(node)] + via.map { "--via " + Self.quote($0) }).joined(separator: " ")
-        case let .lanConfirm(node): return "sudo abroad main confirm-lan \(Self.quote(node))"
-        case let .exitAdd(tag, kind, path): return "sudo abroad exit add \(Self.quote(tag)) --kind \(Self.quote(kind)) --file \(Self.quote(path))"
-        case let .exitRemove(tag): return "sudo abroad exit rm \(Self.quote(tag))"
-        case let .appSet(app, action): return "sudo abroad app set \(Self.quote(app)) \(Self.quote(action == "proxy:main" ? "main" : action))"
-        case let .appRemove(app): return "sudo abroad app rm \(Self.quote(app))"
-        case let .ruleListAdd(kind, item): return "sudo abroad rules \(kind) add \(Self.quote(item))"
-        case let .ruleListRemove(kind, item): return "sudo abroad rules \(kind) rm \(Self.quote(item))"
-        case let .udp443(on): return "sudo abroad rules udp443 " + (on ? "on" : "off")
-        case let .allowLAN(on): return "sudo abroad lan " + (on ? "on" : "off")
+        case .enable: return ["up"]
+        case .restore: return ["restore"]
+        case .mainApply: return ["main", "apply"]
+        case let .regionSet(tz, lang): return ["region", "set", tz, lang]
+        case .regionAuto: return ["region", "auto"]
+        case let .addSourceFile(path, name): return ["main", "add-source", "--file", path, "--name", name]
+        case let .addSourceURLFile(path, name, viaHost): return ["main", "add-source", "--url-file", path, "--name", name] + (viaHost ? ["--via-host"] : [])
+        case let .addNodeFile(path, name): return ["main", "add-node", "--file", path, "--name", name]
+        case let .removeSource(id): return ["main", "rm-source", id]
+        case let .mainUse(node, via): return ["main", "use", node] + via.flatMap { ["--via", $0] }
+        case let .lanConfirm(node): return ["main", "confirm-lan", node]
+        case let .exitAdd(tag, kind, path): return ["exit", "add", tag, "--kind", kind, "--file", path]
+        case let .exitRemove(tag): return ["exit", "rm", tag]
+        case let .appSet(app, action): return ["app", "set", app, action == "proxy:main" ? "main" : action]
+        case let .appRemove(app): return ["app", "rm", app]
+        case let .ruleListAdd(kind, item): return ["rules", kind, "add", item]
+        case let .ruleListRemove(kind, item): return ["rules", kind, "rm", item]
+        case let .udp443(on): return ["rules", "udp443", on ? "on" : "off"]
+        case let .allowLAN(on): return ["lan", on ? "on" : "off"]
+        case let .claudeProxy(on): return ["claude-proxy", on ? "on" : "off"]
         }
+    }
+
+    /// 经文件传给命令行的那个参数（订阅地址、节点、配置、出口配置；文件里是秘密，命令里只有路径）。
+    public var inputFile: String? {
+        switch self {
+        case let .addSourceFile(path, _), let .addSourceURLFile(path, _, _), let .addNodeFile(path, _), let .exitAdd(_, _, path): return path
+        default: return nil
+        }
+    }
+
+    /// 在终端里执行的完整命令（不带 --yes：终端里照样打印预览、让用户确认）。由 arguments 生成。
+    public var terminalCommand: String {
+        (["sudo", "abroad"] + arguments.map(Self.quote)).joined(separator: " ")
     }
 
     /// 命令里的参数只允许常见的时区、语言字符；其他一律加单引号（防止复制到终端时被 shell 解释）。
@@ -60,8 +76,9 @@ public enum SensitiveOperation: Sendable, Equatable {
 }
 
 public enum AuthorizationResult: Sendable, Equatable {
-    case authorized // 系统授权通过（M5-3 之后），调用方重新发请求
+    case authorized // 保留：系统授权通过后调用方重新发请求（这一版不用）
     case runInTerminal(command: String) // 退路：请用户在终端执行这条命令
+    case confirmInApp // B0：在应用自己的确认框里确认，点“执行”后经系统密码框以 root 运行已安装的命令行（PrivilegedSession）
     case cancelled
 }
 

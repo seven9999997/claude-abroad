@@ -1,0 +1,31 @@
+# B0（v0.71b）：应用里经系统密码框以 root 运行的子命令白名单（命令词 TAB 路由 ID）。
+# 和 app/Sources/AbroadKit/PrivilegedCommand.swift 的 PrivilegedSubcommand 一致（swift:privilegedWhitelistFile）；
+# cmd/abroad 的 TestPrivilegedWhitelistMatchesRoutes 核对：每项在命令表里、路由一致、级别是敏感或按本次调用决定；
+# 反过来命令表里敏感、按本次调用决定的命令要么在这里，要么在那份测试的“不提供”表里写明理由。
+up	enable
+restore	restore
+main add-source	main-source-add
+main add-node	main-source-add
+main rm-source	main-source-delete
+main use	main-select
+main confirm-lan	main-lan-confirm
+main apply	main-proxy-apply
+exit add	exit-put
+exit rm	exit-delete
+app set	rules-put
+app rm	rules-put
+rules local add	rules-put
+rules local rm	rules-put
+rules pinned add	rules-put
+rules pinned rm	rules-put
+rules offline add	rules-put
+rules offline rm	rules-put
+rules nofake add	rules-put
+rules nofake rm	rules-put
+rules udp443	rules-put
+lan on	lan-put
+lan off	lan-put
+region set	region-put
+region auto	region-put
+claude-proxy on	claude-proxy-put
+claude-proxy off	claude-proxy-put

@@ -111,11 +111,14 @@ public final class MainProxyModel: ObservableObject {
     public let files: InputFiles
     public let flow: ConfirmFlow
     public let notifier: Notifier
+    /// B0：经系统密码框执行敏感操作的确认框（各页面共用一个；没有时走终端退路）。
+    public let privileged: PrivilegedSession?
 
     public init(client: APIClient, authorizer: Authorizer = TerminalAuthorizer(), files: InputFiles = InputFiles(),
-                flow: ConfirmFlow? = nil, notifier: Notifier? = nil) {
+                flow: ConfirmFlow? = nil, notifier: Notifier? = nil, privileged: PrivilegedSession? = nil) {
         self.client = client
         self.authorizer = authorizer
+        self.privileged = privileged
         self.files = files
         self.flow = flow ?? ConfirmFlow(client: client)
         self.notifier = notifier ?? Notifier()
@@ -154,7 +157,7 @@ public final class MainProxyModel: ObservableObject {
         let kind = addKind
         var body: AddSourceBody
         var fallbackContent: (text: String, ext: String)? // 终端退路要存成临时文件的内容
-        var fallbackPath: String? // 或用户自己选的文件
+        var fallbackLocal: String? // 或用户自己选的本地配置文件的内容（也存成临时文件：root 的 shell 未必读得到受保护目录里的文件）
         switch kind {
         case .subscription:
             let url = formURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -168,7 +171,7 @@ public final class MainProxyModel: ObservableObject {
                 notice = Notice(kind: .error, text: ErrorText(raw: L10n.addReadFailed)); return
             }
             body = AddSourceBody(kind: "yaml", name: name.isEmpty ? f.deletingPathExtension().lastPathComponent : name, content: content)
-            fallbackPath = f.path
+            fallbackLocal = content
         case .manualNode:
             guard !nodeServer.isEmpty, let port = Int(nodePort), (1...65535).contains(port) else {
                 notice = Notice(kind: .error, text: ErrorText(raw: L10n.addBadNode)); return
@@ -195,12 +198,15 @@ public final class MainProxyModel: ObservableObject {
             needsReselect = r.needsReselect ?? false
             await refresh()
         case .needsAuthorization(let t):
-            // 终端退路：内容存成只有本人能读的临时文件（本地配置文件直接用用户自己的路径），再给出命令。
+            // 内容存成只有本人能读的临时文件，命令里只有路径（经系统密码框执行或终端退路都一样）。
             do {
                 var temp: URL?
                 let op: SensitiveOperation
-                if let p = fallbackPath {
-                    op = .addSourceFile(path: p, name: sourceName)
+                if let c = fallbackLocal {
+                    let u = try files.writePrivate(c, ext: "yaml")
+                    temp = u
+                    op = .addSourceFile(path: u.path, name: sourceName)
+                    fallbackLocal = nil
                 } else if let c = fallbackContent {
                     let u = try files.writePrivate(c.text, ext: c.ext)
                     temp = u
@@ -315,7 +321,7 @@ public final class MainProxyModel: ObservableObject {
         case .needsAuthorization(let t):
             applyState = .idle
             guard let exit = selectedExit else { return }
-            await authorize(.mainUse(node: exit, via: via), t, extra: [SensitiveOperation.mainApply.terminalCommand])
+            await authorize(.mainUse(node: exit, via: via), t, then: [.mainApply])
         case .invalid(let t) where t.code == .lanUnconfirmed:
             applyState = .idle
             if let hop = t.node ?? firstHop { // 节点以后台给的为准
@@ -380,10 +386,16 @@ public final class MainProxyModel: ObservableObject {
 
     // ---- 授权与终端退路 ----
 
-    private func authorize(_ op: SensitiveOperation, _ reason: ErrorText, tempFile: URL? = nil, extra: [String] = []) async {
+    private func authorize(_ op: SensitiveOperation, _ reason: ErrorText, tempFile: URL? = nil, then: [SensitiveOperation] = []) async {
+        let tp = TerminalPrompt(commands: [op.terminalCommand] + then.map(\.terminalCommand), tempFile: tempFile)
         switch await authorizer.authorize(op, reason: reason) {
         case .runInTerminal(let cmd):
-            terminal = TerminalPrompt(commands: [cmd] + extra, tempFile: tempFile)
+            terminal = TerminalPrompt(commands: [cmd] + then.map(\.terminalCommand), tempFile: tempFile)
+        case .confirmInApp:
+            guard let s = privileged else { terminal = tp; return }
+            await s.present([op] + then, tempFiles: tempFile.map { [$0] } ?? [], terminal: tp,
+                            onTerminal: { [weak self] t in self?.terminal = t },
+                            onDone: { [weak self] in await self?.refresh() })
         case .authorized, .cancelled:
             // 系统授权（M5-3）接上之前不会走到 authorized；取消时删掉临时文件。
             if let tempFile { files.remove(tempFile) }

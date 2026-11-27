@@ -50,7 +50,7 @@ struct MenuContent: View {
 
     /// 需要确认或要去终端执行时，打开主窗口显示（菜单里放不下预览）。
     private func showIfNeeded() {
-        if model.flow.isActive || model.terminalCommand != nil || model.notice != nil { openMain() }
+        if model.flow.isActive || model.terminalCommand != nil || model.notice != nil || model.privileged?.isActive == true { openMain() }
     }
 
     private func openMain() {

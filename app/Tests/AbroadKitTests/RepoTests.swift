@@ -93,11 +93,13 @@ func appSources() throws -> [(String, String)] {
     for (name, src) in files {
         for line in src.split(separator: "\n") where line.hasPrefix("import ") {
             let m = line.dropFirst("import ".count).trimmingCharacters(in: .whitespaces)
-            #expect(allowedImports.contains(m), "\(name) 引入了 \(m)")
+            // B0：CryptoKit（系统框架）只允许在 InputFiles.swift（算输入文件的摘要；privilegedSourceRules 另有反例）
+            #expect(allowedImports.contains(m) || (m == "CryptoKit" && name == "InputFiles.swift"), "\(name) 引入了 \(m)")
         }
         let code = src.split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }.joined(separator: "\n")
         for f in forbidden where !(name == "InputFiles.swift" && inputOnly.contains(f)) && !(name == "Notifications.swift" && f == "UserDefaults")
-            && !(name == "SystemServices.swift" && f == "write(to") {
+            && !(name == "SystemServices.swift" && f == "write(to")
+            && !(name == "PrivilegedRunner.swift" && f == "/Library/Application Support") { // B0：唯一的基础路径常量（只许一次，privilegedSourceRules 守着）
             #expect((code.contains(f)) == false, "\(name) 里出现了 \(f)")
         }
         if name == "InputFiles.swift" { continue }

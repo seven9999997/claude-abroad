@@ -18,17 +18,39 @@ public class PageModel: ObservableObject {
 
     /// 统一的确认框（各页面共用一个实例）。
     public let flow: ConfirmFlow
+    /// B0：经系统密码框执行敏感操作的确认框（各页面共用一个；没有时走终端退路）。
+    public let privileged: PrivilegedSession?
+    /// 要经文件交给命令行的内容（出口配置）存成的临时文件。
+    public let files = InputFiles()
+    /// 确认框显示在哪个窗口（设置窗口覆盖）。
+    var privilegedHost: PrivilegedHost { .main }
 
-    public init(client: APIClient, authorizer: Authorizer = TerminalAuthorizer(), flow: ConfirmFlow? = nil) {
+    public init(client: APIClient, authorizer: Authorizer = TerminalAuthorizer(), flow: ConfirmFlow? = nil, privileged: PrivilegedSession? = nil) {
         self.client = client
         self.authorizer = authorizer
         self.flow = flow ?? ConfirmFlow(client: client)
+        self.privileged = privileged
     }
 
-    func authorize(_ op: SensitiveOperation, _ reason: ErrorText) async {
-        if case .runInTerminal(let cmd) = await authorizer.authorize(op, reason: reason) {
-            terminal = TerminalPrompt(commands: [cmd])
+    func authorize(_ op: SensitiveOperation, _ reason: ErrorText, tempFile: URL? = nil) async {
+        let tp = TerminalPrompt(commands: [op.terminalCommand], tempFile: tempFile)
+        switch await authorizer.authorize(op, reason: reason) {
+        case .runInTerminal(let cmd): terminal = TerminalPrompt(commands: [cmd], tempFile: tempFile)
+        case .confirmInApp:
+            guard let s = privileged else { terminal = tp; return }
+            await s.present([op], tempFiles: tempFile.map { [$0] } ?? [], host: privilegedHost, terminal: tp,
+                            onTerminal: { [weak self] t in self?.terminal = t },
+                            onDone: { [weak self] in await self?.load() })
+        case .authorized, .cancelled: break
         }
+    }
+
+    /// 应用里直接切换的入口（例如第四道的开关）：先弹确认框，用户点“执行”才执行。只能从按钮调用。
+    public func userTappedPrivileged(_ op: SensitiveOperation) async {
+        guard let s = privileged else { terminal = TerminalPrompt(commands: [op.terminalCommand]); return }
+        await s.present([op], host: privilegedHost, terminal: TerminalPrompt(commands: [op.terminalCommand]),
+                        onTerminal: { [weak self] t in self?.terminal = t },
+                        onDone: { [weak self] in await self?.load() })
     }
 
     /// 读本页（子类覆盖）。
@@ -36,6 +58,7 @@ public class PageModel: ObservableObject {
 
     /// 关掉终端退路的提示后重新加载本页：用户可能刚在终端里改了东西（M5-9 复审必须改）。
     public func dismissTerminal() async {
+        if let f = terminal?.tempFile { files.remove(f) }
         terminal = nil
         await load()
     }
@@ -108,8 +131,21 @@ public final class ExitsModel: PageModel {
         busy = true
         defer { busy = false }
         let o = await client.putExit(tag: tag, kind: kind, conf: conf)
+        if case .needsAuthorization(let t) = o {
+            // 配置存成只有本人能读的临时文件，命令里只有路径（用户选的文件可能在受保护的目录里，root 的 shell 未必读得到）。
+            notice = Notice(kind: .info, text: t)
+            do {
+                let u = try files.writePrivate(conf, ext: "conf")
+                conf = ""
+                await authorize(.exitAdd(tag: tag, kind: kind, path: u.path), t, tempFile: u)
+            } catch {
+                conf = ""
+                notice = Notice(kind: .error, text: ErrorText(raw: L10n.tempFileFailed))
+            }
+            return
+        }
         conf = ""
-        if await handle(o, op: .exitAdd(tag: tag, kind: kind, path: file.path)) {
+        if await handle(o, op: nil) {
             formTag = ""
             await load()
         }
@@ -635,12 +671,15 @@ public final class SettingsModel: PageModel {
         didSet { preference.enabled = notificationsEnabled }
     }
 
-    public init(client: APIClient, env: EnvModel? = nil, preference: NotificationPreference = MemoryPreference()) {
+    public init(client: APIClient, env: EnvModel? = nil, preference: NotificationPreference = MemoryPreference(),
+                authorizer: Authorizer = TerminalAuthorizer(), privileged: PrivilegedSession? = nil) {
         self.env = env ?? EnvModel(client: client)
         self.preference = preference
         notificationsEnabled = preference.enabled
-        super.init(client: client)
+        super.init(client: client, authorizer: authorizer, privileged: privileged)
     }
+
+    override var privilegedHost: PrivilegedHost { .settings }
 
     override public func load() async {
         let o = await client.status()

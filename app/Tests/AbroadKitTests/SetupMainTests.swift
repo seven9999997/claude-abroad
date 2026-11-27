@@ -386,15 +386,18 @@ func dumpState(_ m: MainProxyModel) -> String {
     #expect(p2.commands == ["sudo abroad main add-node --file \(f2.path) --name '家里'"])
     await m.dismissTerminal()
     #expect((FileManager.default.fileExists(atPath: f2.path)) == false)
-    // 本地配置文件：直接用用户自己的路径，不写临时文件。
+    // 本地配置文件：B0 起也存成临时文件（root 的 shell 未必读得到受保护目录里的文件），用户自己的文件不动、不删。
     let user = dir.appendingPathComponent("mine.yaml")
     try "proxies: []\n".write(to: user, atomically: true, encoding: .utf8)
     m.addKind = .localFile
     m.formFile = user
     m.formName = "本地"
     await m.submitAdd()
-    #expect(m.terminal?.tempFile == nil && m.terminal?.commands == ["sudo abroad main add-source --file \(user.path) --name '本地'"])
+    let f3 = try #require(m.terminal?.tempFile)
+    #expect(m.terminal?.commands == ["sudo abroad main add-source --file \(f3.path) --name '本地'"])
+    #expect(try String(contentsOf: f3, encoding: .utf8) == "proxies: []\n")
     await m.dismissTerminal()
+    #expect((FileManager.default.fileExists(atPath: f3.path)) == false)
     #expect(FileManager.default.fileExists(atPath: user.path), "不删用户自己的文件")
     // 只删指定目录里的文件。
     InputFiles(directory: dir.appendingPathComponent("other")).remove(user)

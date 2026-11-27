@@ -425,6 +425,25 @@ public struct DaemonDirectStatus: Codable, Sendable {
     }
 }
 
+public struct DaemonEnablePreview: Codable, Sendable {
+    public var canEnable: Bool
+    public var blocker: String?
+    public var reason: String?
+    public var enabled: Bool?
+    public var region: DaemonRegionChange?
+    public var preview: ClaudeprocPreview?
+    public var note: String
+    enum CodingKeys: String, CodingKey {
+        case canEnable = "can_enable"
+        case blocker = "blocker"
+        case reason = "reason"
+        case enabled = "enabled"
+        case region = "region"
+        case preview = "preview"
+        case note = "note"
+    }
+}
+
 public struct DaemonEngineView: Codable, Sendable {
     public var name: String
     public var state: String

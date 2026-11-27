@@ -11,15 +11,18 @@ struct ClaudeAbroadApp: App {
     /// 各页面共用一个确认框（同一时间只有一个）和一个通知者。
     @MainActor private static let flow = ConfirmFlow(client: client)
     @MainActor private static let notifier = SystemServices.makeNotifier()
-    @StateObject private var model = StatusModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow, notifier: ClaudeAbroadApp.notifier)
+    /// B0：各页面共用一个“经系统密码框执行”的确认框；全应用唯一的提权实现在这里构造一次。
+    @MainActor private static let privileged = PrivilegedSession(client: client, runner: PrivilegedRunner())
+    private static let auth = PrivilegedAuthorizer()
+    @StateObject private var model = StatusModel(client: ClaudeAbroadApp.client, authorizer: ClaudeAbroadApp.auth, flow: ClaudeAbroadApp.flow, notifier: ClaudeAbroadApp.notifier, privileged: ClaudeAbroadApp.privileged)
     @StateObject private var setup = SetupModel(client: ClaudeAbroadApp.client)
-    @StateObject private var main = MainProxyModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow, notifier: ClaudeAbroadApp.notifier)
-    @StateObject private var exits = ExitsModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow)
-    @StateObject private var apps = AppsModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow)
-    @StateObject private var env = EnvModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow)
-    @StateObject private var region = RegionModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow)
-    @StateObject private var engines = EnginesModel(client: ClaudeAbroadApp.client, flow: ClaudeAbroadApp.flow)
-    @StateObject private var settings = SettingsModel(client: ClaudeAbroadApp.client, preference: ClaudeAbroadApp.notifier.preference)
+    @StateObject private var main = MainProxyModel(client: ClaudeAbroadApp.client, authorizer: ClaudeAbroadApp.auth, flow: ClaudeAbroadApp.flow, notifier: ClaudeAbroadApp.notifier, privileged: ClaudeAbroadApp.privileged)
+    @StateObject private var exits = ExitsModel(client: ClaudeAbroadApp.client, authorizer: ClaudeAbroadApp.auth, flow: ClaudeAbroadApp.flow, privileged: ClaudeAbroadApp.privileged)
+    @StateObject private var apps = AppsModel(client: ClaudeAbroadApp.client, authorizer: ClaudeAbroadApp.auth, flow: ClaudeAbroadApp.flow, privileged: ClaudeAbroadApp.privileged)
+    @StateObject private var env = EnvModel(client: ClaudeAbroadApp.client, authorizer: ClaudeAbroadApp.auth, flow: ClaudeAbroadApp.flow, privileged: ClaudeAbroadApp.privileged)
+    @StateObject private var region = RegionModel(client: ClaudeAbroadApp.client, authorizer: ClaudeAbroadApp.auth, flow: ClaudeAbroadApp.flow, privileged: ClaudeAbroadApp.privileged)
+    @StateObject private var engines = EnginesModel(client: ClaudeAbroadApp.client, authorizer: ClaudeAbroadApp.auth, flow: ClaudeAbroadApp.flow, privileged: ClaudeAbroadApp.privileged)
+    @StateObject private var settings = SettingsModel(client: ClaudeAbroadApp.client, preference: ClaudeAbroadApp.notifier.preference, authorizer: ClaudeAbroadApp.auth, privileged: ClaudeAbroadApp.privileged)
     @StateObject private var diagnostics = DiagnosticsExportModel(client: ClaudeAbroadApp.client, saver: SavePanelDiagnosticsSaver())
     /// 主窗口的纯界面状态（侧边栏选中项），不进业务模型。
     @StateObject private var ui = WindowUIState()
@@ -27,7 +30,7 @@ struct ClaudeAbroadApp: App {
     var body: some Scene {
         // 主窗口放在第一个：启动时自动打开（第一级走查 L1-01）。只放在菜单栏时，刘海屏上图标可能被挡住，打开后什么都看不到。
         Window(L10n.appName, id: "main") {
-            MainWindow(ui: ui, status: model, setup: setup, main: main, exits: exits, apps: apps, env: env, region: region, engines: engines, flow: ClaudeAbroadApp.flow)
+            MainWindow(ui: ui, status: model, setup: setup, main: main, exits: exits, apps: apps, env: env, region: region, engines: engines, flow: ClaudeAbroadApp.flow, privileged: ClaudeAbroadApp.privileged)
                 .frame(minWidth: 780, minHeight: 560)
                 .tint(Palette.accent)
                 .task {
@@ -43,7 +46,7 @@ struct ClaudeAbroadApp: App {
                 .task { model.start() }
         }
         Settings {
-            SettingsView(model: settings, env: settings.env, diagnostics: diagnostics)
+            SettingsView(model: settings, env: settings.env, diagnostics: diagnostics, privileged: ClaudeAbroadApp.privileged)
         }
     }
 }
@@ -60,11 +63,16 @@ struct MainWindow: View {
     let region: RegionModel
     let engines: EnginesModel
     @ObservedObject var flow: ConfirmFlow
+    @ObservedObject var privileged: PrivilegedSession
 
     var body: some View {
         content
             .sheet(isPresented: Binding(get: { flow.isActive }, set: { if !$0, flow.isActive { flow.cancel() } })) {
                 ConfirmSheet(flow: flow)
+            }
+            .sheet(isPresented: Binding(get: { privileged.request?.host == .main },
+                                        set: { if !$0, privileged.phase != .running { Task { await privileged.userClosed() } } })) {
+                PrivilegedSheet(session: privileged)
             }
             .safeAreaInset(edge: .top) {
                 if let note = flow.completedNote {

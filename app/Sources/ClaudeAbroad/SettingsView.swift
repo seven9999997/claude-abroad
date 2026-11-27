@@ -7,6 +7,7 @@ struct SettingsView: View {
     @ObservedObject var model: SettingsModel
     @ObservedObject var env: EnvModel
     @ObservedObject var diagnostics: DiagnosticsExportModel
+    @ObservedObject var privileged: PrivilegedSession
 
     var body: some View {
         TabView {
@@ -18,6 +19,13 @@ struct SettingsView: View {
         .frame(width: 620, height: 520)
         .tint(Palette.accent)
         .task { await model.load() }
+        .sheet(isPresented: Binding(get: { privileged.request?.host == .settings },
+                                    set: { if !$0, privileged.phase != .running { Task { await privileged.userClosed() } } })) {
+            PrivilegedSheet(session: privileged)
+        }
+        .sheet(isPresented: Binding(get: { model.terminal != nil }, set: { if !$0 { Task { await model.dismissTerminal() } } })) {
+            if let t = model.terminal { TerminalSheet(prompt: t) { Task { await model.dismissTerminal() } } }
+        }
     }
 
     // MARK: - 通用
@@ -122,9 +130,15 @@ struct SettingsView: View {
             }
             CardSection(L10n.claudeCodeTitle) {
                 CardRow { status(model.claudeCodeText, tone: model.claudeCodeWarn ? .attention : nil, leading: true) }
-                if model.claudeCodeSwitchShown { // v0.68：第四道是开关、默认关；两个方向都要本人授权，给出终端命令
+                if model.claudeCodeSwitchShown { // v0.68：第四道是开关、默认关；两个方向都要本人授权（B0：应用里点了先弹确认框，再经系统密码框执行）
                     RowSeparator()
                     CardRow { Text(model.claudeCodeConsequenceText).font(.caption).fixedSize(horizontal: false, vertical: true) }
+                    RowSeparator()
+                    CardRow {
+                        Button(L10n.claudeCodeTurnOn) { Task { await model.userTappedPrivileged(.claudeProxy(on: true)) } }
+                        Button(L10n.claudeCodeTurnOff) { Task { await model.userTappedPrivileged(.claudeProxy(on: false)) } }
+                        Spacer()
+                    }
                     ForEach(model.claudeCodeCommands, id: \.command) { c in
                         RowSeparator()
                         CardRow {

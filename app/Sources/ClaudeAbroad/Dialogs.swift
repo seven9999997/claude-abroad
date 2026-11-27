@@ -126,3 +126,99 @@ struct TerminalSheet: View {
         .background(Palette.window)
     }
 }
+
+/// B0（v0.71b）：应用里经系统密码框执行敏感操作的确认框。写清要做什么、现状和后果、只读接口给的预览；
+/// 只有点“执行”才调用提权（PrivilegedSession.userTappedExecute）；“在终端执行”是原来的退路。
+struct PrivilegedSheet: View {
+    @ObservedObject var session: PrivilegedSession
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let r = session.request {
+                SheetHeader(title: r.title, symbol: "lock.shield")
+                ForEach(r.lines, id: \.self) { l in Text("· " + l).fixedSize(horizontal: false, vertical: true) }
+                if let b = r.blocked { ToneNote(tone: .failure, text: b, symbol: "xmark.octagon") }
+                preview(r)
+                if !r.inputFiles.isEmpty {
+                    Text(L10n.privInputFile).font(.caption).foregroundStyle(.secondary)
+                    ForEach(r.inputFiles, id: \.self) { CodeBlock(text: $0) }
+                }
+                if let n = r.note { Text(n).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+                result
+                SheetFooter {
+                    if case .done = session.phase {
+                        Spacer()
+                        Button(L10n.privClose) { Task { await session.userClosed() } }.keyboardShortcut(.defaultAction)
+                    } else {
+                        Button(L10n.privInTerminal) { session.userTappedTerminal() }.disabled(session.phase == .running)
+                        Spacer()
+                        Button(L10n.cancel) { Task { await session.userClosed() } }.keyboardShortcut(.cancelAction).disabled(session.phase == .running)
+                        Button(L10n.privExecute, action: { Task { await session.userTappedExecute() } })
+                            .buttonStyle(.borderedProminent)
+                            .disabled(session.phase != .confirming || r.blocked != nil)
+                    }
+                }
+                .controlSize(.large)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+        .padding(.bottom, 16)
+        .frame(width: 540)
+        .tint(Palette.accent)
+        .background(Palette.window)
+        .interactiveDismissDisabled(session.phase == .running)
+    }
+
+    @ViewBuilder private func preview(_ r: PrivilegedRequest) -> some View {
+        if r.region != nil || r.preview != nil {
+            let procs = r.preview?.processes ?? []
+            CardSection(nil) {
+                if let g = r.region {
+                    CardRow {
+                        RowLabel(title: L10n.regionChange)
+                        Text(L10n.regionFromTo(g.from, g.to)).foregroundStyle(.secondary)
+                    }
+                    RowSeparator()
+                }
+                CardRow {
+                    RowLabel(title: L10n.processesWillQuit, bold: true)
+                    Text(L10n.processCount(procs.count)).foregroundStyle(.secondary)
+                }
+                ForEach(procs, id: \.pid) { p in
+                    RowSeparator()
+                    CardRow { Text("\(p.pid)  \(p.app)  \(p.cmd)").font(.callout.monospaced()).textSelection(.enabled) }
+                }
+            }
+            if let un = r.preview?.unverified, !un.isEmpty {
+                CardSection(L10n.processesUnverified) {
+                    ForEach(un, id: \.pid) { p in CardRow { Text("\(p.pid)  \(p.app)  \(p.note ?? "")").font(.callout.monospaced()).foregroundStyle(.secondary) } }
+                }
+            }
+            if r.browsersOption, let bs = r.preview?.browsers {
+                CardSection(L10n.browsersRunning) {
+                    ForEach(bs, id: \.pid) { b in
+                        CardRow { Text("\(b.pid)  \(b.app)  \(b.note ?? "")").font(.callout.monospaced()) }
+                        RowSeparator()
+                    }
+                    CardRow { Toggle(L10n.killBrowsersOption, isOn: $session.killBrowsers).disabled(session.phase != .confirming) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var result: some View {
+        switch session.phase {
+        case .running:
+            HStack { ProgressView().controlSize(.small); Text(L10n.privRunning) }
+        case let .done(ok, message, output):
+            if ok { ToneNote(tone: .success, text: message, symbol: "checkmark.circle") } else { ErrorBlock(text: ErrorText(raw: message)) }
+            if !output.isEmpty {
+                Text(L10n.privOutput).font(.caption).foregroundStyle(.secondary)
+                ScrollView { CodeBlock(text: output) }.frame(maxHeight: 160)
+            }
+        default:
+            Text(L10n.privHow).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}

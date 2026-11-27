@@ -372,7 +372,7 @@ public enum L10n {
     public static let claudeCodeScope = "只覆盖 Claude Code，不覆盖 Claude 桌面版和浏览器"
     public static func resolverLockConflicts(_ doms: [String]) -> String { "有别的软件写的同名文件：" + doms.joined(separator: "、") + "（这些域名不受锁保护）" }
     public static let uninstall = "卸载"
-    public static let uninstallInInstaller = "应用里的卸载入口还没有提供（要等系统授权）；现在请在终端里执行 sudo abroad uninstall，或开发安装的卸载脚本 sudo scripts/m6/install/uninstall.sh"
+    public static let uninstallInInstaller = "应用里的卸载入口下一步提供；现在请在终端里执行 sudo abroad uninstall，或开发安装的卸载脚本 sudo scripts/m6/install/uninstall.sh"
     public static let diagnostics = "诊断包"
     // 补齐五：应用里导出诊断包。
     public static let diagnosticsExport = "导出诊断包…"
@@ -484,4 +484,88 @@ public enum L10n {
     public static let enginesSection = "引擎"
     public static let regionManualSection = "手动指定"
     public static let backendRunning = "后台服务已连上"
+}
+
+// ---- B0（v0.71b）：应用里经系统密码框执行敏感操作 ----
+extension L10n {
+    public static let privExecute = "执行"
+    public static let privInTerminal = "在终端执行"
+    public static let privClose = "关闭"
+    public static let privRunning = "正在执行，请输入管理员密码……"
+    public static let privHow = "点“执行”后会弹出系统的管理员密码框，以管理员身份运行已安装的命令行（同一次打开应用后约 5 分钟内再执行不再询问密码）。"
+    public static let privRecheck = "执行时会按当时的情况重新列出；之后新启动的 Claude 也会被结束。"
+    public static let privInputFile = "要交给命令行的文件（只显示路径；执行时核对内容没有被改过）："
+    public static let privSucceeded = "已完成"
+    public static let privCancelled = "已取消，什么都没有改动"
+    public static let privOutput = "命令行的输出："
+    public static let privBadChars = "参数里有不支持的字符（换行或控制字符），没有执行"
+    public static let privUnavailable = "没法弹出系统密码框执行，请改在终端执行"
+    public static let privEnableBlocked = "现在不能启用："
+    public static let privEnableNoChange = "启用会接管本机网络；地区不会变，不结束任何进程。"
+    public static let privEnableAlready = "已经是启用状态。"
+    public static let privClaudeProxyOff = "关掉之后，回国后靠解析锁和回国拦截。"
+    public static let claudeCodeTurnOn = "打开…"
+    public static let privScriptFailed = "系统密码框的脚本没能准备好"
+    public static func privErrorNumber(_ n: Int) -> String { "系统返回错误 \(n)" }
+    public static let claudeCodeTurnOff = "关闭…"
+    /// 系统密码框里的提示（标题栏里是应用名）。
+    public static func privPrompt(_ what: String) -> String { "Claude 出国要以管理员身份执行：\(what)" }
+    /// 退出码（命令行 0–7，加我们的 31、32）对应的说明。
+    public static func privExit(_ code: Int) -> String {
+        switch code {
+        case 0: return "已完成"
+        case 1: return "执行失败（后台服务回了错误，见下面的输出）"
+        case 2: return "命令行不认识这个操作：后台服务的版本比应用旧，请先升级（scripts/dev/reinstall.sh）"
+        case 3: return "被拒绝：权限不够"
+        case 4: return "需要确认，没有执行"
+        case 5: return "有别的操作在进行，请等它完成后再试"
+        case 6: return "连不上后台服务"
+        case 7: return "这个操作在以后的版本提供"
+        case 31: return "已安装的命令行不对（不是 root 的或别人可写），没有执行"
+        case 32: return "输入文件在确认后被改动过，请重新操作"
+        default: return "执行失败（退出码 \(code)）"
+        }
+    }
+    /// 确认框的标题（做什么）。
+    public static func privTitle(_ op: SensitiveOperation) -> String {
+        switch op {
+        case .enable: return "启用（接管本机网络）"
+        case .restore: return "回国（恢复本机网络）"
+        case .mainApply: return "应用主代理"
+        case let .regionSet(tz, lang): return "切换地区到 \(tz)、\(lang)"
+        case .regionAuto: return "地区改为跟随出口"
+        case let .addSourceFile(_, name), let .addSourceURLFile(_, name, _): return "添加主代理来源“\(name)”"
+        case let .addNodeFile(_, name): return "添加节点“\(name)”"
+        case let .removeSource(id): return "删除主代理来源 \(id)"
+        case let .mainUse(node, via): return via.isEmpty ? "主代理换成节点 \(node)" : "主代理换成节点 \(node)（经 \(via.joined(separator: " → "))）"
+        case let .lanConfirm(node): return "确认局域网节点 \(node)"
+        case let .exitAdd(tag, kind, _): return "添加分流出口 \(tag)（\(kind)）"
+        case let .exitRemove(tag): return "删除分流出口 \(tag)"
+        case let .appSet(app, action): return "应用 \(app) 改为 \(action)"
+        case let .appRemove(app): return "删除应用 \(app) 的规则"
+        case let .ruleListAdd(kind, item): return "规则名单（\(kind)）加上 \(item)"
+        case let .ruleListRemove(kind, item): return "规则名单（\(kind)）去掉 \(item)"
+        case let .udp443(on): return on ? "拦截 UDP 443" : "不再拦截 UDP 443"
+        case let .allowLAN(on): return on ? "打开“允许局域网”" : "关掉“允许局域网”"
+        case let .claudeProxy(on): return on ? "打开第四道（Claude Code 的本机代理）" : "关掉第四道（Claude Code 的本机代理）"
+        }
+    }
+    /// 确认框里的现状和后果（不含后台给的预览）。
+    public static func privConsequences(_ op: SensitiveOperation) -> [String] {
+        switch op {
+        case .enable: return []
+        case .restore: return [returnBlockConsequence]
+        case .mainApply: return ["会经虚拟机里的主代理做一次出口检查并建立出口基准；已启用时会先关闸门、换第一跳，失败回到原来的主代理。"]
+        case .regionSet, .regionAuto: return ["已启用且地区会变时，会结束正在运行的 Claude 并改 Mac 的时区和语言。"]
+        case .addSourceFile, .addSourceURLFile, .addNodeFile: return ["订阅地址、节点和密码只经文件交给命令行，不出现在命令里。"]
+        case .removeSource: return ["正在作为主代理的来源不能删。"]
+        case .mainUse: return ["已启用时会先关闸门、换第一跳、下发并检查，失败回到原来的主代理。"]
+        case .lanConfirm: return ["确认后，主代理的第一跳可以是这个局域网地址。"]
+        case .exitAdd: return ["出口配置只经文件交给命令行，不出现在命令里。"]
+        case .exitRemove: return ["规则里引用它的应用会回到主代理。"]
+        case .appSet, .appRemove, .ruleListAdd, .ruleListRemove, .udp443: return ["改的是分流规则：放松保护的改动要本人授权。"]
+        case let .allowLAN(on): return on ? ["现在：关。打开后，局域网里的设备（打印机、NAS、路由器后台）可以直连。"] : ["关掉后更严：局域网地址也一律走代理或拦截。"]
+        case let .claudeProxy(on): return on ? claudeCodeConsequences : [privClaudeProxyOff]
+        }
+    }
 }

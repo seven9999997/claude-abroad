@@ -127,15 +127,18 @@ public final class StatusModel: ObservableObject {
     public let flow: ConfirmFlow
     /// 通知（触发来源只有事件流和操作的结果）。
     public let notifier: Notifier
+    /// B0：经系统密码框执行敏感操作的确认框（各页面共用一个；没有时走终端退路）。
+    public let privileged: PrivilegedSession?
     /// 环境检测超过这么久（秒）就先补跑一轮再打开（设计 10.2）。
     public static let openRecheckAfter: TimeInterval = 600
     /// 刚连上或重连后的第一次状态只建立基线、不通知。
     private var baselinePending = true
 
     public init(client: APIClient, authorizer: Authorizer = TerminalAuthorizer(), sleeper: Sleeper = TaskSleeper(),
-                flow: ConfirmFlow? = nil, notifier: Notifier? = nil) {
+                flow: ConfirmFlow? = nil, notifier: Notifier? = nil, privileged: PrivilegedSession? = nil) {
         self.client = client
         self.authorizer = authorizer
+        self.privileged = privileged
         self.sleeper = sleeper
         self.flow = flow ?? ConfirmFlow(client: client)
         self.notifier = notifier ?? Notifier()
@@ -373,7 +376,12 @@ public final class StatusModel: ObservableObject {
             guard let op else { notice = Notice(kind: .error, text: t); return }
             switch await authorizer.authorize(op, reason: t) {
             case .runInTerminal(let cmd): terminalCommand = cmd
-            case .authorized: busy = false; await perform(nil, call) // 系统授权通过后重新发（M5-3）
+            case .confirmInApp:
+                guard let s = privileged else { terminalCommand = op.terminalCommand; break }
+                await s.present([op], terminal: TerminalPrompt(commands: [op.terminalCommand]),
+                                onTerminal: { [weak self] t in self?.terminalCommand = t.commands.first },
+                                onDone: { [weak self] in await self?.refresh() })
+            case .authorized: busy = false; await perform(nil, call)
             case .cancelled: break
             }
         case .busy(let t):

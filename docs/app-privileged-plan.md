@@ -1,6 +1,13 @@
 # B0：应用里直接执行敏感操作（系统密码框运行已安装的 root 命令行）——实施计划（交架构顾问审）
 
-> 版本：**v1**（2026-11-27）。只是计划，代码还没改。
+> 版本：**v2**（2026-11-27）。v1 经顾问审过：通过，1 条必须改，改好后直接实现。已实现（偏离见第 7 节）。
+>
+> **v2：顾问的必须改和三处裁定**
+> - **必须改：只读的启用预览 `GET /v1/enable/preview`**：不签发确认码、不改任何状态。内容和启用第一步一样：地区会不会变（从哪到哪）；会变时列出要结束的 Claude 进程、没能确认的进程、在运行的浏览器（回国预览那一套）；写明现在能不能启用（不能时给原因代码，如 `no_baseline`）。应用的启用确认框用它；确认后照旧 root 运行 `abroad --yes --json up`，预览下加“执行时会按当时的情况重新列出”。测试：Go——预览和启用第一步 409 应答内容一致（地区变、不变各一例，`TestEnablePreviewMatchesFirstStep`）；调用预览不签发确认码、状态文件不变；路由级别只读，归入“不许拉起虚拟机”一类（`TestRoutesNeverLaunchWhenNotEnabled` 按路由表自动核对）；另有 `TestEnablePreviewBlockers`、`TestEnablePreviewNoBaseline`。Swift——`enableShowsFixedText` 换成 `enableUsesReadOnlyPreview`。设计 11.1 接口表加一行。下面第 2 节第 5 条、第 5 节风险 5 的“启用没有只读预览”以此为准。
+> - **裁定①**：CryptoKit 同意：只在 `InputFiles.swift` import 和使用（读文件、算摘要只在这个文件），源码检查按此写并加反例（别的文件 import CryptoKit 就失败）。
+> - **裁定②**：版本 v0.71b（A 是 v0.71、B0 v0.71b、阶段 B v0.71c；回国确认里选第四道 v0.72）。
+> - **裁定③**：第四道开关 `claude-proxy on|off` 这次放进白名单：确认框打开时显示三句后果（文字表已有），关闭时显示“关掉之后，回国后靠解析锁和回国拦截。”；白名单 golden 和“不提供”表跟着改（“不提供”只剩 `uninstall`）。
+> - 其余计划全部接受（风险 6 按“用法错误”提示“请先升级”）。
 > 依据：用户原话（2026-11-27）“添加代理节点又需要执行这个，可以直接执行吗，不需要用户再执行”；顾问 2026-11-27 定的顺序 A → **B0** → B → 回国确认里选第四道，以及 B0 的 10 条必须（下面第 2 节逐条对应）。设计记 v0.72 前的 **v0.71b**（还是 v0.71 的一部分，见第 6 节；版本号请顾问定）。
 > 现状核对过的文件：`app/Sources/AbroadKit/{Authorization.swift,ConfirmFlow.swift,InputFiles.swift,StatusModel.swift,MainProxyModel.swift,PageModels.swift}`、`app/Sources/ClaudeAbroad/{Dialogs.swift,HomeView.swift}`、`app/Tests/AbroadKitTests/RepoTests.swift`、`cmd/abroad/{main.go,commands.go}`、`internal/daemon/routes.go`、`internal/api/api.go`、`docs/m6-acceptance.md` 第 1、3、6、7 节、`docs/app-install-plan.md` 第 3 节。
 > 会话里的边界：Swift 测试只用假的提权实现，不弹密码框、不提权；不碰 `/Library/Application Support/claude-abroad*`、`/Applications/ClaudeAbroad.app`；不 sudo；不改网络。
@@ -161,3 +168,16 @@ B0（B0 合并之后）：
 5. 添加来源时，在确认框出现之后、点“执行”之前，把那份输入文件改掉（确认框里会显示临时文件的路径；用文本编辑器改一个字符）：点“执行”后提示“输入文件在确认后被改动过，请重新操作”，来源列表没有变化。
 
 贴回：每一步应用里的提示文字（截图或照抄）、`abroad status` 的输出。
+
+---
+
+## 7. 实现中的偏离和补充（v2）
+
+- **AppleScript 源码在 `PrivilegedRunner.swift` 里拼**（不在 `PrivilegedCommand`）：`do shell script`、`with administrator privileges` 只许出现在这个文件。`PrivilegedCommand` 只提供两层转义的函数和整条 shell 命令，测试对转义做往返还原。
+- **命令的每条路都以 0 退出**，结果在最后一行 `RESULT=<退出码>`：这样 `do shell script` 总能拿回标准输出；只有取消密码框（-128）和系统层面的失败才是 AppleScript 的错误。另加 `without altering line endings`（否则输出的换行会被改成 `\r`）。
+- **一次确认、多步执行**：主代理页“换节点”在终端退路里原来是两条命令（`main use` 再 `main apply`），提权时合成一条命令依次执行，前一步失败就停。
+- **共用的确认框 `PrivilegedSession`**（各页面一个实例，和 `ConfirmFlow` 一样）：`PrivilegedAuthorizer` 返回新的 `.confirmInApp`，模型交给它；“执行”“在终端执行”“取消/关闭”都在它上面。设置窗口里发起的（第四道、允许局域网）在设置窗口里弹（`PrivilegedHost`）。
+- **确认框里的“现状”**：回国、启用用只读预览；局域网写“现在：关”；第四道照裁定③；地区、主代理、规则、出口写“要改成什么”和后果（文字表），没有另外再读一次现状接口。
+- **用户选的本地文件、出口配置也先存成应用自己的临时文件**（计划第 2 节第 4 条已写），终端退路的命令也随之改用临时文件的路径（两个原有测试按此更新：`exitsAuthorization`、`terminalFallbackTempFile`）。
+- **脚本侧真跑（场景 u）**：属主条件换成当前用户才能不提权地跑；“属主是 root”这一条由 Swift golden 和场景 u 的文字核对守着。
+- 设置“高级”里卸载那一行的文字改成“应用里的卸载入口下一步提供”（不再说“要等系统授权”）。
