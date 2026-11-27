@@ -448,4 +448,16 @@ public enum L10n {
 
     public static func processCount(_ n: Int) -> String { "\(n) 个" }
     public static func regionFromTo(_ from: String, _ to: String) -> String { "\(from) → \(to)" }
+
+    // 按原型改样式（2026-11-27）：侧边栏、首页状态卡片、各页分组的标题。
+    public static let navOverview = "总览"
+    public static let navGroupNetwork = "网络"
+    public static let navGroupEnvironment = "环境"
+    public static let navGroupSystem = "系统"
+    public static let homeExitIP = "出口 IP"
+    public static let homePlace = "位置与时区"
+    public static let vmSection = "虚拟机"
+    public static let enginesSection = "引擎"
+    public static let regionManualSection = "手动指定"
+    public static let backendRunning = "后台服务已连上"
 }
