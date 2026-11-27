@@ -179,3 +179,9 @@ Ctrl-C 优雅停止（先请求虚拟机关机，10 秒不停再强停），再�
 - 阶段 9c 的直连目标改成同一个局域网目标；daemon-sim 的直连应用连上后先发几个非 TLS 的字节（裸 IP 加 443 而客户端不先发数据时，daemon 会按“看不清去向”改走主代理）。
 - `direct-probe.sh --lan`：按 IP 连局域网目标；按域名那一步照样跑，连不上如实记录。
 - 直连 socket 的上级目录必须是自己的、权限 0700（abroad-vm 监听前检查），脚本会建好这样的目录。
+
+## reinstall.sh：一条命令重装开发版（过渡用）
+
+`scripts/dev/reinstall.sh`（不要带 sudo）：构建 → 已装过就卸载（提示时输入 `uninstall`）→ 安装前检查 → 安装。需要管理员的两步由 sudo 在终端里问密码。只编排已经审过的脚本，不新增改系统的命令；任何一步失败就停下并说明下一步。卸载会清空主代理配置，结束后要重新添加来源、选节点、`sudo abroad main apply`。
+
+这是过渡用的：等“原地升级”（`install.sh --upgrade`）做好后，已装过时改为升级，不再清空配置。自测：`scripts/dev/reinstall-selftest.sh`（只用空跑）。
