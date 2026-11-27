@@ -36,6 +36,7 @@ grep -q '主代理配置已随卸载清空' "${TMP}/err" && ok "a. 结尾提示�
 dry REINSTALL_TEST_INSTALLED=0 >"${TMP}/i0"; rc=$?
 want0=$(printf '%s\n' "$want1" | grep -v uninstall)
 [ $rc = 0 ] && [ "$(cat "${TMP}/i0")" = "$want0" ] && grep -q '没装过，跳过卸载' "${TMP}/err" && ok "a. 没装过时跳过卸载" || bad "a. 没装过时不对：$(cat "${TMP}/i0")"
+grep -q '已随卸载清空' "${TMP}/err" && bad "a. 没装过时不该说配置已随卸载清空" || ok "a. 没装过时结尾提示不提卸载"
 
 # ---- b. 命令核对 ----
 cmdcheck "${TMP}/i1" && cmdcheck "${TMP}/i0" && ok "b. 命令核对通过（只有五行允许的调用）" || bad "b. 命令核对不通过"

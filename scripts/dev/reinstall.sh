@@ -72,4 +72,8 @@ step "安装前的检查" "按上面列出的原因处理后重新运行本脚�
 step "安装开发版" "安装失败时安装脚本会自动卸载，看它的输出。" \
   sudo scripts/m6/install/install.sh
 
-say "完成。主代理配置已随卸载清空：请重新添加来源、选节点，然后执行 sudo abroad main apply"
+if [ "${installed}" = 1 ]; then
+  say "完成。主代理配置已随卸载清空：请重新添加来源、选节点，然后执行 sudo abroad main apply"
+else
+  say "完成。请添加主代理来源、选节点，然后执行 sudo abroad main apply"
+fi
