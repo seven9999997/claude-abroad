@@ -14,6 +14,8 @@ struct ClaudeAbroadApp: App {
     /// B0：各页面共用一个“经系统密码框执行”的确认框；全应用唯一的提权实现在这里构造一次。
     @MainActor private static let privileged = PrivilegedSession(client: client, runner: PrivilegedRunner())
     private static let auth = PrivilegedAuthorizer()
+    /// 阶段 B（v0.71c）：应用包里的安装文件（版本号来自 Info.plist，目录是应用包内的固定位置）。
+    private static let payload = PayloadInfo.from(info: Bundle.main.infoDictionary ?? [:], resourcePath: Bundle.main.resourcePath)
     @StateObject private var model = StatusModel(client: ClaudeAbroadApp.client, authorizer: ClaudeAbroadApp.auth, flow: ClaudeAbroadApp.flow, notifier: ClaudeAbroadApp.notifier, privileged: ClaudeAbroadApp.privileged)
     @StateObject private var setup = SetupModel(client: ClaudeAbroadApp.client)
     @StateObject private var main = MainProxyModel(client: ClaudeAbroadApp.client, authorizer: ClaudeAbroadApp.auth, flow: ClaudeAbroadApp.flow, notifier: ClaudeAbroadApp.notifier, privileged: ClaudeAbroadApp.privileged)
@@ -22,6 +24,7 @@ struct ClaudeAbroadApp: App {
     @StateObject private var env = EnvModel(client: ClaudeAbroadApp.client, authorizer: ClaudeAbroadApp.auth, flow: ClaudeAbroadApp.flow, privileged: ClaudeAbroadApp.privileged)
     @StateObject private var region = RegionModel(client: ClaudeAbroadApp.client, authorizer: ClaudeAbroadApp.auth, flow: ClaudeAbroadApp.flow, privileged: ClaudeAbroadApp.privileged)
     @StateObject private var engines = EnginesModel(client: ClaudeAbroadApp.client, authorizer: ClaudeAbroadApp.auth, flow: ClaudeAbroadApp.flow, privileged: ClaudeAbroadApp.privileged)
+    @StateObject private var service = ServiceInstallModel(client: ClaudeAbroadApp.client, payload: ClaudeAbroadApp.payload, privileged: ClaudeAbroadApp.privileged)
     @StateObject private var settings = SettingsModel(client: ClaudeAbroadApp.client, preference: ClaudeAbroadApp.notifier.preference, authorizer: ClaudeAbroadApp.auth, privileged: ClaudeAbroadApp.privileged)
     @StateObject private var diagnostics = DiagnosticsExportModel(client: ClaudeAbroadApp.client, saver: SavePanelDiagnosticsSaver())
     /// 主窗口的纯界面状态（侧边栏选中项），不进业务模型。
@@ -30,7 +33,7 @@ struct ClaudeAbroadApp: App {
     var body: some Scene {
         // 主窗口放在第一个：启动时自动打开（第一级走查 L1-01）。只放在菜单栏时，刘海屏上图标可能被挡住，打开后什么都看不到。
         Window(L10n.appName, id: "main") {
-            MainWindow(ui: ui, status: model, setup: setup, main: main, exits: exits, apps: apps, env: env, region: region, engines: engines, flow: ClaudeAbroadApp.flow, privileged: ClaudeAbroadApp.privileged)
+            MainWindow(ui: ui, status: model, setup: setup, main: main, exits: exits, apps: apps, env: env, region: region, engines: engines, flow: ClaudeAbroadApp.flow, privileged: ClaudeAbroadApp.privileged, service: service)
                 .frame(minWidth: 780, minHeight: 560)
                 .tint(Palette.accent)
                 .task {
@@ -46,7 +49,7 @@ struct ClaudeAbroadApp: App {
                 .task { model.start() }
         }
         Settings {
-            SettingsView(model: settings, env: settings.env, diagnostics: diagnostics, privileged: ClaudeAbroadApp.privileged)
+            SettingsView(model: settings, env: settings.env, diagnostics: diagnostics, privileged: ClaudeAbroadApp.privileged, service: service)
         }
     }
 }
@@ -64,9 +67,25 @@ struct MainWindow: View {
     let engines: EnginesModel
     @ObservedObject var flow: ConfirmFlow
     @ObservedObject var privileged: PrivilegedSession
+    @ObservedObject var service: ServiceInstallModel
 
     var body: some View {
         content
+            .task { await service.refresh() }
+            .onChange(of: status.reachable) { _, _ in Task { await service.refresh() } }
+            .safeAreaInset(edge: .top) {
+                if service.showsUpgrade && !(setup.shouldShow && setup.step != .done) { // 阶段 B：后台服务可以（或要）升级
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.up.circle").foregroundStyle(Palette.tone(.attention))
+                        Text(service.text).fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button(L10n.serviceUpgradeButton) { Task { await service.userTappedUpgrade() } }.disabled(!service.upgradeEnabled)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Palette.toneSoft(.attention))
+                }
+            }
             .sheet(isPresented: Binding(get: { flow.isActive }, set: { if !$0, flow.isActive { flow.cancel() } })) {
                 ConfirmSheet(flow: flow)
             }
@@ -91,7 +110,7 @@ struct MainWindow: View {
 
     @ViewBuilder private var content: some View {
         if setup.shouldShow && setup.step != .done {
-            SetupView(setup: setup, main: main, status: status)
+            SetupView(setup: setup, main: main, status: status, service: service)
         } else {
             NavigationSplitView {
                 sidebar

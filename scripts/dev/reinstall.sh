@@ -82,8 +82,8 @@ step "构建后台程序（开发构建，带完整性清单和版本号）" "�
   scripts/dev/integrity-build.sh --dev
 step "组装 payload（程序、镜像、清单、安装脚本）" "看上面的错误（缺虚拟机镜像时先 scripts/dev/vm-up.sh --no-panic），修好后重新运行本脚本。" \
   scripts/dev/payload.sh
-step "打包应用" "看上面的错误，修好后重新运行本脚本。" \
-  scripts/dev/app-bundle.sh
+step "打包应用（带 payload：之后可以在应用里升级后台服务）" "看上面的错误，修好后重新运行本脚本。" \
+  scripts/dev/app-bundle.sh --payload scripts/dev/out/payload
 if [ "${installed}" = 1 ]; then
   UPGRADE_STEP=1
   step "原地升级现在装着的开发版（主代理和设置保留）" "" \

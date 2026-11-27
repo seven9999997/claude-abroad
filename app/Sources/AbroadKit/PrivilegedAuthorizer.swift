@@ -43,7 +43,15 @@ public struct PrivilegedRequest: Sendable {
     public var note: String?
     public var inputFiles: [String]
     public var tempFiles: [URL]
-    public var browsersOption: Bool { steps.contains(.restore) && !(preview?.browsers ?? []).isEmpty }
+    /// 阶段 B（v0.71c）：安装、升级、卸载后台服务（不是命令行的子命令）；payload 是应用包里的安装文件目录。
+    public var service: ServiceAction?
+    public var payload: String?
+    /// 卸载：会删除的东西（只读卸载预览给的）。
+    public var removes: [String] = []
+    public var browsersOption: Bool {
+        if case .uninstall = service { return !(preview?.browsers ?? []).isEmpty }
+        return steps.contains(.restore) && !(preview?.browsers ?? []).isEmpty
+    }
 }
 
 public enum PrivilegedPhase: Sendable, Equatable {
@@ -83,6 +91,7 @@ public final class PrivilegedSession: ObservableObject {
         var r = PrivilegedRequest(steps: steps, title: steps.map(L10n.privTitle).joined(separator: "，然后"), lines: steps.flatMap(L10n.privConsequences),
                                   inputFiles: steps.compactMap(\.inputFile), tempFiles: tempFiles)
         r.host = host
+        if let now = await currentLine(first) { r.lines.insert(now, at: 0) }
         switch first {
         case .restore:
             if case .ok(let pv) = await client.restorePreview() { r.preview = pv }
@@ -107,10 +116,83 @@ public final class PrivilegedSession: ObservableObject {
         phase = .confirming
     }
 
+    /// 阶段 B（v0.71c）：弹出安装、升级、卸载后台服务的确认框（不执行）。卸载先读只读的卸载预览。
+    public func presentService(_ a: ServiceAction, payload: String?, lines: [String], host: PrivilegedHost = .main,
+                               terminal: TerminalPrompt, onTerminal: @escaping @MainActor (TerminalPrompt) -> Void,
+                               onDone: @escaping @MainActor () async -> Void) async {
+        guard request == nil else { return }
+        var r = PrivilegedRequest(steps: [], title: L10n.serviceTitle(a), lines: lines, inputFiles: [], tempFiles: [])
+        r.host = host
+        r.service = a
+        r.payload = payload
+        if case .uninstall = a {
+            if case .ok(let pv) = await client.uninstallPreview() {
+                // 卸载预览里的进程部分和回国预览同一个结构（多出的 removes、note 解码时不要）
+                r.preview = (try? JSONEncoder().encode(pv)).flatMap { try? JSONDecoder().decode(ClaudeprocPreview.self, from: $0) }
+                r.removes = pv.removes ?? []
+                r.note = pv.note
+            } else {
+                r.note = L10n.privRecheck
+            }
+        }
+        killBrowsers = false
+        self.onDone = onDone
+        self.onTerminal = onTerminal
+        terminalPrompt = terminal
+        request = r
+        phase = .confirming
+    }
+
+    /// B0 建议改⑤（v0.71c）：地区、主代理、规则、出口的确认框加一行“现在：…”（读现有的只读接口；读不到就不写这一行）。
+    func currentLine(_ op: SensitiveOperation) async -> String? {
+        switch op {
+        case .regionSet, .regionAuto:
+            guard case .ok(let r) = await client.region() else { return nil }
+            return L10n.privNow(r.target.map { "\($0.timezone)、\($0.lang)" } ?? L10n.privNowRegionNone)
+        case .mainApply, .mainUse, .lanConfirm, .addSourceFile, .addSourceURLFile, .addNodeFile, .removeSource:
+            guard case .ok(let m) = await client.mainProxy() else { return nil }
+            let sel = m.selected.map { $0.name } ?? L10n.privNowNone
+            return L10n.privNow(L10n.privNowMain(sel, applied: m.applied, sources: Int(m.sources)))
+        case let .appSet(app, _), let .appRemove(app):
+            guard case .ok(let d) = await client.rules() else { return nil }
+            return L10n.privNow(d.rules.first(where: { $0.app == app }).map { "\(app) → \($0.action)" } ?? L10n.privNowNoRule(app))
+        case let .ruleListAdd(kind, item), let .ruleListRemove(kind, item):
+            guard case .ok(let d) = await client.rules() else { return nil }
+            let list: [String]
+            switch kind {
+            case "local": list = d.localDomains
+            case "pinned": list = d.pinnedExtra
+            case "offline": list = d.offlineAllow
+            default: list = d.bypassExtra
+            }
+            return L10n.privNow(L10n.privNowInList(item, list.contains(item), count: list.count))
+        case .udp443:
+            guard case .ok(let d) = await client.rules() else { return nil }
+            return L10n.privNow(d.blockUDP443 ? L10n.privNowOn : L10n.privNowOff)
+        case .exitAdd, .exitRemove:
+            guard case .ok(let xs) = await client.exits() else { return nil }
+            return L10n.privNow(xs.isEmpty ? L10n.privNowNone : xs.map(\.tag).joined(separator: "、"))
+        default:
+            return nil
+        }
+    }
+
     /// 用户点了“执行”：这一刻算输入文件的摘要、拼命令、交给执行层。只能从确认框的按钮调用（源码检查守着）。
     public func userTappedExecute() async {
         guard let r = request, phase == .confirming else { return }
         guard let runner else { userTappedTerminal(); return }
+        if let a = r.service {
+            let act: ServiceAction
+            if case .uninstall = a { act = .uninstall(killBrowsers: killBrowsers) } else { act = a }
+            guard let cmd = try? PrivilegedCommand.buildService(act, paths: runner.paths, payload: r.payload) else {
+                phase = .done(ok: false, message: L10n.privBadChars, output: "")
+                return
+            }
+            phase = .running
+            executions += 1
+            finish(await runner.run(command: cmd, prompt: L10n.servicePrompt(act)), service: act)
+            return
+        }
         var digests: [String: String] = [:]
         for f in r.inputFiles {
             guard let sum = try? InputFiles.sha256(of: URL(fileURLWithPath: f)) else {
@@ -129,7 +211,11 @@ public final class PrivilegedSession: ObservableObject {
         }
         phase = .running
         executions += 1
-        let res = await runner.run(command: cmd, prompt: L10n.privPrompt(r.title))
+        finish(await runner.run(command: cmd, prompt: L10n.privPrompt(r.title)), service: nil)
+    }
+
+    /// 结果按退出码显示文字表里的说明，命令行（或安装脚本）的输出原样附在下面；不按输出文字分支。
+    private func finish(_ res: PrivilegedRunResult, service: ServiceAction?) {
         switch res {
         case .cancelled:
             phase = .done(ok: false, message: L10n.privCancelled, output: "")
@@ -137,7 +223,8 @@ public final class PrivilegedSession: ObservableObject {
             phase = .done(ok: false, message: L10n.privUnavailable, output: why)
         case .finished(let out):
             if let (code, body) = PrivilegedCommand.parse(out) {
-                phase = .done(ok: code == 0, message: L10n.privExit(code), output: body)
+                let msg = service.map { L10n.serviceExit(code, $0) } ?? L10n.privExit(code)
+                phase = .done(ok: code == 0, message: msg, output: body)
             } else {
                 phase = .done(ok: false, message: L10n.privUnavailable, output: out)
             }

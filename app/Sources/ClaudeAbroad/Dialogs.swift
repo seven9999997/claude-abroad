@@ -139,6 +139,11 @@ struct PrivilegedSheet: View {
                 ForEach(r.lines, id: \.self) { l in Text("· " + l).fixedSize(horizontal: false, vertical: true) }
                 if let b = r.blocked { ToneNote(tone: .failure, text: b, symbol: "xmark.octagon") }
                 preview(r)
+                if !r.removes.isEmpty { // 阶段 B：卸载会删除的东西（只读卸载预览给的）
+                    CardSection(L10n.serviceRemoves) {
+                        ForEach(r.removes, id: \.self) { x in CardRow { Text("· " + x).fixedSize(horizontal: false, vertical: true) } }
+                    }
+                }
                 if !r.inputFiles.isEmpty {
                     Text(L10n.privInputFile).font(.caption).foregroundStyle(.secondary)
                     ForEach(r.inputFiles, id: \.self) { CodeBlock(text: $0) }

@@ -47,6 +47,8 @@
   - **取消本机自用 pkg 的原因**：用户要的是“一条命令 + 应用里点一下”，pkg 解决不了“每次升级都要先卸载、清空主代理配置”的问题，还要多维护一个打包格式和一套卸载记录；原地升级加应用里的入口（阶段 B）覆盖了它的用途。
   - 阶段 B（应用里的安装、升级、卸载入口）等阶段 A 验收后做；顾问已拍板：只读的 `GET /v1/uninstall/preview`、payload 带 `scripts/lib/common.sh`、源码检查例外只在 PrivilegedRunner.swift 的一个常量、NSAppleScript 放后台串行队列、`codesign --verify --strict` 会话里实测。
   - 用户的真机验证（阶段 A）：见计划 2.7——一次原地升级且主代理配置还在；一次“借用虚拟机进行中被拒绝”（`sudo abroad main check` 进行时另开终端执行 `--upgrade`）。
+- **2026-11-27 阶段 B（应用里安装、升级、卸载后台服务，v0.71c）：开发完成，待顾问验收**（在 worktree `.claude/worktrees/stage-b`、分支 stage-b 上做，没有合并：用户在主工作目录做真机验证）。复用 B0 的提权层；只读卸载预览 `GET /v1/uninstall/preview`；`scripts/dev/build-app.sh`（会话里实测：payload 放 `Contents/Resources/payload/`，签名后 `codesign --verify --strict` 通过）；B0 建议改⑤（确认框里的“现在：…”）一并补了。
+  - **另记（顾问 2026-11-27）**：`scripts/dev/app-test.sh` 的测试宏插件偶发错误，B0 时重跑了 3 次（上限 4 次），属偶发、在增多；下次 3 次以上单独排查，先看并行编译占资源，不要提高上限。阶段 B 开发中单独跑 `swift test` 也碰到过一次（“plugin for module 'TestingMacros' not found”），重跑即过。
 - **2026-11-27 B0（应用里直接执行敏感操作）：开发完成，待顾问验收**。用户原话“添加代理节点又需要执行这个，可以直接执行吗，不需要用户再执行”。计划 docs/app-privileged-plan.md v2（顾问必须改：只读的启用预览 `GET /v1/enable/preview`；裁定：CryptoKit 只在 InputFiles.swift、版本 v0.71b、第四道开关进白名单）；设计 v0.71b。M5-3 以此收口，E1、E2 撤掉。阶段 B（应用里的安装、升级、卸载，v0.71c）接着做。
 - **借用虚拟机修复的验收标准（前任 architect 2026-11-27 原文）**：
   ```

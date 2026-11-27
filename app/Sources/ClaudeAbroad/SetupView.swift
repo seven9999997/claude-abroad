@@ -7,6 +7,7 @@ struct SetupView: View {
     @ObservedObject var setup: SetupModel
     @ObservedObject var main: MainProxyModel
     @ObservedObject var status: StatusModel
+    @ObservedObject var service: ServiceInstallModel
 
     var body: some View {
         HStack(spacing: 0) {
@@ -97,9 +98,16 @@ struct SetupView: View {
                         if setup.reachable {
                             stepHeader(L10n.setupServiceOK)
                         } else {
-                            stepHeader(L10n.setupServiceText)
-                            CodeBlock(text: setup.serviceCommand)
-                            Text(L10n.setupTemporary).font(.caption).foregroundStyle(.secondary)
+                            if service.showsInstall { // 阶段 B（v0.71c）：应用里安装（点了先弹确认框，再点“执行”才输密码）
+                                stepHeader(L10n.serviceNotInstalled)
+                                Button(L10n.serviceInstallButton) { Task { await service.userTappedInstall() } }
+                                    .buttonStyle(.borderedProminent)
+                                Text(L10n.serviceBoundary).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                stepHeader(L10n.setupServiceText)
+                                CodeBlock(text: setup.serviceCommand)
+                                Text(L10n.setupTemporary).font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     default:
                         stepHeader(L10n.setupDoneText)

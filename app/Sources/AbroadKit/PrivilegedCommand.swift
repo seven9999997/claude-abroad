@@ -72,6 +72,13 @@ public struct PrivilegedStep: Sendable, Equatable {
     }
 }
 
+/// 阶段 B（v0.71c）：应用里安装、升级、卸载后台服务。
+public enum ServiceAction: Sendable, Equatable {
+    case install
+    case upgrade(acceptUnknown: Bool)
+    case uninstall(killBrowsers: Bool)
+}
+
 public enum PrivilegedCommandError: Error, Equatable {
     case notWhitelisted(String)
     case badCharacter
@@ -144,6 +151,45 @@ public enum PrivilegedCommand {
         return mk + "/bin/cp " + shellQuote(src) + " " + shellQuote(dst) +
             " && [ \"$(/usr/bin/shasum -a 256 " + shellQuote(dst) + " | /usr/bin/cut -c1-64)\" = " + shellQuote(sha) + " ] " +
             "|| { /bin/rm -rf \"$S\"; echo 'RESULT=\(exitInputChanged)'; exit 0; }"
+    }
+
+    // ---- 阶段 B（v0.71c）：安装、升级、卸载后台服务 ----
+
+    /// 安装目录里没有卸载脚本（加这个功能之前装的、还没升级过）。
+    public static let exitOldInstall = 30
+    /// 应用包里的安装文件复制到 root 的临时目录后，和包里自带的 payload.sha256 对不上（内部不一致；不证明是不是原版）。
+    public static let exitPayloadBad = 33
+
+    /// 安装、升级：只用系统自带的程序把应用包里的 payload 整个复制（解引用符号链接）到属主 root、0700 的临时目录，
+    /// 核对 payload.sha256，之后一切从这份副本执行 install.sh（--from 副本 --yes）。核对不过退出码 33，什么都不改。
+    /// 卸载：执行已安装的、属主 root 的 uninstall.sh——先检查安装目录、scripts、三个脚本都是 root 的、组和其他人不可写、
+    /// 不是符号链接（没有 scripts 时退出码 30），再复制到临时目录执行（脚本会删掉安装目录，不能在原处跑），带 --yes。
+    public static func buildService(_ a: ServiceAction, paths: PrivilegedPaths, payload: String?) throws -> String {
+        var lines = ["umask 077", "S=" + shellQuote(paths.staging) + "; I=" + shellQuote(paths.installDir)]
+        guard acceptable(paths.staging), acceptable(paths.installDir) else { throw PrivilegedCommandError.badCharacter }
+        switch a {
+        case .install, .upgrade:
+            guard let payload, acceptable(payload), payload.hasPrefix("/") else { throw PrivilegedCommandError.badCharacter }
+            lines.append("P=" + shellQuote(payload))
+            lines.append("/bin/rm -rf \"$S\" && /bin/mkdir -m 700 \"$S\" && /usr/sbin/chown root:wheel \"$S\" && /bin/cp -RL \"$P\" \"$S/p\" " +
+                "&& ( cd \"$S/p\" && /usr/bin/shasum -a 256 -s -c payload.sha256 ) || { /bin/rm -rf \"$S\"; echo 'RESULT=\(exitPayloadBad)'; exit 0; }")
+            var flags = ["--from", "\"$S/p\"", "--yes"]
+            if case let .upgrade(acceptUnknown) = a {
+                flags.append("--upgrade")
+                if acceptUnknown { flags.append("--accept-unknown-version") }
+            }
+            lines.append("cd /; /bin/bash \"$S/p/scripts/m6/install/install.sh\" " + flags.joined(separator: " ") + " 2>&1; rc=$?; /bin/rm -rf \"$S\"; echo \"RESULT=$rc\"; exit 0")
+        case let .uninstall(killBrowsers):
+            lines.append("[ -d \"$I/scripts\" ] || { echo 'RESULT=\(exitOldInstall)'; exit 0; }")
+            lines.append("for p in \"$I\" \"$I/scripts\" \"$I/scripts/m6/install/uninstall.sh\" \"$I/scripts/m6/install/lib.sh\" \"$I/scripts/lib/common.sh\"; do " +
+                "[ -e \"$p\" ] && [ ! -L \"$p\" ] && [ \"$(/usr/bin/stat -f %u \"$p\")\" = 0 ] && [ $(( 0$(/usr/bin/stat -f %Lp \"$p\") & 022 )) = 0 ] " +
+                "|| { echo 'RESULT=\(exitBadInstall)'; exit 0; }; done")
+            lines.append("/bin/rm -rf \"$S\" && /bin/mkdir -m 700 \"$S\" && /usr/sbin/chown root:wheel \"$S\" && /bin/mkdir -m 700 \"$S/p\" && /bin/cp -R \"$I/scripts\" \"$S/p/scripts\" " +
+                "|| { /bin/rm -rf \"$S\"; echo 'RESULT=\(exitBadInstall)'; exit 0; }")
+            lines.append("cd /; /bin/bash \"$S/p/scripts/m6/install/uninstall.sh\" --yes" + (killBrowsers ? " --kill-browsers" : "") +
+                " 2>&1; rc=$?; /bin/rm -rf \"$S\"; echo \"RESULT=$rc\"; exit 0")
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// 解析输出：最后一行 RESULT=<退出码>，其余是命令行的输出（--json 时是最终的应答）。

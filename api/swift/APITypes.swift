@@ -975,6 +975,27 @@ public struct DaemonUninstallFlags: Codable, Sendable {
     }
 }
 
+public struct DaemonUninstallPreviewView: Codable, Sendable {
+    public var processes: [ClaudeprocTarget]?
+    public var unverified: [ClaudeprocTarget]?
+    public var willKill: Bool
+    public var notice: String?
+    public var browsers: [ClaudeprocTarget]?
+    public var browserNote: String?
+    public var removes: [String]?
+    public var note: String
+    enum CodingKeys: String, CodingKey {
+        case processes = "processes"
+        case unverified = "unverified"
+        case willKill = "will_kill"
+        case notice = "notice"
+        case browsers = "browsers"
+        case browserNote = "browser_note"
+        case removes = "removes"
+        case note = "note"
+    }
+}
+
 public struct DaemonUninstallResult: Codable, Sendable {
     public var steps: [DaemonUninstallStep]?
     public var complete: Bool

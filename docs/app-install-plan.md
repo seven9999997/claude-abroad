@@ -1,6 +1,6 @@
 # 一条命令构建、应用里装好后台服务、原地升级：实施计划（交架构顾问审）
 
-> 版本：**v2**（2026-11-27）。v1 经顾问审过：通过，1 条必须改（见 1.1 的 `TestStateFormatPinned`），阶段 A 可以开工；第 0 节四处拍板和风险 3 的结论回填在下面。阶段 A 已按本计划实现（实现中的偏离见第 7 节），阶段 B 还没做。
+> 版本：**v2**（2026-11-27）。v1 经顾问审过：通过，1 条必须改（见 1.1 的 `TestStateFormatPinned`）；第 0 节四处拍板和风险 3 的结论回填在下面。阶段 A 已实现（偏离见第 7 节）；阶段 B 已实现（v0.71c，偏离见第 8 节）。
 > 依据：用户 2026-11-27 的选择“1”（原话“我不想每次安装都执行这么多命令，太啰嗦了”）；顾问 2026-11-27 的判定（分两阶段、同一份计划、分开交验收；设计都记 v0.71；“回国确认里选第四道”顺延到 v0.72；取消本机自用 pkg）。
 > 现状核对过的文件：`scripts/m6/install/{install.sh,uninstall.sh,lib.sh,selftest.sh,commands.txt,check-commands.sh,README.md}`、`scripts/dev/{reinstall.sh,integrity-build.sh,app-bundle.sh,app-test.sh}`、`internal/daemon/{daemon.go,routes.go,uninstall.go,confirm.go}`、`internal/state/{file.go,machine.go}`、`app/Sources/AbroadKit/{Authorization.swift,SetupModel.swift,PageModels.swift,Strings.swift}`、`app/Tests/AbroadKitTests/RepoTests.swift`、设计 10.3、11.2、11.4。
 > 会话里的边界：不提权（不 sudo、不弹管理员密码框）、不运行真实模式（只有自测 `M6I_TEST_DIR` 和空跑 `DRY_RUN=1`）、不碰真实系统路径（`/Library/Application Support/claude-abroad`、`/Applications/ClaudeAbroad.app`、`/Library/LaunchDaemons`、`/var/run`、`/var/log` 下我们的东西）、不改宿主机网络、不碰本机会话依赖的代理（见 `docs/LOCAL.md`）。本计划里出现的 `sudo …` 命令一律是**写给用户在真机上执行的**，会话不执行。
@@ -370,3 +370,17 @@ umask 077; /bin/rm -rf 'STG' && /bin/mkdir -m 700 'STG' && /usr/sbin/chown root:
 | abroadd/state.lock | 锁 | 没有内容 |
 
   运行目录 `/var/run/claude-abroad` 下的 `launchguard-boot`、`pf-loaded`、`guard-pf-tokens` 开机时清空，不算状态目录。fake-IP 映射的落盘（`fakedns.Pool.SaveFile`）现在没有接到 abroadd，不在状态目录里。
+
+---
+
+## 8. 阶段 B 实现中的偏离和补充（v0.71c）
+
+- **payload 的位置**：`Contents/Resources/payload/`。会话里对本机构建的应用包实测：`codesign --force --sign -` 之后 `codesign --verify --strict` 通过（`valid on disk`、`satisfies its Designated Requirement`），`abroad-vm` 自带的虚拟化授权签名不变，payload 的 `payload.sha256` 签名前后都核对得上（`app-bundle.sh` 里固定检查）。所以没有改放 `Contents/SharedSupport`。
+- **应用里的版本号**：`app-bundle.sh --payload` 把 `build.json` 的四项写进 Info.plist（`ClaudeAbroadPayloadCommit`、`…BuildTime`、`…Dirty`、`…StateFormat`）；应用用 `Bundle.main.infoDictionary` 读，payload 目录用 `Bundle.main.resourcePath` 拼，不读文件、不查文件在不在（“应用不写磁盘、`FileManager` 只在 Transport.swift”的规则不放宽）。没有这些键的应用包显示“这份应用包里没有后台服务的安装文件”。
+- **退出码**：安装、升级时 payload 核对不过是 33；卸载时安装目录没有 `scripts/` 是 30，已安装的卸载脚本属主或权限不对是 31；其余照安装、卸载脚本自己的退出码。`RESULT=` 行由提权命令打（同 B0），`install.sh` 不打。
+- **`uninstall.sh --yes` 不要求 `SUDO_USER`**（仍要求 root）：应用经管理员授权运行时没有 `SUDO_USER`，和 `install.sh --from` 同样处理。
+- **版本不明时“多确认一次”**：点“升级后台服务…”后弹出的确认框第一行写“后台服务的版本不明（是加版本号之前装的）。确认要升级吗？”，在框里点“执行”才带 `--accept-unknown-version` 执行；没有再叠一个对话框。
+- **安装、升级、卸载复用 B0 的 `PrivilegedSession`**（`presentService`）：确认框、只能点击触发、后台串行队列、结果显示都是同一套；命令在 `PrivilegedCommand.buildService`，和 B0 共用转义和拒绝控制字符。
+- **`reinstall.sh` 的打包一步也带 `--payload`**：命令行升级时交给用户的那份应用里就有安装文件，以后可以在应用里升级。
+- **卸载入口只在设置“高级”**（没有放进应用菜单）；没装时设置里也有“安装后台服务…”。
+- **B0 建议改⑤** 一并补了：地区、主代理、规则、出口的确认框第一行写“现在：…”（读现有只读接口，读不到就不写）。

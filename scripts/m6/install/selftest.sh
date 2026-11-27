@@ -504,6 +504,7 @@ cp -R "$PL" "${TMP}/plnosum" && rm "${TMP}/plnosum/payload.sha256"
 S=$(mkcase); M6I_TEST_DIR="$S" M6I_YES=1 bash "${INSTALL}" --from "${TMP}/plnosum" >/dev/null 2>"$S/i.err"; rc=$?
 [ $rc = 3 ] && grep -q '没有 payload.sha256' "$S/i.err" && ok "s. --from 的目录里没有 payload.sha256：拒绝" || bad "s. 没有 payload.sha256：rc=$rc"
 M6I_TEST_DIR="$S" bash "${INSTALL}" --from relative >/dev/null 2>&1; [ $? = 2 ] && ok "s. --from 要绝对路径" || bad "s. --from 相对路径没被拒绝"
+grep -q '\[ "${YES}" = 1 \] && M6I_FROM=1' scripts/m6/install/uninstall.sh && ok "s. 卸载带 --yes（应用经管理员授权运行）时不要求 SUDO_USER（仍要求 root；源码核对）" || bad "s. 卸载带 --yes 时仍要求 SUDO_USER"
 grep -q '"${M6I_FROM:-0}" = 1 ] ||' scripts/m6/install/lib.sh && ok "s. --from 时真实模式不要求 SUDO_USER（仍要求 root；源码核对）" || bad "s. --from 时仍要求 SUDO_USER"
 # 升级用 payload（含 payload.sha256）
 S=$(mkcase); setup_old "$S"
@@ -581,6 +582,47 @@ if [ -s "${GOLD}" ]; then
   grep -q '= 0 \]' <<<"$(cmdof addsource)" && ok "u. golden 里属主条件是 root（uid 0）" || bad "u. golden 里没有属主是 root 的条件"
 else
   bad "u. 没有 ${GOLD}（由 swift 测试 privilegedCommandGolden 生成）"
+fi
+
+# ---- u（阶段 B，v0.71c）：安装、升级、卸载后台服务的三条命令（Swift golden，app/Tests/AbroadKitTests/testdata/service-commands.txt）真跑：
+#      payload 复制到临时目录、核对 payload.sha256（对不上 33）；从副本执行 install.sh --from --yes；卸载执行已安装的 uninstall.sh
+#      （没有 scripts 时 30，属主或权限不对 31），带 --yes / --kill-browsers；临时目录都不留。----
+SGOLD=app/Tests/AbroadKitTests/testdata/service-commands.txt
+scmd() { awk -v n="### $1" '$0 == n { f = 1; next } /^### / { f = 0 } f' "${SGOLD}" | sed -e "s|@INST@|${UD}/sinst|g" -e "s|@STG@|${UD}/sstg|g" \
+  -e "s|/@PAYLOAD@|${UD}/spl|g" -e "s|\")\" = 0 \]|\")\" = $(id -u) ]|" -e 's|/usr/sbin/chown root:wheel "\$S" \&\& ||' >"${UD}/scmd.sh"; /bin/sh "${UD}/scmd.sh" | tail -1; }
+mkspl() { # 假 payload：install.sh 记下参数和它所在的目录
+  rm -rf "${UD}/spl" "${UD}/sargs"; mkdir -p "${UD}/spl/scripts/m6/install" "${UD}/spl/scripts/lib" "${UD}/spl/bin"
+  printf '#!/bin/bash\necho "$0 $*" >"%s/sargs"\n' "${UD}" >"${UD}/spl/scripts/m6/install/install.sh"
+  echo x >"${UD}/spl/bin/abroadd"
+  (cd "${UD}/spl" && shasum -a 256 scripts/m6/install/install.sh bin/abroadd >payload.sha256)
+}
+mksinst() { # 假的已安装目录：scripts 里的 uninstall.sh 记下参数
+  rm -rf "${UD}/sinst" "${UD}/sargs"; mkdir -p "${UD}/sinst/scripts/m6/install" "${UD}/sinst/scripts/lib"
+  printf '#!/bin/bash\necho "$0 $*" >"%s/sargs"\n' "${UD}" >"${UD}/sinst/scripts/m6/install/uninstall.sh"
+  echo '# lib' >"${UD}/sinst/scripts/m6/install/lib.sh"; echo '# common' >"${UD}/sinst/scripts/lib/common.sh"
+  chmod -R go-w "${UD}/sinst"
+}
+if [ -s "${SGOLD}" ]; then
+  mkspl; out=$(scmd install)
+  [ "${out}" = RESULT=0 ] && [ "$(cat "${UD}/sargs" 2>/dev/null)" = "${UD}/sstg/p/scripts/m6/install/install.sh --from ${UD}/sstg/p --yes" ] && [ ! -e "${UD}/sstg" ] &&
+    ok "u. 安装：payload 复制到临时目录、核对通过，从副本执行 install.sh --from <副本> --yes，临时目录不留" || bad "u. 安装：${out} $(cat "${UD}/sargs" 2>/dev/null)"
+  mkspl; out=$(scmd upgrade-unknown)
+  grep -q -- "--from ${UD}/sstg/p --yes --upgrade --accept-unknown-version$" "${UD}/sargs" 2>/dev/null && [ "${out}" = RESULT=0 ] && ok "u. 升级（版本不明）：带 --upgrade --accept-unknown-version" || bad "u. 升级：${out}"
+  mkspl; echo tampered >>"${UD}/spl/bin/abroadd"; out=$(scmd install)
+  [ "${out}" = RESULT=33 ] && [ ! -e "${UD}/sargs" ] && [ ! -e "${UD}/sstg" ] && ok "u. 应用包里的安装文件被改过（摘要对不上）：退出码 33，没有执行 install.sh" || bad "u. payload 被改：${out}"
+  mkspl; rm "${UD}/spl/bin/abroadd"; out=$(scmd upgrade)
+  [ "${out}" = RESULT=33 ] && [ ! -e "${UD}/sargs" ] && ok "u. 应用包里的安装文件缺了：退出码 33" || bad "u. payload 缺文件：${out}"
+  mksinst; out=$(scmd uninstall-kill)
+  [ "${out}" = RESULT=0 ] && [ "$(cat "${UD}/sargs" 2>/dev/null)" = "${UD}/sstg/p/scripts/m6/install/uninstall.sh --yes --kill-browsers" ] && [ ! -e "${UD}/sstg" ] && [ -f "${UD}/sinst/scripts/m6/install/uninstall.sh" ] &&
+    ok "u. 卸载：已安装的 uninstall.sh 复制到临时目录后执行，带 --yes --kill-browsers，临时目录不留" || bad "u. 卸载：${out} $(cat "${UD}/sargs" 2>/dev/null)"
+  mksinst; rm -rf "${UD}/sinst/scripts"; out=$(scmd uninstall)
+  [ "${out}" = RESULT=30 ] && [ ! -e "${UD}/sargs" ] && ok "u. 安装目录里没有卸载脚本（老安装）：退出码 30" || bad "u. 没有 scripts：${out}"
+  mksinst; chmod g+w "${UD}/sinst/scripts/m6/install/uninstall.sh"; out=$(scmd uninstall)
+  [ "${out}" = RESULT=31 ] && [ ! -e "${UD}/sargs" ] && ok "u. 已安装的卸载脚本组可写：退出码 31，没有执行" || bad "u. 卸载脚本可写：${out}"
+  mksinst; mv "${UD}/sinst/scripts/lib/common.sh" "${UD}/c.sh"; ln -s "${UD}/c.sh" "${UD}/sinst/scripts/lib/common.sh"; out=$(scmd uninstall)
+  [ "${out}" = RESULT=31 ] && [ ! -e "${UD}/sargs" ] && ok "u. 已安装的脚本是符号链接：退出码 31" || bad "u. 符号链接：${out}"
+else
+  bad "u. 没有 ${SGOLD}（由 swift 测试 serviceCommandGolden 生成）"
 fi
 
 # ---- 升级的空跑和命令核对 ----

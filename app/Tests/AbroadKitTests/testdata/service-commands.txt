@@ -1,0 +1,32 @@
+### install
+umask 077
+S='@STG@'; I='@INST@'
+P='/@PAYLOAD@'
+/bin/rm -rf "$S" && /bin/mkdir -m 700 "$S" && /usr/sbin/chown root:wheel "$S" && /bin/cp -RL "$P" "$S/p" && ( cd "$S/p" && /usr/bin/shasum -a 256 -s -c payload.sha256 ) || { /bin/rm -rf "$S"; echo 'RESULT=33'; exit 0; }
+cd /; /bin/bash "$S/p/scripts/m6/install/install.sh" --from "$S/p" --yes 2>&1; rc=$?; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0
+### upgrade
+umask 077
+S='@STG@'; I='@INST@'
+P='/@PAYLOAD@'
+/bin/rm -rf "$S" && /bin/mkdir -m 700 "$S" && /usr/sbin/chown root:wheel "$S" && /bin/cp -RL "$P" "$S/p" && ( cd "$S/p" && /usr/bin/shasum -a 256 -s -c payload.sha256 ) || { /bin/rm -rf "$S"; echo 'RESULT=33'; exit 0; }
+cd /; /bin/bash "$S/p/scripts/m6/install/install.sh" --from "$S/p" --yes --upgrade 2>&1; rc=$?; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0
+### upgrade-unknown
+umask 077
+S='@STG@'; I='@INST@'
+P='/@PAYLOAD@'
+/bin/rm -rf "$S" && /bin/mkdir -m 700 "$S" && /usr/sbin/chown root:wheel "$S" && /bin/cp -RL "$P" "$S/p" && ( cd "$S/p" && /usr/bin/shasum -a 256 -s -c payload.sha256 ) || { /bin/rm -rf "$S"; echo 'RESULT=33'; exit 0; }
+cd /; /bin/bash "$S/p/scripts/m6/install/install.sh" --from "$S/p" --yes --upgrade --accept-unknown-version 2>&1; rc=$?; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0
+### uninstall
+umask 077
+S='@STG@'; I='@INST@'
+[ -d "$I/scripts" ] || { echo 'RESULT=30'; exit 0; }
+for p in "$I" "$I/scripts" "$I/scripts/m6/install/uninstall.sh" "$I/scripts/m6/install/lib.sh" "$I/scripts/lib/common.sh"; do [ -e "$p" ] && [ ! -L "$p" ] && [ "$(/usr/bin/stat -f %u "$p")" = 0 ] && [ $(( 0$(/usr/bin/stat -f %Lp "$p") & 022 )) = 0 ] || { echo 'RESULT=31'; exit 0; }; done
+/bin/rm -rf "$S" && /bin/mkdir -m 700 "$S" && /usr/sbin/chown root:wheel "$S" && /bin/mkdir -m 700 "$S/p" && /bin/cp -R "$I/scripts" "$S/p/scripts" || { /bin/rm -rf "$S"; echo 'RESULT=31'; exit 0; }
+cd /; /bin/bash "$S/p/scripts/m6/install/uninstall.sh" --yes 2>&1; rc=$?; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0
+### uninstall-kill
+umask 077
+S='@STG@'; I='@INST@'
+[ -d "$I/scripts" ] || { echo 'RESULT=30'; exit 0; }
+for p in "$I" "$I/scripts" "$I/scripts/m6/install/uninstall.sh" "$I/scripts/m6/install/lib.sh" "$I/scripts/lib/common.sh"; do [ -e "$p" ] && [ ! -L "$p" ] && [ "$(/usr/bin/stat -f %u "$p")" = 0 ] && [ $(( 0$(/usr/bin/stat -f %Lp "$p") & 022 )) = 0 ] || { echo 'RESULT=31'; exit 0; }; done
+/bin/rm -rf "$S" && /bin/mkdir -m 700 "$S" && /usr/sbin/chown root:wheel "$S" && /bin/mkdir -m 700 "$S/p" && /bin/cp -R "$I/scripts" "$S/p/scripts" || { /bin/rm -rf "$S"; echo 'RESULT=31'; exit 0; }
+cd /; /bin/bash "$S/p/scripts/m6/install/uninstall.sh" --yes --kill-browsers 2>&1; rc=$?; /bin/rm -rf "$S"; echo "RESULT=$rc"; exit 0

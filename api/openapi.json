@@ -1670,6 +1670,51 @@
         ],
         "type": "object"
       },
+      "DaemonUninstallPreviewView": {
+        "properties": {
+          "browser_note": {
+            "type": "string"
+          },
+          "browsers": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudeprocTarget"
+            },
+            "type": "array"
+          },
+          "note": {
+            "type": "string"
+          },
+          "notice": {
+            "type": "string"
+          },
+          "processes": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudeprocTarget"
+            },
+            "type": "array"
+          },
+          "removes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "unverified": {
+            "items": {
+              "$ref": "#/components/schemas/ClaudeprocTarget"
+            },
+            "type": "array"
+          },
+          "will_kill": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "note",
+          "will_kill"
+        ],
+        "type": "object"
+      },
       "DaemonUninstallResult": {
         "properties": {
           "browsers_left": {
@@ -3697,6 +3742,35 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DaemonStatus"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            },
+            "description": "出错"
+          }
+        },
+        "x-level": "read"
+      }
+    },
+    "/v1/uninstall/preview": {
+      "get": {
+        "description": "卸载的预览（只查看：不签发确认码、不改任何状态、不拉起虚拟机；内容同卸载第一步；?kill_browsers=true 时按勾选浏览器预览；v0.71c）",
+        "operationId": "uninstall-preview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonUninstallPreviewView"
                 }
               }
             },

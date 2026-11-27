@@ -372,7 +372,7 @@ public enum L10n {
     public static let claudeCodeScope = "只覆盖 Claude Code，不覆盖 Claude 桌面版和浏览器"
     public static func resolverLockConflicts(_ doms: [String]) -> String { "有别的软件写的同名文件：" + doms.joined(separator: "、") + "（这些域名不受锁保护）" }
     public static let uninstall = "卸载"
-    public static let uninstallInInstaller = "应用里的卸载入口下一步提供；现在请在终端里执行 sudo abroad uninstall，或开发安装的卸载脚本 sudo scripts/m6/install/uninstall.sh"
+    public static let uninstallInInstaller = "应用里卸载：上面“后台服务”一栏的“卸载 Claude 出国…”（会先列出要做的事，确认后输一次管理员密码）；也可以在终端里执行开发安装的卸载脚本 sudo scripts/m6/install/uninstall.sh"
     public static let diagnostics = "诊断包"
     // 补齐五：应用里导出诊断包。
     public static let diagnosticsExport = "导出诊断包…"
@@ -566,6 +566,82 @@ extension L10n {
         case .appSet, .appRemove, .ruleListAdd, .ruleListRemove, .udp443: return ["改的是分流规则：放松保护的改动要本人授权。"]
         case let .allowLAN(on): return on ? ["现在：关。打开后，局域网里的设备（打印机、NAS、路由器后台）可以直连。"] : ["关掉后更严：局域网地址也一律走代理或拦截。"]
         case let .claudeProxy(on): return on ? claudeCodeConsequences : [privClaudeProxyOff]
+        }
+    }
+}
+
+// ---- 阶段 B（v0.71c）：应用里安装、升级、卸载后台服务；B0 建议改⑤ 的“现在：…” ----
+extension L10n {
+    public static func privNow(_ s: String) -> String { "现在：\(s)" }
+    public static let privNowNone = "没有"
+    public static let privNowOn = "开"
+    public static let privNowOff = "关"
+    public static let privNowRegionNone = "没有锁定目标地区（跟随出口）"
+    public static func privNowMain(_ sel: String, applied: Bool, sources: Int) -> String {
+        "主代理选的是 \(sel)（\(applied ? "已下发" : "还没有下发")），共 \(sources) 个来源"
+    }
+    public static func privNowNoRule(_ app: String) -> String { "\(app) 没有单独的规则（按默认）" }
+    public static func privNowInList(_ item: String, _ inList: Bool, count: Int) -> String {
+        (inList ? "\(item) 已在名单里" : "\(item) 不在名单里") + "（名单共 \(count) 项）"
+    }
+
+    public static let serviceSection = "后台服务"
+    public static let serviceInstallButton = "安装后台服务…"
+    public static let serviceUpgradeButton = "升级后台服务…"
+    public static let serviceUninstallButton = "卸载 Claude 出国…"
+    public static let serviceNoPayload = "这份应用包里没有后台服务的安装文件（用 scripts/dev/build-app.sh 构建的应用才有）。"
+    public static let serviceNotInstalled = "后台服务没有安装，或没有在运行。"
+    public static let serviceUpToDate = "后台服务和应用是同一个版本。"
+    public static func serviceUpgradeAvailable(_ old: String, _ new: String) -> String { "后台服务可以升级：\(old) → \(new)（主代理和设置都保留）" }
+    public static func serviceUnknownVersion(_ new: String) -> String { "后台服务的版本不明（是加版本号之前装的）；可以升级到 \(new)（升级前会再确认一次）" }
+    public static func serviceFormatDiffers(_ old: Int, _ new: Int) -> String { "状态格式变了（后台 \(old)、应用里的 \(new)），不能原地升级：要先卸载再重装（主代理和设置要重新配置）" }
+    public static func serviceDaemonNewer(_ old: String, _ new: String) -> String { "后台服务（\(old)）比这个应用里的（\(new)）还新：不降级" }
+    public static let serviceBlockedEnabled = "已启用时不能升级：请先停用，升级后再启用"
+    public static let serviceBlockedTransition = "正在启用或回国，等它完成再升级"
+    public static let serviceBlockedBorrow = "正在借用虚拟机（应用主代理或检查主代理），等它完成再升级"
+    public static let serviceBlockedBusy = "正在进行别的操作，等它完成再升级"
+    public static let serviceBlockedUninstall = "正在卸载或已经卸载过，不能升级"
+    public static let serviceBlockedCorrupt = "后台服务的状态文件读不出来，不能原地升级：请卸载后重新安装"
+    public static let serviceUnknownWarning = "后台服务的版本不明（是加版本号之前装的）。确认要升级吗？"
+    public static let serviceUpgradeKeeps = "只换程序、镜像、完整性清单和后台服务的配置；主代理来源和选择、规则、分流出口、地区、各开关都保留。"
+    public static let serviceUpgradeStops = "期间后台服务会停一下（不会断网、不会接管网络）；任何一步失败都会退回旧版本。"
+    public static let serviceInstallWhat = "把后台服务装到这台 Mac 上（程序、虚拟机镜像、专用用户 _abroad、两个后台服务），装完是“已回国”状态，不会断网。"
+    public static let serviceBoundary = "这个应用没有签名：应用包里的东西可信程度等于你的用户账户本身。密码框能拦住别的程序悄悄安装，但拦不住在你点“执行”之前改掉应用包内容的程序。"
+    public static let serviceUninstallWhat = "卸载会结束下面的 Claude 进程、恢复本机网络、解除 Claude 启动管控，并删除后台服务、专用用户和数据（主代理和设置都会清空）。"
+    public static let serviceRemoves = "会删除的东西："
+    public static let serviceUninstalledTrash = "卸载完成。应用 /Applications/ClaudeAbroad.app 留着，不需要的话可以自己移到废纸篓。"
+    public static func serviceTitle(_ a: ServiceAction) -> String {
+        switch a {
+        case .install: return "安装 Claude 出国的后台服务"
+        case .upgrade: return "升级 Claude 出国的后台服务"
+        case .uninstall: return "卸载 Claude 出国"
+        }
+    }
+    /// 系统密码框里的提示（计划 3.5 ③）。
+    public static func servicePrompt(_ a: ServiceAction) -> String {
+        switch a {
+        case .install, .upgrade: return "安装 / 升级 Claude 出国的后台服务（会以管理员身份运行）"
+        case .uninstall: return "卸载 Claude 出国的后台服务并恢复本机网络（会以管理员身份运行）"
+        }
+    }
+    /// 安装脚本、卸载脚本的退出码对应的说明。
+    public static func serviceExit(_ code: Int, _ a: ServiceAction) -> String {
+        switch (code, a) {
+        case (0, .install): return "安装完成。接下来添加主代理来源、选节点并应用。"
+        case (0, .upgrade): return "升级完成，主代理和设置都保留。"
+        case (0, .uninstall): return serviceUninstalledTrash
+        case (3, _): return "前提不满足，什么都没有改动（原因见下面的输出）"
+        case (10, _): return "现在的状态不允许升级，什么都没有改动（原因见下面的输出）"
+        case (11, _): return "后台服务不比应用里的旧：不降级，什么都没有改动"
+        case (13, _): return "状态格式变了，不能原地升级：请先卸载再重装"
+        case (14, _): return "后台服务的版本不明，没有确认：什么都没有改动"
+        case (20, _): return "升级失败，已经退回旧版本（主代理和设置都在；原因见下面的输出）"
+        case (21, _): return "升级失败，退回旧版本也没有完成：请按 docs/emergency.md 处理，再升级一次会先接着退回"
+        case (30, _): return "这份安装太旧（安装目录里没有卸载脚本）：请先升级后台服务，或在终端执行 sudo scripts/m6/install/uninstall.sh"
+        case (31, _): return "已安装的卸载脚本不对（不是 root 的或别人可写），没有执行"
+        case (33, _): return "应用包里的安装文件不完整或被改动过，什么都没有改动：请重新构建应用（scripts/dev/build-app.sh）"
+        case (_, .uninstall): return "卸载没有完成（退出码 \(code)）：原因见下面的输出，可以重试，或按 docs/emergency.md 处理"
+        default: return "执行失败（退出码 \(code)），原因见下面的输出"
         }
     }
 }

@@ -8,6 +8,7 @@ struct SettingsView: View {
     @ObservedObject var env: EnvModel
     @ObservedObject var diagnostics: DiagnosticsExportModel
     @ObservedObject var privileged: PrivilegedSession
+    @ObservedObject var service: ServiceInstallModel
 
     var body: some View {
         TabView {
@@ -18,7 +19,7 @@ struct SettingsView: View {
         }
         .frame(width: 620, height: 520)
         .tint(Palette.accent)
-        .task { await model.load() }
+        .task { await model.load(); await service.refresh() }
         .sheet(isPresented: Binding(get: { privileged.request?.host == .settings },
                                     set: { if !$0, privileged.phase != .running { Task { await privileged.userClosed() } } })) {
             PrivilegedSheet(session: privileged)
@@ -232,6 +233,22 @@ struct SettingsView: View {
                     Button(L10n.diagnosticsExport) { Task { await diagnostics.export() } }
                         .disabled(diagnostics.busy)
                 }
+            }
+            CardSection(L10n.serviceSection) { // 阶段 B（v0.71c）：后台服务的版本、升级和卸载
+                CardRow(alignment: .top) {
+                    Text(service.text).font(.caption).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if service.showsUpgrade || service.showsInstall || service.showsUninstall {
+                    RowSeparator()
+                    CardRow {
+                        if service.showsInstall { Button(L10n.serviceInstallButton) { Task { await service.userTappedInstall(host: .settings) } } }
+                        if service.showsUpgrade { Button(L10n.serviceUpgradeButton) { Task { await service.userTappedUpgrade(host: .settings) } }.disabled(!service.upgradeEnabled) }
+                        Spacer()
+                        if service.showsUninstall { Button(L10n.serviceUninstallButton) { Task { await service.userTappedUninstall(host: .settings) } } }
+                    }
+                }
+                RowSeparator()
+                CardRow { Text(L10n.serviceBoundary).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
             }
             CardSection(L10n.uninstall) {
                 CardRow(alignment: .top) {

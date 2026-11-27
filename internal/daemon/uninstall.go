@@ -232,3 +232,26 @@ func (d *Daemon) uninstallClaudeProxy() {
 		d.events.Add("claude_proxy", "switch_off_failed", "记下开关："+err.Error()) // 已卸载时启动也不监听，不影响结果
 	}
 }
+
+// UninstallPreviewRecheckNote 是只读卸载预览里固定的一句（v0.71c：应用确认后以 root 运行已安装的 uninstall.sh，
+// 它再执行 abroad --yes uninstall，后台按当时的情况再走一遍两步确认）。
+const UninstallPreviewRecheckNote = "执行时会按当时的情况重新列出；之后新启动的 Claude 也会被结束。"
+
+// UninstallPreviewView 是 GET /v1/uninstall/preview 的应答：内容和卸载第一步 409 应答里的 preview 相同，加一句说明。
+type UninstallPreviewView struct {
+	UninstallPreview
+	Note string `json:"note"`
+}
+
+// handleUninstallPreview 是 GET /v1/uninstall/preview（只读，v0.71c；顾问 2026-11-27 拍板）：不签发确认码、不改任何状态、
+// 不拉起虚拟机。应用的卸载确认框用它；卸载后也能读（AllowedAfterUninstall 只管改动类接口）。
+func (d *Daemon) handleUninstallPreview(w http.ResponseWriter, r *http.Request) {
+	_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 64<<10))
+	pv, err := d.uninstallPreview(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errBody{usererror.Wrap("列出卸载会做的事", err, "请再试一次。").Error()})
+		return
+	}
+	pv.Preview = pv.Preview.WithBrowserChoice(r.URL.Query().Get("kill_browsers") == "true")
+	writeJSON(w, http.StatusOK, UninstallPreviewView{UninstallPreview: pv, Note: UninstallPreviewRecheckNote})
+}

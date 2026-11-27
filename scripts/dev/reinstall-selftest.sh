@@ -16,7 +16,7 @@ bad() { echo "✗ $*"; fails=$((fails + 1)); }
 S=scripts/dev/reinstall.sh
 dry() { env DRY_RUN=1 "$@" bash "$S" 2>"${TMP}/err"; }
 
-ALLOW='^RUN: (scripts/dev/integrity-build\.sh --dev|scripts/dev/payload\.sh|scripts/dev/app-bundle\.sh|sudo scripts/m6/install/uninstall\.sh|scripts/m6/install/install\.sh --check-only|sudo scripts/m6/install/install\.sh|sudo scripts/m6/install/install\.sh --upgrade)$'
+ALLOW='^RUN: (scripts/dev/integrity-build\.sh --dev|scripts/dev/payload\.sh|scripts/dev/app-bundle\.sh --payload scripts/dev/out/payload|sudo scripts/m6/install/uninstall\.sh|scripts/m6/install/install\.sh --check-only|sudo scripts/m6/install/install\.sh|sudo scripts/m6/install/install\.sh --upgrade)$'
 BAN='(--yes|pfctl|networksetup|route|ifconfig|launchctl)'
 cmdcheck() { # 只允许清单里的行，不许出现禁止的词
   grep -vE "$ALLOW" "$1" | grep -q . && return 1
@@ -28,14 +28,14 @@ cmdcheck() { # 只允许清单里的行，不许出现禁止的词
 dry REINSTALL_TEST_INSTALLED=1 >"${TMP}/i1"; rc=$?
 want1='RUN: scripts/dev/integrity-build.sh --dev
 RUN: scripts/dev/payload.sh
-RUN: scripts/dev/app-bundle.sh
+RUN: scripts/dev/app-bundle.sh --payload scripts/dev/out/payload
 RUN: sudo scripts/m6/install/install.sh --upgrade'
 [ $rc = 0 ] && [ "$(cat "${TMP}/i1")" = "$want1" ] && ok "a. 装过时：构建、组装 payload、打包、原地升级，不卸载" || bad "a. 装过时的顺序不对：$(cat "${TMP}/i1")"
 grep -q '主代理和设置都保留' "${TMP}/err" && ! grep -q '清空' "${TMP}/err" && ok "a. 装过时结尾提示主代理和设置都保留" || bad "a. 装过时的结尾提示不对：$(tail -1 "${TMP}/err")"
 dry REINSTALL_TEST_INSTALLED=0 >"${TMP}/i0"; rc=$?
 want0='RUN: scripts/dev/integrity-build.sh --dev
 RUN: scripts/dev/payload.sh
-RUN: scripts/dev/app-bundle.sh
+RUN: scripts/dev/app-bundle.sh --payload scripts/dev/out/payload
 RUN: scripts/m6/install/install.sh --check-only
 RUN: sudo scripts/m6/install/install.sh'
 [ $rc = 0 ] && [ "$(cat "${TMP}/i0")" = "$want0" ] && grep -q '没装过，跳过卸载' "${TMP}/err" && ok "a. 没装过时跳过卸载，检查后安装" || bad "a. 没装过时不对：$(cat "${TMP}/i0")"

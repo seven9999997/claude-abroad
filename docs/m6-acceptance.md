@@ -18,7 +18,7 @@
 
 | # | 完成标准 | 结论 | 依据 | 弱在哪里；这一版到此为止（以后如果购买账号从哪里接上） |
 |---|---|---|---|---|
-| 1 | 在全新的机器上拖入“应用程序”即可安装、使用 | **达到替代程度** + **待真机** | 开发安装脚本代替 DMG 和 SMAppService：`script:scripts/m6/install/install.sh#M6-11b`（安装后只读核对首次准备、完整性、回国拦截），`script:scripts/m6/install/selftest.sh#M6-11b`（在临时目录里真装真卸）；端到端 `script:scripts/m6/e2e/run.sh#I1` | 要从源码构建、要 sudo 执行脚本，非开发者用不了；只能装在执行脚本的那台 Mac 上；没有签名的更新通道（重装即升级）。这一版到此为止；以后如果购买账号，按 P1–P3 接上（安装位置和后台服务注册的接口见 m6-plan 第 8 节） |
+| 1 | 在全新的机器上拖入“应用程序”即可安装、使用 | **达到替代程度** + **待真机** | v0.71c：`scripts/dev/build-app.sh` 一条命令构建并放进“应用程序”，打开应用点“安装后台服务…”、输一次管理员密码；以后点“升级后台服务…”原地升级、主代理和设置保留；设置里“卸载 Claude 出国…”。安装逻辑只有一份（同一个 `install.sh`/`uninstall.sh`）：`script:scripts/m6/install/install.sh#M6-11b`（安装后只读核对首次准备、完整性、回国拦截），`script:scripts/m6/install/selftest.sh#M6-11b`（在临时目录里真装、真升级、真卸）；应用侧 `swift:serviceStates`、`swift:serviceCommandGolden`、`swift:serviceNoRunWithoutTap`；端到端 `script:scripts/m6/e2e/run.sh#I1` | 还是要从源码构建（`build-app.sh`），只能装在构建的那台 Mac 上；没有签名：应用包的内容可信程度等于用户账户本身（见第 7 节）；没有更新通道（重新构建、点“升级”）。这一版到此为止；以后如果购买账号，按 P1–P3 接上（安装位置和后台服务注册的接口见 m6-plan 第 8 节） |
 | 2 | 回国后 Claude 连不上 | **达到**（机制；每一道各自拦不住什么见第 4 节）+ **待真机**（对各程序是否有效） | 五道管控见第 4 节。第一道 `go:internal/resolverlock#TestWriteIdempotent`；第四道（v0.68 起可选、默认关，打开之后）`go:internal/daemon#TestClaudeProxyStateTable`；第五道 `go:internal/state#TestReturnBlockNoGap`、`go:internal/daemon#TestReturnBlockSwitch`；启用、停用、回国全流程不碰解析锁 `go:internal/daemon#TestResolverLockInDaemon`；回国时结束不了 Claude 就中止、什么都不改 `go:internal/daemon#TestRestoreLeftovers` | 解析锁对自带加密 DNS 的程序、开着别的代理软件时无效（R9、R18，`scripts/m6/resolver`）；第五道本机另有代理软件接管时拦不住；Anthropic 新增地址段要等新版本。对真实地址段的效果只能用发布构建验证（第 7 节“没有做”） |
 | 3 | 回国后 Claude 被打开后马上结束 | **达到替代程度** + **待真机** | 第三道：`go:internal/daemon#TestLaunchGuardRuleA`、`go:internal/claudeproc#TestGuardTermThenKill`；开发构建只针对测试目录 `go:internal/claudeproc#TestFakeDirGuard`；端到端 `script:scripts/m6/e2e/run.sh#L1` | 没有 Endpoint Security（P5），不能在程序运行之前拒绝：每 200 毫秒扫描、发现即结束，Claude 可能已经运行零点几秒（这一版的最终状态：Endpoint Security 要付费账号，这一版不做）；只结束签名确认过的进程，npm、Homebrew 装的 Claude Code 第三道不覆盖（靠第一、五道，第四道打开时还有第四道；v0.68 起第四道默认关）。端到端的开发构建只验证机制，对真实 Claude 的效果要发布构建（第 7 节） |
 | 4 | 一键卸载后恢复正常并完全清理 | **达到** + **待真机** | `go:internal/daemon#TestUninstallRestoresEverything`、`go:internal/daemon#TestUninstallFromEachState`、`go:internal/daemon#TestReturnBlockUninstall`（三种起点卸载后锚点空、引用全部释放、pf 回到安装前）、`go:internal/daemon#TestUninstalledRejectsChanges`；命令行 `go:cmd/abroad#TestCLIUninstall`；开发安装的卸载和快照对照 `script:scripts/m6/e2e/run.sh#U1` | 第 3 步“注销后台服务、删除专用用户和数据”由安装器完成（现在是开发安装的卸载脚本）；快照对照里 pf 是否启用那一行的格式没在真机核对过，认不出时记“无法判断”、不参与对照；卸载后，Claude 出国的 pf 启用引用和锚点规则都不留下；pf 是否启用还受系统和别的软件持有的引用影响。卸载对照时，如果安装前没启用、卸载后启用，而启用引用都属于别的程序、我们的锚点是空的，这不算不一致，会写一条说明（2026-11-27 真机，设计 v0.70a） |
@@ -136,6 +136,12 @@
 | P8 | 系统授权（M5-3） | **这一版以系统密码框代替**（B0，v0.71b）：以 root 运行已安装的、属主 root 的命令行；不需要账号 | 终端退路保留（“在终端执行”） |
 
 **替代做法**（m6-plan 第 2 节 S1–S7）：开发安装代替 DMG 和 SMAppService（S1）；只有第一、三、四、五道（S2；第四道 v0.68 起可选、默认关）；SHA-256 清单（S3）；对端 uid 三级权限（S4、S5）；手动重装代替自动更新（S6）；不分发、自行构建（S7）。**用户决定不购买付费开发者账号，第 1 节完成标准里第 1、5 两条以替代做法为最终状态**，第 3 条同样以替代做法为最终状态（没有第二道）。
+
+**应用里安装、升级、卸载的边界**（阶段 B，v0.71c）：
+- 这一版没有签名：应用包属于用户账户、用户可写，“包里是不是原版”的信任程度等于用户账户本身，和在用户可写的仓库里 sudo 运行 `install.sh` 相同。
+- 系统密码框拦住的是别的程序悄悄完成安装或升级；拦不住以用户权限运行的程序在用户点“执行”之前改掉包里的东西（连同 `payload.sha256` 一起改）——防住它需要签名，这一版不做。
+- 提权后先把 payload 复制到 root 所有的临时目录再核对 `payload.sha256`（`script:scripts/m6/install/selftest.sh#u`）：只防“检查之后、执行之前被换掉”，只证明副本内部一致。
+- 卸载运行的是已安装的、root 所有的 `uninstall.sh`（不用应用包里的），执行前检查属主和权限；不受应用包被改的影响。
 
 **应用里执行敏感操作的边界**（B0，v0.71b）：
 - 同一次打开应用后，系统认证一次约 5 分钟内再提权不弹密码框（系统行为）；每次敏感操作都先有应用自己的确认框，只有点“执行”才调用提权（`swift:noRunWithoutTap`、`swift:privilegedSourceRules`）。这 5 分钟里，能往应用进程里注入代码的用户权限恶意程序可以借用——没有签名、没有加固运行时，这一版防不住。

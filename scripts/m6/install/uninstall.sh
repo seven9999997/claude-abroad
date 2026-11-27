@@ -23,6 +23,8 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+# --yes（v0.71c）：应用经管理员授权运行时没有终端、也没有 SUDO_USER（确认已经在应用里做过）；仍要求 root。
+[ "${YES}" = 1 ] && M6I_FROM=1
 UARGS=()
 [ "${YES}" = 1 ] && UARGS+=(--yes)
 UARGS+=(uninstall)

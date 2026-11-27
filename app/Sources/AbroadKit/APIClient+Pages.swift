@@ -138,6 +138,8 @@ extension APIClient {
     public func restorePreview() async -> Outcome<ClaudeprocPreview> { await get("/v1/restore/preview") }
     /// 启用的预览（只读，v0.71b）：地区会不会变、会变时要结束的 Claude 进程、现在能不能启用。不签发确认码。
     public func enablePreview() async -> Outcome<DaemonEnablePreview> { await get("/v1/enable/preview") }
+    /// 卸载的预览（只读，v0.71c）：内容同卸载第一步（要结束的 Claude 进程、在运行的浏览器、要删除的东西）。不签发确认码。
+    public func uninstallPreview() async -> Outcome<DaemonUninstallPreviewView> { await get("/v1/uninstall/preview") }
 
     // 引擎与虚拟机
     public func engines() async -> Outcome<DaemonEnginesView> { await get("/v1/engines") }
