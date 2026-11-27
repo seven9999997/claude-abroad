@@ -180,6 +180,10 @@ type STUNDeps struct {
 	// Resolve 把服务器的域名解析成真实地址（经主代理的 DoH）；nil 时按域名拨（经系统解析器得到 fake 地址，主代理收到的是域名）。
 	// 2026-11-27 真机：主代理是“中转 → SOCKS5”的链路时，目标是域名的 UDP 没有应答（目标是 IP 的照常），08 无法判断、启用回滚。
 	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
+	// ProxiedUDP 返回网络栈经主代理开的 UDP 流的累计数（nil 时不用）。全部没有应答时，这一轮里它涨了，说明 STUN 请求确实
+	// 经主代理发出去了：主代理不转发这类 UDP（2026-11-27 真机：链式主代理只有 DNS 的 UDP 有应答），WebRTC 拿不到地址，
+	// 也没有绕开主代理的路（01 已通过），判通过；没涨（请求根本没发出去，例如探测窗口没开）仍是无法判断。
+	ProxiedUDP func() int64
 }
 
 // stunTarget 把 "host:port" 换成真实地址（Resolve 为 nil、已经是 IP 时原样返回）。
@@ -214,6 +218,10 @@ func STUN(d STUNDeps) Item {
 			to = 3 * time.Second
 		}
 		var got []netip.Addr
+		var before int64
+		if d.ProxiedUDP != nil {
+			before = d.ProxiedUDP()
+		}
 		for _, s := range servers {
 			target, ok := stunTarget(ctx, d.Resolve, s)
 			if !ok {
@@ -230,6 +238,9 @@ func STUN(d STUNDeps) Item {
 		if len(got) == 0 {
 			if d.UDPUnsupported != nil && d.UDPUnsupported() {
 				return pass("主代理不支持 UDP，STUN 全部没有应答（WebRTC 不会泄漏）")
+			}
+			if d.ProxiedUDP != nil && d.ProxiedUDP() > before {
+				return pass("STUN 请求都经主代理发出、没有应答（主代理不转发这类 UDP）：WebRTC 拿不到地址，不会泄漏")
 			}
 			return unk("无法判断：STUN 服务器都没有应答")
 		}

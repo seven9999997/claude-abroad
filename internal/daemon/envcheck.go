@@ -175,7 +175,13 @@ func (d *Daemon) envItems(e *EnvDeps) []envcheck.Item {
 		envcheck.ExitRegion(exit),
 		envcheck.Timezone(fixer),
 		envcheck.Language(fixer),
-		envcheck.STUN(envcheck.STUNDeps{Servers: e.StunServers, Dial: e.Probe, Real: d.realIP, Exit: exit, UDPUnsupported: udpOff, Timeout: e.StunTimeout, Resolve: e.StunResolve}),
+		envcheck.STUN(envcheck.STUNDeps{Servers: e.StunServers, Dial: e.Probe, Real: d.realIP, Exit: exit, UDPUnsupported: udpOff, Timeout: e.StunTimeout, Resolve: e.StunResolve,
+			ProxiedUDP: func() int64 {
+				if s.Data == nil {
+					return 0
+				}
+				return s.Data.OpenCounts()[rules.ExitMain].UDP
+			}}),
 		envcheck.ClaudeReach(envcheck.ReachDeps{Open: open, RootCAs: e.RootCAs, Timeout: e.ReachTimeout,
 			Exits: func() []string { return envcheck.ClaudeExits(d.currentRules(), exitUp) }}),
 		envcheck.ClaudeProcEnv(procEnvs),

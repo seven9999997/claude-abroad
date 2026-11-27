@@ -614,3 +614,19 @@ func TestSTUNResolvesToIP(t *testing.T) {
 	o = STUN(STUNDeps{Servers: []string{"s2:3478"}, Dial: dial, Real: real, Exit: exit, Resolve: resolve, Timeout: 300 * time.Millisecond}).Run(bg)
 	want(t, "解析失败跳过", o, exitcheck.Unknown)
 }
+
+// 全部没有应答时：请求确实经主代理发出（开流计数涨了）判通过；没发出去（计数没涨）仍是无法判断。
+func TestSTUNSilentButProxied(t *testing.T) {
+	exit := probeOf(rep(nil, "203.0.113.7", "US", ""), nil)
+	var opens atomic.Int64
+	silent := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		opens.Add(1) // 网络栈经主代理开了一条 UDP 流，但没有应答
+		var d net.Dialer
+		return d.DialContext(ctx, "udp", "127.0.0.1:9") // discard：不回
+	}
+	o := STUN(STUNDeps{Servers: []string{"s:1"}, Dial: silent, Exit: exit, ProxiedUDP: opens.Load, Timeout: 200 * time.Millisecond}).Run(bg)
+	want(t, "经主代理发出、没有应答", o, exitcheck.Pass)
+	var none atomic.Int64
+	o = STUN(STUNDeps{Servers: []string{"s:1"}, Dial: silent, Exit: exit, ProxiedUDP: none.Load, Timeout: 200 * time.Millisecond}).Run(bg)
+	want(t, "没有经主代理发出", o, exitcheck.Unknown)
+}
