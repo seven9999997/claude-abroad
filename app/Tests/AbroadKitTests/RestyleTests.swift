@@ -57,9 +57,8 @@ private func codeOnly(_ src: String) -> [String] {
 }
 
 /// 视图里不出现写死的色值和直接颜色：颜色只从 Palette.swift 取（配色文件除外）。
-/// 设置窗口（SettingsView.swift）这次不改（另一个任务在改它），暂时列为例外，等那边合并后改样式时去掉这条例外。
 @Test func viewsTakeColorsFromPaletteOnly() throws {
-    let exempt: Set<String> = ["Palette.swift", "SettingsView.swift"]
+    let exempt: Set<String> = ["Palette.swift"]
     let dir = repoRoot.appendingPathComponent("app/Sources/ClaudeAbroad")
     let files = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasSuffix(".swift") }
     #expect(files.contains("Palette.swift"))
