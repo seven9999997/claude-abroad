@@ -2,6 +2,7 @@
 // 只用 Command Line Tools 构建：不用 SwiftUI 的宏（@State、@Entry、#Preview、@Observable），状态用 ObservableObject。
 // 会话里只编译、不启动（走查交用户，见 docs/m5-walkthrough-draft.md）。
 import AbroadKit
+import AppKit
 import SwiftUI
 
 @main
@@ -22,16 +23,20 @@ struct ClaudeAbroadApp: App {
     @StateObject private var diagnostics = DiagnosticsExportModel(client: ClaudeAbroadApp.client, saver: SavePanelDiagnosticsSaver())
 
     var body: some Scene {
+        // 主窗口放在第一个：启动时自动打开（第一级走查 L1-01）。只放在菜单栏时，刘海屏上图标可能被挡住，打开后什么都看不到。
+        Window(L10n.appName, id: "main") {
+            MainWindow(status: model, setup: setup, main: main, exits: exits, apps: apps, env: env, region: region, engines: engines, flow: ClaudeAbroadApp.flow)
+                .frame(minWidth: 620, minHeight: 520)
+                .task {
+                    model.start()
+                    NSApplication.shared.activate(ignoringOtherApps: true) // 从终端启动时切到前台
+                }
+        }
         MenuBarExtra {
             MenuContent(model: model)
         } label: {
             Image(systemName: model.phase.symbol)
                 .accessibilityLabel(Text(L10n.titleLine(model.phase.title)))
-                .task { model.start() }
-        }
-        Window(L10n.appName, id: "main") {
-            MainWindow(status: model, setup: setup, main: main, exits: exits, apps: apps, env: env, region: region, engines: engines, flow: ClaudeAbroadApp.flow)
-                .frame(minWidth: 620, minHeight: 520)
                 .task { model.start() }
         }
         Settings {
