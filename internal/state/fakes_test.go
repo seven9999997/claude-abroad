@@ -210,6 +210,10 @@ func (b *bed) onEvent(e Event) { b.mu.Lock(); b.events = append(b.events, e); b.
 // newProcStore 建一个“进程”的 Store（带时间线和注入钩子），并拿到跨进程锁。
 func (b *bed) newProcStore() (*Store, func()) {
 	st := NewStore(b.dir)
+	// 测试台不做目录 fsync：崩溃在这里是内存里模拟的（丢掉进程对象），不靠断电，目录落盘与否不影响任何断言；
+	// 这个包的耗时主要花在 fsync 上（macOS 上是整盘的 F_FULLFSYNC，并行也分摊不开），去掉这一半能省四成。
+	// 目录 fsync 本身及其失败的处理由 file_test.go 的 Save 测试和 TestEnablingDirSyncFailure（自己再换掉这个钩子）覆盖。
+	st.syncDir = func(string) error { return nil }
 	st.afterSave = func(f File) {
 		b.mu.Lock()
 		b.writes++

@@ -251,6 +251,7 @@ func TestEnableFailFromRestored(t *testing.T) {
 	t.Parallel() // 独立的测试台；耗时主要是等待（补齐四第 0 步）
 	for _, fault := range enableFaults(t, false) {
 		t.Run(fault.name, func(t *testing.T) {
+			t.Parallel() // 每例一个独立的测试台
 			b := newBed(t)
 			fault.inject(b)
 			err := b.m.Enable(bg)
@@ -327,6 +328,7 @@ func TestEnableFailFromDisabled(t *testing.T) {
 	t.Parallel() // 独立的测试台；耗时主要是等待（补齐四第 0 步）
 	for _, fault := range enableFaults(t, true) {
 		t.Run(fault.name, func(t *testing.T) {
+			t.Parallel() // 每例一个独立的测试台
 			b := newBed(t)
 			mustOK(t, b.m.Enable(bg))
 			mustOK(t, b.m.Disable(bg, false))
@@ -368,6 +370,7 @@ func TestRollbackFailure(t *testing.T) {
 	for _, rf := range rollbackFaults {
 		for _, then := range []string{"Restore", "Enable"} {
 			t.Run(rf.name+"/"+then, func(t *testing.T) {
+				t.Parallel() // 每例一个独立的测试台
 				b := newBed(t)
 				b.exit.fail = errInjected // 启用在出口检查失败
 				rf.inject(b)
@@ -427,11 +430,13 @@ func TestRestoreStepFailure(t *testing.T) {
 		k := i + 1
 		faults = append(faults, enableFault{"还原第 " + itoa(k) + " 个服务", func(b *bed) { b.failNthNet(sysnet.OpIPv6Restore, k) }})
 	}
-	for k := 1; k <= restoreWrites(t); k++ {
+	nWrites := restoreWrites(t) // 只量一次（原来每例里量两次，各要一整轮启用和恢复）
+	for k := 1; k <= nWrites; k++ {
 		faults = append(faults, enableFault{"第 " + itoa(k) + " 次状态文件写入", func(b *bed) { b.failNthWrite(k) }})
 	}
 	for _, fault := range faults {
 		t.Run(fault.name, func(t *testing.T) {
+			t.Parallel() // 每例一个独立的测试台
 			b := newBed(t)
 			mustOK(t, b.m.Enable(bg))
 			fault.inject(b)
@@ -450,8 +455,8 @@ func TestRestoreStepFailure(t *testing.T) {
 			if b.gate.IsOpen() {
 				t.Fatal("闸门没关")
 			}
-			flushed := fault.name == "第 "+itoa(restoreWrites(t)-1)+" 次状态文件写入" ||
-				fault.name == "第 "+itoa(restoreWrites(t))+" 次状态文件写入"
+			flushed := fault.name == "第 "+itoa(nWrites-1)+" 次状态文件写入" ||
+				fault.name == "第 "+itoa(nWrites)+" 次状态文件写入"
 			if !flushed && !b.fpf.Active(pf.DefaultAnchor) {
 				t.Fatal("pf 应仍生效")
 			}

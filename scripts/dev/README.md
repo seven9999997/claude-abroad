@@ -137,7 +137,19 @@ ABROAD_FULL_EXHAUSTIVE=1 go test -timeout 30m ./internal/... ./cmd/... -count=1
 ABROAD_FULL_EXHAUSTIVE=1 go test -timeout 30m -race -tags abroaddev ./internal/... ./cmd/... -count=1
 ```
 
-默认命令（CLAUDE.md 里的 `go test ./internal/...`）不带开关，状态机包要在默认的 10 分钟时限内跑完。以后再往这个包里加穷举，先量耗时。
+默认命令（CLAUDE.md 里的 `go test ./internal/...`）不带开关，状态机包要在默认的 10 分钟时限内跑完，上限 400 秒。以后再往这个包里加穷举，先量耗时。
+
+两种跑法各跑什么、各要多久（这台 8 核开发 Mac，2026-11-27 实测；负载见 docs/PROGRESS.md）：
+
+| 命令 | 跑什么 | 耗时 |
+|---|---|---|
+| `go test ./internal/state`（默认） | 全部测试；崩溃与重启穷举里“允许局域网”关的两组只跑缩减集，其余穷举全量；`TestSimBackendSuite` 用模拟器后端把整个包再跑一遍 | 约 230–260 秒（改前 395–419 秒） |
+| `ABROAD_FULL_EXHAUSTIVE=1 go test -race -tags abroaddev -timeout 30m ./internal/state` | 同上，“允许局域网”关的两组也全量，带竞态检测 | 约 250 秒 |
+| `ABROAD_FULL_EXHAUSTIVE=1 go test -timeout 30m ./internal/state` | 同上，不带竞态检测 | 约 330 秒（实测时负载升到 78；耗时随磁盘忙闲波动，和是否带竞态检测关系不大） |
+
+这个包的耗时几乎全在状态文件的 fsync 上（macOS 上 `File.Sync` 是整盘的 F_FULLFSYNC，CPU 只用两成多，加并行度也分摊不开）。
+所以测试台（`fakes_test.go` 的 `newProcStore`）不做目录 fsync（崩溃是内存里模拟的，与落盘无关）；文件本身的 fsync 照做。
+失败注入和崩溃穷举的每一例都是独立的测试台，都标了 `t.Parallel()`；`TestSimBackendSuite` 起的子进程也并行跑。
 
 ## Mac 应用的测试（app-test.sh）
 
