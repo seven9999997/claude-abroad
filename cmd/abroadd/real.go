@@ -279,8 +279,8 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		},
 		Exit: daemon.FullExitCheck{Checker: checker, Baseline: baseline}, Baseline: baseline,
 		Teardown: dp, Killer: claude, Claude: claude,
-		VMRegion: regionVM(f, logger),         // 地区（M4-5）：Mac 一侧经 netR 执行，登录用户读 /dev/console 的属主
-		Env:      realEnvDeps(claude, direct), // 环境检测（M4-6a、6b）
+		VMRegion: regionVM(f, logger),             // 地区（M4-5）：Mac 一侧经 netR 执行，登录用户读 /dev/console 的属主
+		Env:      realEnvDeps(claude, direct, dp), // 环境检测（M4-6a、6b）
 		// Claude 域名解析锁（M6-3）：状态接口和冲突检查读它；写入和删除不在这里。
 		// 启动管控（解析锁、托管设置、第三层、首次准备、本机代理端口）只有带 --launch-control 才接（M6-4b-1 返工）。
 		ResolverLock: ctl.lock,
@@ -338,7 +338,7 @@ func (s selfIdent) IsSelf(ctx context.Context, network string, src, dst netip.Ad
 }
 
 // realEnvDeps 是真实模式的环境检测依赖（M4-6a、6b）。第 11 项由 NewRealSystem 接上冲突检查。
-func realEnvDeps(claude *claudeproc.Service, direct *directdial.Client) *daemon.EnvDeps {
+func realEnvDeps(claude *claudeproc.Service, direct *directdial.Client, dp *daemon.DataPlane) *daemon.EnvDeps {
 	e := &daemon.EnvDeps{
 		// 06：连一个只有 IPv6 的地址（公共解析器的 IPv6 地址，443）。真实模式下系统直接拒绝或被 pf 拦住，不经网络栈。
 		DialV6: func(ctx context.Context) error {
@@ -353,9 +353,10 @@ func realEnvDeps(claude *claudeproc.Service, direct *directdial.Client) *daemon.
 		Resolve: func(ctx context.Context, name string) ([]netip.Addr, error) {
 			return net.DefaultResolver.LookupNetIP(ctx, "ip4", name)
 		},
-		// 07 后半：经我们的 DNS 查回显解析器地址的 TXT 记录（经主代理的 DoH 上游）。
+		// 07 后半：经主代理的 DoH 查回显解析器地址的 TXT 记录。在 abroadd 进程里直接查（dp.ProbeTXT），不经系统解析器：
+		// 启用第 ⑦ 步闸门还关着，经系统解析器的查询会被我们的 DNS 答 SERVFAIL（2026-11-27 真机）。
 		Echo: func(ctx context.Context) (netip.Addr, error) {
-			txts, err := net.DefaultResolver.LookupTXT(ctx, "o-o.myaddr.l.google.com")
+			txts, err := dp.ProbeTXT(ctx, "o-o.myaddr.l.google.com")
 			if err != nil {
 				return netip.Addr{}, err
 			}
@@ -388,6 +389,8 @@ func realEnvDeps(claude *claudeproc.Service, direct *directdial.Client) *daemon.
 		// 15、16：当前登录用户（/dev/console 的属主）的主目录。
 		Home: console.HomeDir, // M5-5：由控制台用户的 uid 查出（和冲突检查同一个取法）
 	}
+	// 08：STUN 服务器先经主代理的 DoH 解析成真实地址再拨（目标是域名的 UDP 在链式主代理上没有应答，2026-11-27 真机）。
+	e.StunResolve = dp.ProbeA
 	// 08 的本机真实公网 IP：经直连拨号模块按域名取一个连到 STUN 服务器的 UDP 连接（只在内存里）。
 	if direct != nil {
 		e.RealDial = func(ctx context.Context) (net.Conn, error) {

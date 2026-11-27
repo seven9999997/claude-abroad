@@ -177,6 +177,25 @@ type STUNDeps struct {
 	Exit           *ExitProbe
 	UDPUnsupported func() bool // 主代理已知不支持 UDP
 	Timeout        time.Duration
+	// Resolve 把服务器的域名解析成真实地址（经主代理的 DoH）；nil 时按域名拨（经系统解析器得到 fake 地址，主代理收到的是域名）。
+	// 2026-11-27 真机：主代理是“中转 → SOCKS5”的链路时，目标是域名的 UDP 没有应答（目标是 IP 的照常），08 无法判断、启用回滚。
+	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
+}
+
+// stunTarget 把 "host:port" 换成真实地址（Resolve 为 nil、已经是 IP 时原样返回）。
+func stunTarget(ctx context.Context, resolve func(context.Context, string) ([]netip.Addr, error), s string) (string, bool) {
+	host, port, err := net.SplitHostPort(s)
+	if err != nil || resolve == nil {
+		return s, err == nil
+	}
+	if _, err := netip.ParseAddr(host); err == nil {
+		return s, true
+	}
+	addrs, err := resolve(ctx, host)
+	if err != nil || len(addrs) == 0 {
+		return "", false
+	}
+	return net.JoinHostPort(addrs[0].Unmap().String(), port), true
 }
 
 // STUN 是 08 WebRTC（硬性，要发网络探测）。
@@ -196,7 +215,11 @@ func STUN(d STUNDeps) Item {
 		}
 		var got []netip.Addr
 		for _, s := range servers {
-			c, err := dial(ctx, "udp", s)
+			target, ok := stunTarget(ctx, d.Resolve, s)
+			if !ok {
+				continue
+			}
+			c, err := dial(ctx, "udp", target)
 			if err != nil {
 				continue
 			}

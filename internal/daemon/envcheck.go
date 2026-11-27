@@ -53,6 +53,8 @@ type EnvDeps struct {
 	// StunServers 覆盖 08 的服务器（nil 用默认）；RealDial 经直连拨号模块取一个连到 STUN 服务器的 UDP 连接（本机真实 IP）。
 	StunServers []string
 	RealDial    func(ctx context.Context) (net.Conn, error)
+	// StunResolve 把 08 的 STUN 服务器域名解析成真实地址（经主代理的 DoH；nil 时按域名拨）。
+	StunResolve func(ctx context.Context, host string) ([]netip.Addr, error)
 	// ProcEnvs 列出 Claude 根进程的环境（12、17）。
 	ProcEnvs envcheck.ProcEnvs
 	// Home 是当前登录用户的主目录（15、16）。
@@ -173,7 +175,7 @@ func (d *Daemon) envItems(e *EnvDeps) []envcheck.Item {
 		envcheck.ExitRegion(exit),
 		envcheck.Timezone(fixer),
 		envcheck.Language(fixer),
-		envcheck.STUN(envcheck.STUNDeps{Servers: e.StunServers, Dial: e.Probe, Real: d.realIP, Exit: exit, UDPUnsupported: udpOff, Timeout: e.StunTimeout}),
+		envcheck.STUN(envcheck.STUNDeps{Servers: e.StunServers, Dial: e.Probe, Real: d.realIP, Exit: exit, UDPUnsupported: udpOff, Timeout: e.StunTimeout, Resolve: e.StunResolve}),
 		envcheck.ClaudeReach(envcheck.ReachDeps{Open: open, RootCAs: e.RootCAs, Timeout: e.ReachTimeout,
 			Exits: func() []string { return envcheck.ClaudeExits(d.currentRules(), exitUp) }}),
 		envcheck.ClaudeProcEnv(procEnvs),

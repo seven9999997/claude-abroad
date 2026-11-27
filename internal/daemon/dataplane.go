@@ -41,8 +41,12 @@ type DataPlane struct {
 	pool   *fakedns.Pool
 	srv    *fakedns.Server
 	doh    *fakedns.DoHUpstream
-	proxy  *stack.Proxy
-	gate   *lateGate
+	// probeDoH 只给环境检测用（07 回显、08 解析 STUN 服务器）：闸门开着或探测窗口开着时都查。启用第 ⑦ 步时闸门还关着，
+	// 经系统解析器的查询会被我们的 DNS 答 SERVFAIL（2026-11-27 真机：07、08 无法判断、启用回滚）。只在 abroadd 进程里调用，
+	// 别的应用的 DNS 仍按闸门。
+	probeDoH *fakedns.DoHUpstream
+	proxy    *stack.Proxy
+	gate     *lateGate
 
 	opens atomic.Int64 // 经 Opener 开流的次数（测试和诊断用）
 
@@ -87,6 +91,61 @@ type lateGate struct{ v atomic.Pointer[GateView] }
 func (g *lateGate) Open() bool {
 	v := g.v.Load()
 	return v != nil && v.Open()
+}
+
+// probeOrOpen 在闸门开着或探测窗口开着时算开（只给 probeDoH 用）。
+type probeOrOpen struct{ g *lateGate }
+
+func (p probeOrOpen) Open() bool { return p.g.Open() || p.g.ProbeOpen() }
+
+// ProbeLookup 经主代理的 DoH 查 name 的 qtype 记录（只给环境检测用：探测窗口开着时闸门关着也查），返回应答里的记录。
+func (p *DataPlane) ProbeLookup(ctx context.Context, name string, qtype uint16) ([]dns.RR, error) {
+	q := new(dns.Msg)
+	q.SetQuestion(dns.Fqdn(name), qtype)
+	q.RecursionDesired = true
+	r, err := p.probeDoH.Exchange(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	if r.Rcode != dns.RcodeSuccess {
+		return nil, errors.New("DoH 应答：" + dns.RcodeToString[r.Rcode])
+	}
+	return r.Answer, nil
+}
+
+// ProbeTXT 经 ProbeLookup 查 TXT（07 的回显解析器地址）。
+func (p *DataPlane) ProbeTXT(ctx context.Context, name string) ([]string, error) {
+	rrs, err := p.ProbeLookup(ctx, name, dns.TypeTXT)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, rr := range rrs {
+		if t, ok := rr.(*dns.TXT); ok {
+			out = append(out, t.Txt...)
+		}
+	}
+	return out, nil
+}
+
+// ProbeA 经 ProbeLookup 查 A 记录（08 把 STUN 服务器解析成真实地址）。
+func (p *DataPlane) ProbeA(ctx context.Context, name string) ([]netip.Addr, error) {
+	rrs, err := p.ProbeLookup(ctx, name, dns.TypeA)
+	if err != nil {
+		return nil, err
+	}
+	var out []netip.Addr
+	for _, rr := range rrs {
+		if a, ok := rr.(*dns.A); ok {
+			if ip, ok := netip.AddrFromSlice(a.A.To4()); ok {
+				out = append(out, ip)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil, errors.New("没有 A 记录")
+	}
+	return out, nil
 }
 
 // ProbeOpen 是探测窗口（M4-6a，stack.ProbeGate）。
@@ -276,6 +335,7 @@ func NewDataPlane(op StreamOpener, upstream fakedns.Upstream) *DataPlane {
 	p.avail = &gatesm.ExitAvail{Clock: dpClock{p}, DownFor: ExitDownFor}
 	p.pool = fakedns.DefaultPool()
 	p.doh = &fakedns.DoHUpstream{Opener: countingOpener{p, "doh"}, Gate: p.gate}
+	p.probeDoH = &fakedns.DoHUpstream{Opener: countingOpener{p, "doh"}, Gate: probeOrOpen{p.gate}}
 	if upstream == nil {
 		upstream = p.doh
 	}

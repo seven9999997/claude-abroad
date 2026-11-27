@@ -588,3 +588,29 @@ func TestNetworkFaultsNeverFailHard(t *testing.T) {
 		}
 	}
 }
+
+// 2026-11-27 真机：链式主代理上目标是域名的 UDP 没有应答。设了 Resolve 时 08 先把服务器解析成真实地址、按 IP 拨；
+// 解析失败的服务器跳过（全部跳过时无法判断）。
+func TestSTUNResolvesToIP(t *testing.T) {
+	real := &RealIP{Dial: func(ctx context.Context) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "udp", fakeStun(t, "198.51.100.77:9"))
+	}}
+	real.Measure(bg)
+	exit := probeOf(rep(nil, "203.0.113.7", "US", ""), nil)
+	exit.LocateFn = func(context.Context, netip.Addr) (string, error) { return "US", nil }
+	srv := fakeStun(t, "203.0.113.9:1")
+	dial := localDial(map[string]string{"192.0.2.5:3478": srv}) // 只认解析后的 IP
+	resolve := func(_ context.Context, host string) ([]netip.Addr, error) {
+		if host == "s1" {
+			return []netip.Addr{netip.MustParseAddr("192.0.2.5")}, nil
+		}
+		return nil, errors.New("查不到")
+	}
+	o := STUN(STUNDeps{Servers: []string{"s1:3478"}, Dial: dial, Real: real, Exit: exit, Resolve: resolve, Timeout: 300 * time.Millisecond}).Run(bg)
+	want(t, "解析成 IP 后拨", o, exitcheck.Pass)
+	o = STUN(STUNDeps{Servers: []string{"s1:3478"}, Dial: dial, Real: real, Exit: exit, Timeout: 300 * time.Millisecond}).Run(bg)
+	want(t, "不解析时按域名拨（测试里拨不通）", o, exitcheck.Unknown)
+	o = STUN(STUNDeps{Servers: []string{"s2:3478"}, Dial: dial, Real: real, Exit: exit, Resolve: resolve, Timeout: 300 * time.Millisecond}).Run(bg)
+	want(t, "解析失败跳过", o, exitcheck.Unknown)
+}
