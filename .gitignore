@@ -41,6 +41,7 @@ node_modules/
 # 本机私人信息（会话日志、需要用户处理的事、隐私检查的本地模式）
 /docs/LOCAL.md
 /docs/LOCAL.patterns
+/docs/LOCAL-*.md
 
 # 本机工具的附件目录
 /.cc-connect/
