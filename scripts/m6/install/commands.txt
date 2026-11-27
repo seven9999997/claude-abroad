@@ -11,7 +11,7 @@ CHANGE ^cp <仓库>/scripts/dev/out/(integrity|payload)/(bin/(abroad|abroad-resc
 CHANGE ^mkdir -p /Library/Application Support/claude-abroad/scripts/m6/install /Library/Application Support/claude-abroad/scripts/lib$
 CHANGE ^cp <仓库>/(scripts/dev/out/payload/)?scripts/(m6/install/(uninstall|lib)\.sh|lib/common\.sh) /Library/Application Support/claude-abroad/scripts/(m6/install/(uninstall|lib)\.sh|lib/common\.sh)$
 CHANGE ^chown -R root:wheel /Library/Application Support/claude-abroad$
-CHANGE ^chmod -R go-w /Library/Application Support/claude-abroad$
+CHANGE ^chmod -R go-w,a\+rX /Library/Application Support/claude-abroad$
 CHANGE ^dscl \. -create /(Users|Groups)/_abroad( (PrimaryGroupID|UniqueID) [0-9]+| Password \*| UserShell /usr/bin/false| NFSHomeDirectory /var/empty| RealName claude-abroad| IsHidden 1)?$
 CHANGE ^dscacheutil -flushcache$
 CHANGE ^mkdir -p /Library/Application Support/claude-abroad/state/abroadd /Library/Application Support/claude-abroad/state/vm /Library/Application Support/claude-abroad/state/store /var/log/claude-abroad$
@@ -52,7 +52,7 @@ CHANGE ^chmod 700 /Library/Application Support/claude-abroad/prev$
 CHANGE ^cp /Library/LaunchDaemons/com\.claude-abroad\.dev\.(abroadd|guard)\.plist /Library/Application Support/claude-abroad/prev/plists/com\.claude-abroad\.dev\.(abroadd|guard)\.plist$
 CHANGE ^mv /Library/Application Support/claude-abroad/(bin|image|integrity\.json|build\.json|scripts) /Library/Application Support/claude-abroad/prev/(bin|image|integrity\.json|build\.json|scripts)$
 CHANGE ^chown -R root:wheel /Library/Application Support/claude-abroad/(bin|image|integrity\.json|build\.json|scripts)$
-CHANGE ^chmod -R go-w /Library/Application Support/claude-abroad/(bin|image|integrity\.json|build\.json|scripts)$
+CHANGE ^chmod -R go-w,a\+rX /Library/Application Support/claude-abroad/(bin|image|integrity\.json|build\.json|scripts)$
 CHANGE ^mv /Applications/ClaudeAbroad\.app /Library/Application Support/claude-abroad/prev/app\.app$
 CHANGE ^chown -R [^ /]+ /Applications/ClaudeAbroad\.app$
 CHANGE ^rm -rf /Library/Application Support/claude-abroad/prev$

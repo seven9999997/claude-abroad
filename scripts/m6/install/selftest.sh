@@ -659,6 +659,20 @@ if scripts/dev/payload.sh --src "$PV" --out "${TMP}/pl-nocgo" >/dev/null 2>"${TM
   grep -q '没有链接虚拟化框架' "${TMP}/pl-nocgo.err" && ok "vz. payload.sh 遇到没链接虚拟化框架的 abroad-vm 就失败" || bad "vz. payload.sh 的提示不对：$(cat "${TMP}/pl-nocgo.err")"
 fi
 
+# ---- 2026-11-27 真机：镜像是 0600 时，装上和升级后虚拟机（_abroad）也要读得到 ----
+readable() { local f m; for f in "$@"; do m=$(stat -f '%Lp' "$f"); [ $(( 0$m & 04 )) != 0 ] || { echo "$f $m"; return 1; }; done; }
+PM="${TMP}/src-0600"; cp -R "${SRC}" "$PM"; chmod 600 "$PM"/image/*
+IM=$(mkcase)
+if M6I_TEST_DIR="$IM" M6I_TEST_SRC="$PM" M6I_YES=1 bash "${INSTALL}" >/dev/null 2>"$IM/err"; then
+  if why=$(readable "$IM$I"/image/* "$IM$I"/bin/*); then ok "perm. 全新安装：源头镜像是 0600，装上后所有人可读（_abroad 读得到）"; else bad "perm. 全新安装后读不到：$why"; fi
+else bad "perm. 全新安装失败：$(tail -2 "$IM/err")"; fi
+P2M="${TMP}/p2-0600"; cp -R "$P2" "$P2M"; chmod 600 "$P2M"/image/*
+UM=$(mkcase); setup_old "$UM" && {
+  if upg "$UM" "$P2M" "$ST_R"; then
+    if why=$(readable "$UM$I"/image/* "$UM$I"/bin/*); then ok "perm. 原地升级：新镜像是 0600，升级后所有人可读"; else bad "perm. 升级后读不到：$why"; fi
+  else bad "perm. 升级失败：$(tail -2 "$UM/up.err")"; fi
+}
+
 # 2026-11-27：真机路径上“是不是开发构建”的判断（测试模式跳过它），由公共函数的自测覆盖
 scripts/lib/buildcheck-selftest.sh >"${TMP}/bc" 2>&1 && ok "“是不是开发构建”的判断（$(grep -c '^✓' "${TMP}/bc") 项，含退出码 2 的假程序）" || bad "“是不是开发构建”的判断：$(grep '^✗' "${TMP}/bc" | head -3)"
 

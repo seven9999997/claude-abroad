@@ -337,7 +337,8 @@ do_upgrade() {
   # 只改新放的这几项的属主和权限（状态目录里 vm/ 属 _abroad，不能整个安装目录 chown -R）
   for it in "${ITEMS[@]}"; do
     m6i_do chown -R root:wheel "$(P "${INST}/${it}")" || m6i_die "改属主失败"
-    m6i_do chmod -R go-w "$(P "${INST}/${it}")" || m6i_die "改权限失败"
+    # a+rX：虚拟机以 _abroad 运行，要能读镜像（构建出来的镜像是 0600；2026-11-27 真机：挂载 rootfs.img 报 Operation not supported）
+    m6i_do chmod -R go-w,a+rX "$(P "${INST}/${it}")" || m6i_die "改权限失败"
   done
 
   # ---- 6. plist：内容变了才换（guard 换了时像开机一样运行一次）----
@@ -466,7 +467,8 @@ m6i_do cp "${SRC}/integrity.json" "$(P "${INST}/integrity.json")" || m6i_die "�
 m6i_do cp "${SRC}/build.json" "$(P "${INST}/build.json")" || m6i_die "复制版本号失败"
 place_scripts || m6i_die "复制安装目录里的脚本失败"
 m6i_do chown -R root:wheel "$(P "${INST}")"
-m6i_do chmod -R go-w "$(P "${INST}")"
+# a+rX：虚拟机以 _abroad 运行，要能读镜像（构建出来的镜像是 0600；2026-11-27 真机）。这时安装目录里还没有状态目录。
+m6i_do chmod -R go-w,a+rX "$(P "${INST}")"
 
 # ---- 专用用户（虚拟机以它运行，pf 只放行它的出站）----
 id=$(m6i_free_id) || m6i_die "400–499 内没有空闲的 UID"
