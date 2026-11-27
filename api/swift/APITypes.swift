@@ -45,6 +45,11 @@ public enum ApiErrorCode: String, Codable, Sendable, CaseIterable {
     case `internal` = "internal"
     case uninstalled = "uninstalled"
     case rulesChanged = "rules_changed"
+    case vmUnavailable = "vm_unavailable"
+    case mainPushFailed = "main_push_failed"
+    case mainUnreachable = "main_unreachable"
+    case noMainSelected = "no_main_selected"
+    case stateIncomplete = "state_incomplete"
 }
 
 public struct ApiErrorBody: Codable, Sendable {
@@ -226,10 +231,23 @@ public struct DaemonBaselineSummary: Codable, Sendable {
     public var rule: String
     public var country: String
     public var timezone: String?
+    public var borrowed: Bool?
     enum CodingKeys: String, CodingKey {
         case rule = "rule"
         case country = "country"
         case timezone = "timezone"
+        case borrowed = "borrowed"
+    }
+}
+
+public struct DaemonBorrowView: Codable, Sendable {
+    public var op: String
+    public var step: String
+    public var since: String
+    enum CodingKeys: String, CodingKey {
+        case op = "op"
+        case step = "step"
+        case since = "since"
     }
 }
 
@@ -614,11 +632,13 @@ public struct DaemonMainProxyResult: Codable, Sendable {
     public var region: RegionTarget?
     public var synced: Bool
     public var note: String?
+    public var borrowed: Bool?
     enum CodingKeys: String, CodingKey {
         case baseline = "baseline"
         case region = "region"
         case synced = "synced"
         case note = "note"
+        case borrowed = "borrowed"
     }
 }
 
@@ -843,6 +863,7 @@ public struct DaemonStatus: Codable, Sendable {
     public var direct: DaemonDirectStatus?
     public var gate: GatesmStatus
     public var vmManager: VmmgrStatus?
+    public var borrow: DaemonBorrowView?
     public var resolverLock: ResolverlockStatus?
     public var claudeCode: DaemonClaudeProxyStatus?
     public var integrity: IntegrityResult?
@@ -871,6 +892,7 @@ public struct DaemonStatus: Codable, Sendable {
         case direct = "direct"
         case gate = "gate"
         case vmManager = "vm_manager"
+        case borrow = "borrow"
         case resolverLock = "resolver_lock"
         case claudeCode = "claude_code"
         case integrity = "integrity"
@@ -1180,12 +1202,14 @@ public struct VmmgrStatus: Codable, Sendable {
     public var restarts: Int64
     public var failures: Int64
     public var lastError: String?
+    public var borrowed: Bool?
     enum CodingKeys: String, CodingKey {
         case managed = "managed"
         case phase = "phase"
         case restarts = "restarts"
         case failures = "failures"
         case lastError = "last_error"
+        case borrowed = "borrowed"
     }
 }
 

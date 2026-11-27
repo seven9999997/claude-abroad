@@ -10,6 +10,10 @@ struct EnginesPage: View {
                 CardSection(L10n.vmSection) {
                     if let m = model.view?.vmManager {
                         CardRow { Text(L10n.vmManagerLine(m.phase, m.restarts)) }
+                        if m.borrowed == true {
+                            RowSeparator()
+                            CardRow { ToneNote(tone: .attention, text: L10n.vmBorrowed, symbol: "clock") }
+                        }
                         if let e = m.lastError, !e.isEmpty {
                             RowSeparator()
                             CardRow { RowLabel(title: L10n.vmLastError); Text(e).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }

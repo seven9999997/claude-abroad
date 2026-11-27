@@ -208,6 +208,7 @@ func TestExitCheckAPI(t *testing.T) {
 	}
 	e.system = &sys
 	d := e.start(e.opts())
+	post(t, d, "/v1/enable", 200) // 借用虚拟机修复（v0.70）：未启用时不检查分流出口，先启用（断言不变）
 	if err := d.exits.Put(StoredExit{Tag: "wg", Kind: "wireguard", Conf: tWG}); err != nil {
 		t.Fatal(err)
 	}

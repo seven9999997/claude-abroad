@@ -42,7 +42,12 @@
           "unavailable",
           "internal",
           "uninstalled",
-          "rules_changed"
+          "rules_changed",
+          "vm_unavailable",
+          "main_push_failed",
+          "main_unreachable",
+          "no_main_selected",
+          "state_incomplete"
         ],
         "type": "string"
       },
@@ -346,6 +351,9 @@
       },
       "DaemonBaselineSummary": {
         "properties": {
+          "borrowed": {
+            "type": "boolean"
+          },
           "country": {
             "type": "string"
           },
@@ -359,6 +367,26 @@
         "required": [
           "country",
           "rule"
+        ],
+        "type": "object"
+      },
+      "DaemonBorrowView": {
+        "properties": {
+          "op": {
+            "type": "string"
+          },
+          "since": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "step": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "since",
+          "step"
         ],
         "type": "object"
       },
@@ -1025,6 +1053,9 @@
           "baseline": {
             "$ref": "#/components/schemas/DaemonBaselineSummary"
           },
+          "borrowed": {
+            "type": "boolean"
+          },
           "note": {
             "type": "string"
           },
@@ -1422,6 +1453,9 @@
         "properties": {
           "allow_lan": {
             "type": "boolean"
+          },
+          "borrow": {
+            "$ref": "#/components/schemas/DaemonBorrowView"
           },
           "browsers_left": {
             "items": {
@@ -2099,6 +2133,9 @@
       },
       "VmmgrStatus": {
         "properties": {
+          "borrowed": {
+            "type": "boolean"
+          },
           "failures": {
             "format": "int64",
             "type": "integer"

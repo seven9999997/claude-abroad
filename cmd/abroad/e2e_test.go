@@ -141,7 +141,6 @@ func TestEndToEnd(t *testing.T) {
 	if !strings.Contains(txt.out, "wg") || !strings.Contains(txt.out, "wg2") {
 		t.Fatal(txt.out)
 	}
-	both("exit check", "exit", "check", "wg")
 	keep(mustOK(t, r.runWith(in{stdin: wgConf}, "--json", "exit", "add", "wg3", "--kind", "wireguard", "--stdin"), "exit add --json"))
 	split("exit rm", []string{"exit", "rm", "wg2"}, []string{"exit", "rm", "wg3"})
 	// 分享链接（M6-6c）：只从文件或标准输入读；写在参数里的拒绝、不发请求；输出里不回显密码。
@@ -180,6 +179,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("status 应显示签名校验未启用的说明：%s", txt.out)
 	}
 	both("apps", "apps")
+	both("exit check", "exit", "check", "wg") // 借用虚拟机修复（v0.70）：未启用时不检查分流出口，挪到启用之后（断言不变）
 	txt, _ = both("engine ls", "engine", "ls")
 	if !strings.Contains(txt.out, "mihomo") {
 		t.Fatal(txt.out)

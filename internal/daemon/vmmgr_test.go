@@ -191,7 +191,7 @@ func TestVMManagerInDaemon(t *testing.T) {
 	}
 }
 
-// d：abroadd 正常退出时关闭自己拉起的虚拟机；状态文件是回国（全新安装）时不拉起。
+// d：abroadd 正常退出时关闭自己拉起的虚拟机；状态文件是回国（全新安装）时启动不拉起（不常驻）。
 func TestVMManagerShutdownAndRestored(t *testing.T) {
 	l := &dmLauncher{}
 	l.healthy.Store(true)
@@ -202,7 +202,7 @@ func TestVMManagerShutdownAndRestored(t *testing.T) {
 	d := de.start(o)
 	time.Sleep(100 * time.Millisecond)
 	if l.launches.Load() != 0 || status(t, d).VMManager.Phase != vmmgr.PhaseIdle {
-		t.Fatalf("回国状态不应拉起虚拟机（拉起 %d 次）", l.launches.Load())
+		t.Fatalf("回国状态启动时虚拟机不应常驻（拉起 %d 次）", l.launches.Load())
 	}
 	post(t, d, "/v1/enable", 200)
 	waitCond(t, "running", func() bool { return status(t, d).VMManager.Phase == vmmgr.PhaseRunning })

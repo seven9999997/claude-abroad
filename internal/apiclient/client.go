@@ -158,6 +158,12 @@ var ErrStreamClosed = errors.New("和后台服务的连接断开了")
 
 // Events 订阅事件流，每条事件调用 fn，直到 ctx 结束（返回 nil）或连接断开（返回 ErrStreamClosed 或连不上的错误）。
 func (c *Client) Events(ctx context.Context, fn func(Event)) error {
+	return c.EventsConnected(ctx, nil, fn)
+}
+
+// EventsConnected 同 Events；connected 非 nil 时在订阅建立（收到后台的“已连上”注释行）后调用一次。
+// 命令行据此先订阅、再发请求，不漏掉请求一开始的进度事件。
+func (c *Client) EventsConnected(ctx context.Context, connected func(), fn func(Event)) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://abroadd/v1/events", nil)
 	if err != nil {
 		return err
@@ -187,6 +193,10 @@ func (c *Client) Events(ctx context.Context, fn func(Event)) error {
 			}
 			ev = Event{}
 		case strings.HasPrefix(line, ":"):
+			if connected != nil {
+				connected()
+				connected = nil
+			}
 		case strings.HasPrefix(line, "id: "):
 			ev.ID = strings.TrimPrefix(line, "id: ")
 		case strings.HasPrefix(line, "event: "):

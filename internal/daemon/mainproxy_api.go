@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode"
 
+	"claude-abroad/internal/exitcheck"
 	"claude-abroad/internal/exitpolicy"
 	"claude-abroad/internal/gatesm"
 	"claude-abroad/internal/managedproxy"
@@ -273,18 +274,38 @@ func (d *Daemon) handleLANConfirm(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]int{"confirmed": n})
 }
 
+// handleMainCheck 是 POST /v1/main-proxy/check：只检查、不保存。未启用时借用虚拟机（docs/vm-borrow-plan.md v2）。
 func (d *Daemon) handleMainCheck(w http.ResponseWriter, r *http.Request) {
 	bs := d.opts.Sys.Baseline
 	if bs == nil {
 		writeJSON(w, http.StatusNotImplemented, errBody{"这个模式没有出口检查"})
 		return
 	}
-	base, err := bs.Probe(r.Context(), exitpolicy.Rule(r.URL.Query().Get("rule")))
+	rule := exitpolicy.Rule(r.URL.Query().Get("rule"))
+	var base exitcheck.Baseline
+	borrowed := false
+	err := d.withVM(r.Context(), "main_check", func(ctx context.Context, u vmUse) (string, error) {
+		borrowed = u.borrowed
+		if err := d.pushForProbe(ctx, "main_check", u); err != nil {
+			return "", err
+		}
+		d.borrowStep("main_check", BorrowChecking, "")
+		var err error
+		base, err = bs.Probe(ctx, rule)
+		return exitDone(base.Country, base.Timezone), err
+	}, nil)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, errBody{mainErr("检查主代理", err, "请检查主代理是否可用。").Error()})
+		var pf *ProbeFailure
+		if errors.As(err, &pf) && !pf.Unreachable && !pf.OnlyChannel {
+			writeJSON(w, http.StatusBadGateway, errBody{mainErr("检查主代理", err, "请检查主代理是否可用。").Error()})
+			return
+		}
+		writeVMErr(w, "检查主代理", err, http.StatusBadGateway)
 		return
 	}
-	writeJSON(w, http.StatusOK, summarizeBaseline(base))
+	sum := summarizeBaseline(base)
+	sum.Borrowed = borrowed
+	writeJSON(w, http.StatusOK, sum)
 }
 
 // handleMainSelect 是 PUT /v1/main-proxy：选节点（或链）并应用。未启用时只保存（启用时下发）；已启用时走 switchMain。
@@ -534,11 +555,12 @@ func (d *Daemon) ensureMainPushed(ctx context.Context) error {
 	}
 	d.exitPushMu.Lock()
 	defer d.exitPushMu.Unlock()
-	return d.pushManagedLocked(ctx, vm, "启用")
+	return d.pushManagedLocked(ctx, vm, "启用", true)
 }
 
-// pushManagedLocked 按保存的选择下发（调用方持有 exitPushMu）。
-func (d *Daemon) pushManagedLocked(ctx context.Context, vm MainProxyVM, why string) error {
+// pushManagedLocked 按保存的选择下发（调用方持有 exitPushMu）。persist 为假时只下发：不写“已下发”记录、不删待下发的
+// 选择、不发事件（借来的虚拟机马上要停，“已下发”是假话；docs/vm-borrow-plan.md v2）。
+func (d *Daemon) pushManagedLocked(ctx context.Context, vm MainProxyVM, why string, persist bool) error {
 	d.main.mu.Lock()
 	s, err := d.main.load()
 	d.main.mu.Unlock()
@@ -550,7 +572,7 @@ func (d *Daemon) pushManagedLocked(ctx context.Context, vm MainProxyVM, why stri
 		return mainErr("下发主代理", err, mainPlanHint(err))
 	}
 	if cur, err := vm.MainProxyDigest(ctx); err == nil && cur == p.digest {
-		if a, _ := d.main.applied(); a != nil && a.Digest == p.digest {
+		if a, _ := d.main.applied(); !persist || a != nil && a.Digest == p.digest {
 			return nil
 		}
 	}
@@ -561,6 +583,9 @@ func (d *Daemon) pushManagedLocked(ctx context.Context, vm MainProxyVM, why stri
 		return err
 	}
 	d.setPushedMain(p.store.Selected)
+	if !persist {
+		return nil
+	}
 	d.main.mu.Lock()
 	err = d.main.saveApplied(appliedRecord{Store: p.store, Digest: p.digest, Hops: p.hops})
 	_ = os.Remove(d.main.file("pending.json"))

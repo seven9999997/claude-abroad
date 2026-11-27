@@ -85,9 +85,9 @@ func ExitIP(p *ExitProbe) Item {
 		case ip.Result != exitcheck.Pass:
 			return unk("无法判断：取不到出口 IP")
 		case rule.Result == exitcheck.Fail:
-			return fail("出口变了，不符合出口变化规则（"+string(rule.Cause)+"）", "换回原来的节点，或重新“应用主代理”建立新的出口基准。")
+			return fail("出口变了，不符合出口变化规则", "换回原来的节点，或重新“应用主代理”建立新的出口基准。")
 		case rule.Result != exitcheck.Pass:
-			return unk("无法判断：没法和出口基准比对（" + string(rule.Cause) + "）")
+			return unk("无法判断：没法和出口基准比对（" + exitcheck.CauseText(rule.Cause) + "）")
 		}
 		return pass("出口符合出口变化规则")
 	}}

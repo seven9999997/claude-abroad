@@ -66,6 +66,8 @@ type Machine struct {
 	Admit func() error
 
 	busy atomic.Bool
+	// held：忙标记由 ExclusiveHold（借用虚拟机）持有。监护据此在回国拦截模式下照常巡检（docs/vm-borrow-plan.md v2 必须改 1）。
+	held atomic.Bool
 }
 
 func (m *Machine) now() time.Time {
@@ -117,6 +119,21 @@ func (m *Machine) Exclusive(fn func() error) error {
 		return err
 	}
 	defer m.unlock()
+	return fn()
+}
+
+// ExclusiveHold 和 Exclusive 一样在状态机的忙标记下执行 fn（和启用、停用、恢复、改规则互斥；忙时返回 ErrBusy，
+// 也过 Admit），另外置 held：持有期间监护抢不到忙标记时，状态是 RESTORED 且处在回国拦截模式就照常巡检。
+// 只给借用虚拟机用（internal/daemon/vmborrow.go，源码检查）：持有期间调用方不得改状态文件，不得碰 pf、路由、DNS、地区。
+func (m *Machine) ExclusiveHold(fn func() error) error {
+	if err := m.lockChange(); err != nil {
+		return err
+	}
+	m.held.Store(true)
+	defer func() {
+		m.held.Store(false) // 先清 held 再放锁
+		m.unlock()
+	}()
 	return fn()
 }
 

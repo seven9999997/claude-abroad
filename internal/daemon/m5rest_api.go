@@ -17,6 +17,7 @@ import (
 	"claude-abroad/internal/preflight"
 	"claude-abroad/internal/redact"
 	"claude-abroad/internal/stack"
+	"claude-abroad/internal/state"
 	"claude-abroad/internal/vmmgr"
 )
 
@@ -331,6 +332,9 @@ func (d *Daemon) handleEngines(w http.ResponseWriter, r *http.Request) {
 
 // ---- 单独检查一个出口（决定 5）----
 
+// ExitCheckNotEnabledText 是未启用时检查分流出口的回答。
+const ExitCheckNotEnabledText = "没有启用时不检查分流出口：启用后会自动检查"
+
 // ExitCheckMinInterval 是同一个出口两次手动检查的最小间隔。
 const ExitCheckMinInterval = 10 * time.Second
 
@@ -349,6 +353,11 @@ func (d *Daemon) handleExitCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	if d.opts.Sys.CheckExit == nil {
 		writeJSON(w, http.StatusNotImplemented, errBody{"这个模式不检查出口"})
+		return
+	}
+	// architect 改判（docs/vm-borrow-plan.md v2 裁定④）：未启用时不借用虚拟机检查分流出口。
+	if d.fileState() != state.Enabled {
+		writeErr(w, http.StatusConflict, api.ErrorBody{Code: api.CodeNotEnabled, Error: ExitCheckNotEnabledText})
 		return
 	}
 	ran := d.checkExitOnce(r.Context(), tag)

@@ -111,7 +111,7 @@ func verdictOf(rep exitcheck.Report) (gatesm.Result, string) {
 	return gatesm.Unknown, failedItems(rep)
 }
 
-// failedItems 列出没通过的项（只有项名和原因，不含地址）。
+// failedItems 列出没通过的项（中文的项名和原因，不含地址；原因码不拼进给人看的文字，docs/vm-borrow-plan.md v2 第 6 节）。
 func failedItems(rep exitcheck.Report) string {
 	var out string
 	for _, it := range rep.Items {
@@ -119,7 +119,7 @@ func failedItems(rep exitcheck.Report) string {
 			if out != "" {
 				out += "；"
 			}
-			out += it.Name + "（" + string(it.Cause) + "）"
+			out += exitcheck.ItemLabel(it.Name) + "：" + exitcheck.CauseText(it.Cause)
 		}
 	}
 	return out

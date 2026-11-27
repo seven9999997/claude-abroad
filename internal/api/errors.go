@@ -26,6 +26,12 @@ const (
 	CodeInternal                 ErrorCode = "internal"                   // 500 及其他
 	CodeUninstalled              ErrorCode = "uninstalled"                // 409：已经一键卸载过（M6-5a），要继续使用请重新安装
 	CodeRulesChanged             ErrorCode = "rules_changed"              // 412：规则在读取之后被改过（条件写入，补齐一），重新读取后再改
+	// 借用虚拟机（docs/vm-borrow-plan.md v2）：经虚拟机的检查做不成时的明确原因（不再是“通道不通”这类内部说法）。
+	CodeVMUnavailable   ErrorCode = "vm_unavailable"   // 503：虚拟机没起来、没在运行或没就绪（拉不起来、等就绪超时、外部启动的没在运行、已停止重启）
+	CodeMainPushFailed  ErrorCode = "main_push_failed" // 502（启用时 500）：把主代理配置下发到虚拟机失败
+	CodeMainUnreachable ErrorCode = "main_unreachable" // 422、502：主代理不通（检查的各项都是超时、连不上一类）
+	CodeNoMainSelected  ErrorCode = "no_main_selected" // 422：还没有选主代理节点
+	CodeStateIncomplete ErrorCode = "state_incomplete" // 409：上一次启用或回国没有完成（崩溃后留下的半截状态）
 )
 
 // ErrorCodes 是全部代码（生成 Swift 的枚举、测试核对用）。
@@ -33,6 +39,7 @@ var ErrorCodes = []ErrorCode{
 	CodeNeedsAuthorization, CodeNeedsConfirm, CodeConfirmInvalid, CodeBusy, CodeInUse, CodeViaHostRequired, CodeLANUnconfirmed,
 	CodeSwitchRolledBack, CodeSwitchRollbackIncomplete, CodeNoBaseline, CodeUnsupported, CodeInvalid, CodeNotFound, CodeTooLarge,
 	CodeNotEnabled, CodeUnavailable, CodeInternal, CodeUninstalled, CodeRulesChanged,
+	CodeVMUnavailable, CodeMainPushFailed, CodeMainUnreachable, CodeNoMainSelected, CodeStateIncomplete,
 }
 
 // ErrorBody 是所有出错应答的形式。error 是给人看的文字（“做什么失败了：原因。下一步”），code 是稳定的代码；

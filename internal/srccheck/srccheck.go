@@ -164,3 +164,65 @@ func NoDial(t testing.TB, dir string, allow map[string][]string) int {
 	}
 	return bad
 }
+
+// skipDirs 是扫描整个仓库时跳过的目录。
+var skipDirs = map[string]bool{"third_party": true, "out": true, ".git": true, ".claude": true, "testdata": true, "node_modules": true, ".build": true}
+
+// GoFiles 返回 root 下全部非测试的 .go 文件（相对 root 的路径），跳过第三方、产物、测试数据目录。
+func GoFiles(t testing.TB, root string) []string {
+	t.Helper()
+	var out []string
+	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if skipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(p, ".go") && !strings.HasSuffix(p, "_test.go") {
+			rel, _ := filepath.Rel(root, p)
+			out = append(out, rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// MethodCallsOutside 检查 root 下非测试的 .go 文件：形如 x.<method>(...) 的调用只允许出现在 allow 列出的文件里
+// （相对 root 的路径）。返回违规数（同时经 t.Errorf 报告）和允许的文件里的调用数。
+func MethodCallsOutside(t testing.TB, root, method string, allow map[string]bool) (bad, allowed int) {
+	t.Helper()
+	for _, rel := range GoFiles(t, root) {
+		af := Parse(t, filepath.Join(root, rel))
+		ast.Inspect(af, func(n ast.Node) bool {
+			c, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			if s, ok := c.Fun.(*ast.SelectorExpr); ok && s.Sel.Name == method {
+				if allow[filepath.ToSlash(rel)] {
+					allowed++
+				} else {
+					bad++
+					t.Errorf("%s 调用了 %s（只允许 %v）", rel, method, keys(allow))
+				}
+			}
+			return true
+		})
+	}
+	return bad, allowed
+}
+
+func keys(m map[string]bool) []string {
+	var out []string
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}

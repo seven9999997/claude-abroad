@@ -1,4 +1,5 @@
 // 界面文字集中在这里（m5-plan v2.5 决定 6）：视图和视图模型只引用 L10n，不在各处写字面文字，便于以后加别的语言。
+import AbroadAPI
 import Foundation
 
 public enum L10n {
@@ -221,6 +222,29 @@ public enum L10n {
     }
     public static func vmManagerLine(_ phase: String, _ restarts: Int64) -> String { "虚拟机：" + vmPhaseName(phase) + "（重新启动 \(restarts) 次）" }
     public static let vmLastError = "最近一次失败"
+    /// 借用虚拟机（v0.70）：未启用时应用主代理、检查主代理临时启动虚拟机，检查完自动关闭。
+    public static let vmBorrowed = "临时运行：做出口检查，结束后自动关闭"
+    /// 借用虚拟机的进度（状态里的 borrow.step；不认识或没有时为 nil）。
+    public static func borrowStep(_ step: String?) -> String? {
+        switch step {
+        case "starting": return "正在启动虚拟机（第一次可能要一两分钟）"
+        case "pushing": return "正在下发主代理"
+        case "checking": return "正在检查出口"
+        case "stopping": return "正在关闭虚拟机"
+        default: return nil
+        }
+    }
+    /// 经虚拟机的检查做不成时，按稳定的代码给一句标题（后台的原文照常显示在下面）。
+    public static func borrowFailureTitle(_ code: ApiErrorCode?) -> String? {
+        switch code {
+        case .vmUnavailable: return "虚拟机没起来"
+        case .mainPushFailed: return "主代理配置没下发成功"
+        case .mainUnreachable: return "主代理不通"
+        case .noMainSelected: return "还没有选主代理节点"
+        case .stateIncomplete: return "上一次启用或回国没有完成"
+        default: return nil
+        }
+    }
     public static func engineLine(_ name: String, _ state: String, _ restarts: Int64) -> String { "\(name)：\(state)（重启 \(restarts) 次）" }
     public static func seconds(_ s: Int64) -> String { "\(s) 秒" }
     public static let settingsGeneral = "通用"

@@ -683,7 +683,9 @@ func cmdMainNodes(a *app, args []string) int {
 }
 
 func cmdMainCheck(a *app, args []string) int {
+	stop := a.borrowProgress()
 	resp, code := a.call("POST", "/v1/main-proxy/check", nil)
+	stop()
 	if code != ExitOK {
 		return code
 	}
@@ -867,7 +869,9 @@ func cmdMainApply(a *app, args []string) int {
 	if r := f.vals["--rule"]; r != "" {
 		body = map[string]any{"rule": r}
 	}
+	stop := a.borrowProgress()
 	resp, code := a.confirmed("POST", "/v1/main-proxy/apply", body)
+	stop()
 	if code != ExitOK {
 		return code
 	}

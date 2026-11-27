@@ -6,6 +6,8 @@ import UniformTypeIdentifiers
 
 struct MainProxyPage: View {
     @ObservedObject var model: MainProxyModel
+    /// 借用虚拟机的进度（L10n.borrowStep(status.borrowStep)；v0.70）：应用、检查进行中显示它。
+    var progress: String? = nil
     var onApplied: () -> Void = {}
 
     var body: some View {
@@ -196,7 +198,7 @@ struct MainProxyPage: View {
         case .idle: EmptyView()
         case .checking:
             RowSeparator()
-            CardRow { ProgressView().controlSize(.small); Text(L10n.applying) }
+            CardRow { ProgressView().controlSize(.small); Text(progress ?? L10n.applying) }
         case .saved(let note):
             RowSeparator()
             CardRow { Text(note.isEmpty ? L10n.applySaved : note) }
@@ -207,6 +209,7 @@ struct MainProxyPage: View {
             RowSeparator()
             CardRow {
                 VStack(alignment: .leading, spacing: 6) {
+                    if let title = L10n.borrowFailureTitle(t.code) { Text(title).bold() }
                     ErrorBlock(text: t)
                     switch rb {
                     case .done: Label(L10n.rollbackDone, systemImage: "arrow.uturn.backward.circle")
@@ -223,13 +226,18 @@ struct MainProxyPage: View {
         case .idle: EmptyView()
         case .checking:
             RowSeparator()
-            CardRow { ProgressView().controlSize(.small); Text(L10n.checking) }
+            CardRow { ProgressView().controlSize(.small); Text(progress ?? L10n.checking) }
         case let .ok(rule, c, tz):
             RowSeparator()
             CardRow { ToneNote(tone: model.checkState.tone ?? .pass, text: L10n.checkOK(c, tz, rule), symbol: "checkmark.circle") }
         case .failed(let t):
             RowSeparator()
-            CardRow { ErrorBlock(text: t) }
+            CardRow {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let title = L10n.borrowFailureTitle(t.code) { Text(title).bold() }
+                    ErrorBlock(text: t)
+                }
+            }
         }
     }
 }

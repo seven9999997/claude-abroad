@@ -192,3 +192,16 @@ func TestRepoWindowsPlaceholdersFail(t *testing.T) {
 		}
 	}
 }
+
+// MethodCallsOutside 的反例：不在允许名单里的文件调用 ExclusiveHold 两处，都报出来；放开这个文件后为 0。
+func TestMethodCallsOutsideCatchesViolations(t *testing.T) {
+	dir := copyNamed(t, "holdbad")
+	r := &recorder{TB: t}
+	if bad, _ := MethodCallsOutside(r, dir, "ExclusiveHold", map[string]bool{"vmborrow.go": true}); bad != 2 || r.errs != 2 {
+		t.Fatalf("应报 2 处，实际 %d（%d）", bad, r.errs)
+	}
+	r = &recorder{TB: t}
+	if bad, ok := MethodCallsOutside(r, dir, "ExclusiveHold", map[string]bool{"holdbad.go": true}); bad != 0 || ok != 2 || r.errs != 0 {
+		t.Fatalf("放开后应为 0 处违规、2 处允许：%d %d", bad, ok)
+	}
+}

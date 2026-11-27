@@ -8,7 +8,9 @@
 //   - 同一时刻最多一个由自己拉起的 abroad-vm；结束进程只经 Launch 返回的进程句柄（不按进程号找）；
 //     强停后仍不退出时报告卡住，不再拉起第二个；
 //   - 连续失败到 MaxFailures 次后停止重启并报告，保持断网，不自动回国；健康运行满 StableFor 或用户重新启用后计数清零；
-//   - 管理器不结束任何别的进程（包括 Claude）。
+//   - 管理器不结束任何别的进程（包括 Claude）；
+//   - 回国状态虚拟机不常驻；只在一次互斥的操作内部被借用（Borrow），操作结束时已经停掉；借用期间失败不重试，
+//     借用的失败不计入常驻时的连续失败次数（docs/vm-borrow-plan.md v2）。
 package vmmgr
 
 import (
@@ -73,6 +75,7 @@ type Timing struct {
 	BackoffMax     time.Duration
 	MaxFailures    int           // 连续失败这么多次后停止重启
 	StartWait      time.Duration // Start（启用、地区同步后）最多等这么久
+	BorrowWait     time.Duration // Borrow 最多等这么久（0 表示 StartTimeout+10s）
 }
 
 // DefaultTiming 是正式的取值。abroad-vm 自己的看门狗是 30 秒、优雅停止最多约 13 秒，这里的时长都比它长。
@@ -89,6 +92,7 @@ var DefaultTiming = Timing{
 	BackoffMax:     60 * time.Second,
 	MaxFailures:    6,
 	StartWait:      3 * time.Minute,
+	BorrowWait:     100 * time.Second,
 }
 
 // 阶段。
@@ -110,6 +114,7 @@ type Status struct {
 	Restarts  int    `json:"restarts"`             // 这次 abroadd 运行以来重新拉起的次数
 	Failures  int    `json:"failures"`             // 当前的连续失败次数
 	LastError string `json:"last_error,omitempty"` // 最近一次失败的原因
+	Borrowed  bool   `json:"borrowed,omitempty"`   // 正被借用（未启用时临时运行，做完出口检查就停掉）
 }
 
 // 错误。
@@ -139,7 +144,18 @@ type Manager struct {
 	ctl     chan struct{} // 想要的状态变了、或要求重试（容量 1，合并）
 	retry   bool
 	closed  bool
+	// borrowed：正被借用（Borrow 到 release 之间）。isWanted 把它算作“需要”。
+	borrowed bool
+	// failKind 是最近一次失败的类别（借用失败时区分“拉不起来”和“没有就绪”）。
+	failKind string
 }
+
+// 失败的类别。
+const (
+	failLaunch   = "launch"
+	failNotReady = "not_ready"
+	failExited   = "exited"
+)
 
 func (m *Manager) init() {
 	if m.changed == nil {
@@ -221,7 +237,20 @@ func (m *Manager) SetWanted(w bool) {
 func (m *Manager) isWanted() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.wanted
+	return m.wanted || m.borrowed
+}
+
+// borrowOnly：只是被借用、没被要求常驻。
+func (m *Manager) borrowOnly() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.borrowed && !m.wanted
+}
+
+func (m *Manager) setFailKind(k string) {
+	m.mu.Lock()
+	m.failKind = k
+	m.mu.Unlock()
 }
 
 func (m *Manager) takeRetry() bool {
@@ -345,6 +374,7 @@ func (m *Manager) Run(ctx context.Context) {
 		var why error
 		if err != nil {
 			why = fmt.Errorf("拉起 abroad-vm 失败：%w", err)
+			m.setFailKind(failLaunch)
 		} else {
 			why = m.supervise(ctx, p, t)
 			if why == nil || ctx.Err() != nil { // 不再需要，或 abroadd 要退出：关掉它
@@ -363,6 +393,18 @@ func (m *Manager) Run(ctx context.Context) {
 		if !m.fail(ctx, why) {
 			continue // 到上限：fail 里已等到重试、不再需要或 ctx 结束
 		}
+		if m.borrowOnly() {
+			// 借用期间失败不重试：停在退避阶段（Borrow 据此返回失败），等 release 或被要求常驻。
+			m.setPhase(PhaseBackoff)
+			for m.borrowOnly() {
+				select {
+				case <-ctx.Done():
+					return
+				case <-m.ctl:
+				}
+			}
+			continue
+		}
 		if !m.backoff(ctx) {
 			return
 		}
@@ -379,6 +421,11 @@ func (m *Manager) supervise(ctx context.Context, p Proc, t Timing) error {
 	for {
 		select {
 		case <-p.Done():
+			if healthy {
+				m.setFailKind(failExited)
+			} else {
+				m.setFailKind(failNotReady)
+			}
 			if err := p.ExitErr(); err != nil {
 				return fmt.Errorf("abroad-vm 意外退出：%w", err)
 			}
@@ -422,6 +469,7 @@ func (m *Manager) supervise(ctx context.Context, p Proc, t Timing) error {
 		}
 		if !healthy {
 			if !now.Before(deadline) {
+				m.setFailKind(failNotReady)
 				return fmt.Errorf("拉起后 %s 内没有就绪：%v", t.StartTimeout, err)
 			}
 			continue
@@ -437,6 +485,7 @@ func (m *Manager) supervise(ctx context.Context, p Proc, t Timing) error {
 			m.event("unhealthy", redact.String(err.Error()))
 		}
 		if !badSince.IsZero() && now.Sub(badSince) >= t.UnhealthyKill {
+			m.setFailKind(failExited)
 			return fmt.Errorf("健康检查不通过超过 %s：%v", t.UnhealthyKill, err)
 		}
 	}
@@ -534,4 +583,139 @@ func (m *Manager) backoff(ctx context.Context) bool {
 		// 想要的状态变了：回到循环开头重新判断（不再需要就停在 idle；仍需要就立即拉起）
 		return true
 	}
+}
+
+// ---- 借用（docs/vm-borrow-plan.md v2 第 1 节第 2 步）----
+
+// 借用失败的类别。
+const (
+	KindLaunch   = "launch"    // 拉不起来
+	KindNotReady = "not_ready" // 拉起后时限内没有就绪
+	KindStuck    = "stuck"     // 进程卡住
+)
+
+// BorrowError 是借用失败：Kind 区分“虚拟机没起来”的几种情形，Error 是给人看的中文原因（已脱敏）。
+type BorrowError struct {
+	Kind string
+	Msg  string
+	Err  error
+}
+
+func (e *BorrowError) Error() string { return e.Msg }
+func (e *BorrowError) Unwrap() error { return e.Err }
+
+func (m *Manager) borrowWait() time.Duration {
+	t := m.timing()
+	if t.BorrowWait > 0 {
+		return t.BorrowWait
+	}
+	return t.StartTimeout + 10*time.Second
+}
+
+func seconds(d time.Duration) string {
+	if d < time.Second {
+		return d.String()
+	}
+	return fmt.Sprintf("%d 秒", int(d.Round(time.Second)/time.Second))
+}
+
+// Borrow 在一次互斥的操作内部临时使用虚拟机（未启用时应用主代理、检查主代理）。
+//   - 已经要求常驻（wanted）：不借用，等到健康（最多 BorrowWait；failed、stuck 立即报错），release 是空操作；
+//   - 否则临时拉起并等到健康；第一次失败（拉不起来、没有就绪、卡住）或超时就停掉并返回 *BorrowError，不重试。
+//
+// release 必须调用（调用方用脱离取消的 ctx）：没被要求常驻就停掉并等它退出；期间被要求常驻就交还、不停。可重复调用。
+func (m *Manager) Borrow(ctx context.Context) (release func(context.Context) error, borrowed bool, err error) {
+	noop := func(context.Context) error { return nil }
+	m.mu.Lock()
+	m.init()
+	if m.closed {
+		m.mu.Unlock()
+		return noop, false, ErrClosed
+	}
+	if m.wanted {
+		m.mu.Unlock()
+		err := m.waitFor(ctx, m.borrowWait(), func(s Status, closed bool) (bool, error) {
+			switch {
+			case closed:
+				return true, ErrClosed
+			case s.Phase == PhaseRunning:
+				return true, nil
+			case s.Phase == PhaseFailed:
+				return true, &BorrowError{Kind: KindLaunch, Msg: "虚拟机已停止重启（" + s.LastError + "）", Err: ErrFailed}
+			case s.Phase == PhaseStuck:
+				return true, &BorrowError{Kind: KindStuck, Msg: ErrStuck.Error(), Err: ErrStuck}
+			}
+			return false, nil
+		})
+		if errors.Is(err, ErrTimeout) {
+			err = &BorrowError{Kind: KindNotReady, Msg: "虚拟机在 " + seconds(m.borrowWait()) + "内没有就绪", Err: err}
+		}
+		return noop, false, err
+	}
+	m.borrowed = true
+	m.failKind = ""
+	m.st.Borrowed = true
+	m.st.Failures = 0
+	close(m.changed)
+	m.changed = make(chan struct{})
+	m.mu.Unlock()
+	m.poke()
+	release = m.release
+	werr := m.waitFor(ctx, m.borrowWait(), func(s Status, closed bool) (bool, error) {
+		switch {
+		case closed:
+			return true, ErrClosed
+		case s.Phase == PhaseRunning:
+			return true, nil
+		case s.Phase == PhaseStuck:
+			return true, &BorrowError{Kind: KindStuck, Msg: ErrStuck.Error(), Err: ErrStuck}
+		case s.Phase == PhaseFailed, s.Phase == PhaseBackoff && s.Failures > 0:
+			if m.failKind == failLaunch { // done 在 m.mu 下调用
+				return true, &BorrowError{Kind: KindLaunch, Msg: "拉起虚拟机失败（" + s.LastError + "）", Err: ErrFailed}
+			}
+			return true, &BorrowError{Kind: KindNotReady, Msg: "虚拟机没有就绪（" + s.LastError + "）", Err: ErrFailed}
+		}
+		return false, nil
+	})
+	if werr == nil {
+		return release, true, nil
+	}
+	if errors.Is(werr, ErrTimeout) {
+		werr = &BorrowError{Kind: KindNotReady, Msg: "虚拟机在 " + seconds(m.borrowWait()) + "内没有就绪", Err: werr}
+	}
+	_ = release(context.WithoutCancel(ctx))
+	return noop, true, werr
+}
+
+// release 结束借用：没被要求常驻就停掉虚拟机并等它退出（卡住时返回 ErrStuck）；被要求常驻就交还，不停。
+func (m *Manager) release(ctx context.Context) error {
+	m.mu.Lock()
+	m.init()
+	if !m.borrowed {
+		m.mu.Unlock()
+		return nil
+	}
+	m.borrowed = false
+	m.st.Borrowed = false
+	wanted := m.wanted
+	if !wanted {
+		m.st.Failures = 0 // 借用的失败不计入常驻时的连续失败
+	}
+	close(m.changed)
+	m.changed = make(chan struct{})
+	m.mu.Unlock()
+	m.poke()
+	if wanted {
+		return nil
+	}
+	t := m.timing()
+	return m.waitFor(ctx, t.StopWait+t.KillWait+5*time.Second, func(s Status, closed bool) (bool, error) {
+		switch {
+		case closed, s.Phase == PhaseIdle:
+			return true, nil
+		case s.Phase == PhaseStuck:
+			return true, ErrStuck
+		}
+		return false, nil
+	})
 }

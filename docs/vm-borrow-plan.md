@@ -357,3 +357,14 @@
 8. 借用期间管理器照常加清 `ReasonVM`，事件历史里会多出“gate_closed vm：虚拟机启动中”“虚拟机正在关闭”；闸门原来就关着，应用不会发“保护断开”的通知（现有 `vmReasonNotifiesOnlyWhenGateWasOpen` 已覆盖）。
 9. 停用状态的虚拟机常驻（停用不关虚拟机），实际只有回国状态会借用。停用后管理器已 `failed`：**不借用、不重试**，回 `vm_unavailable`“虚拟机已停止重启：请重新启用后再试”（矩阵和 `TestBorrowFailures` 外另加 `internal/daemon#TestBorrowDisabledGivenUpNoRetry`：`launches` 不变）。
 10. 虚拟机在回国状态下的出站经宿主机现有网络，宿主机上别的代理软件是否接管这部分流量不由我们决定；借用不改宿主机网络设置，也不碰本机会话依赖的代理。
+
+## 10. 实现记录（2026-11-27，和 v2 的偏离及理由）
+
+1. `pushForProbe` 只对**借来的**虚拟机下发（v2 写的是不是借来的也按保存的选择下发并记“已下发”）。理由：外部启动、停用时常驻的虚拟机按以前的行为（开发工具手动下发的那条路、原有测试的时间线都不变）；本缺口只需要借来的那台。
+2. `mainPushVM.Start` 只在状态文件是 ENABLING（启用第 ④ 步、Recover 接着启用）时下发。理由：地区同步（`SyncRegion`）里也调 Start，而更换主代理的 `switchMain` 在同步地区时正持有 `exitPushMu`，再去拿会死锁；ENABLED 时本来就由 `maintainMain` 维护。`TestMainPushVMStartSkipsSameDigest` 覆盖重复调用和地区同步。
+3. 借用进行中 `POST /v1/restore` 回“忙”。理由：回国状态下回国本来是空操作（不拿锁直接回 200），验收 ④ 要求借用期间回国得到“忙”。
+4. 裁定④ 让两条原有测试在回国状态下检查分流出口变成 409：`internal/daemon/m5rest_test.go` 的 `TestExitCheckAPI` 先启用；`cmd/abroad/e2e_test.go` 的 `TestEndToEnd` 把 `exit check` 挪到第一次 `up` 之后。两处断言都没改。
+5. `vmmgr`：借用期间失败后不进退避，停在 backoff 阶段等 release（`Run` 里 `borrowOnly`）。理由：最初的写法在 `-count=30` 下偶发“拉起 2 次”——Borrow 看到失败、还没来得及 release 时退避计时器先到，管理循环又拉起了一次。这是实现缺陷，不是测试的问题。
+6. 新增 `apiclient.(*Client).EventsConnected`：命令行先等订阅建立（最多 2 秒）再发请求，不漏掉开头的进度。订阅期间标准错误经一把锁写（`--json` 时两步确认的预览也写标准错误）。
+7. 检查主代理明确不通过（出口在大陆等）时仍按原来的 502 和文字；只有虚拟机相关、主代理不通的情况走新的代码。
+8. 源码检查 `MethodCallsOutside` 加在 `internal/srccheck`（反例 `testdata/holdbad`），`internal/daemon#TestExclusiveHoldOnlyInVMBorrow` 用它。

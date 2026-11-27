@@ -275,7 +275,7 @@ func TestExitCheckEventNoAddress(t *testing.T) {
 	if !found {
 		t.Fatalf("应有 exit_check 的闸门关闭事件：%+v", st.Events)
 	}
-	if got := failedItems(r); got != "mainland（mainland）" && !strings.Contains(got, "mainland") || strings.Contains(got, "203.0.113.7") {
+	if got := failedItems(r); !strings.Contains(got, "是否在大陆") || strings.Contains(got, "203.0.113.7") {
 		t.Fatalf("failedItems：%q", got)
 	}
 }

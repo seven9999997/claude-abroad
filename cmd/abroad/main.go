@@ -17,7 +17,9 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 
 	"claude-abroad/internal/api"
 	"claude-abroad/internal/apiclient"
@@ -162,6 +164,63 @@ func (a *app) run(args []string) int {
 	return c.run(a, cargs)
 }
 
+// borrowProgress 在未启用时应用主代理、检查主代理期间（临时启动虚拟机，可能要一两分钟）把进度写到标准错误
+// （--json 时标准输出只放最终的应答）。先订阅事件、等订阅建立（最多 2 秒）再返回；返回的函数停止订阅。
+// 只打印来源 vm_borrow 的进行中步骤；事件详情由后台给出，不含 IP、节点服务器和端口（docs/vm-borrow-plan.md v2）。
+func (a *app) borrowProgress() func() {
+	if a.client == nil || a.client.Socket == "" {
+		return func() {}
+	}
+	ctx, cancel := context.WithCancel(a.ctx)
+	c := &apiclient.Client{Socket: a.client.Socket}
+	// 订阅期间标准错误经一把锁写（两步确认的预览在 --json 时也写标准错误，和进度可能同时）；停止时换回原来的。
+	orig := a.stderr
+	lw := &lockedWriter{w: orig}
+	a.stderr = lw
+	ready, done := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	go func() {
+		defer close(done)
+		defer once.Do(func() { close(ready) })
+		_ = c.EventsConnected(ctx, func() { once.Do(func() { close(ready) }) }, func(ev apiclient.Event) {
+			if ev.Event != "vm_borrow" {
+				return
+			}
+			var se struct{ Kind, Detail string }
+			if json.Unmarshal([]byte(ev.Data), &se) != nil {
+				return
+			}
+			switch se.Kind {
+			case "starting", "pushing", "checking", "stopping":
+				if se.Detail != "" {
+					fmt.Fprintln(lw, se.Detail+"…")
+				}
+			}
+		})
+	}()
+	select {
+	case <-ready:
+	case <-time.After(2 * time.Second):
+	}
+	return func() {
+		cancel()
+		<-done
+		a.stderr = orig
+	}
+}
+
+// lockedWriter 让几个协程交替写同一个输出时一行一行地写。
+type lockedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
+}
+
 // routeLevel 取路由表里的级别（没有这个 ID 时按敏感处理，宁严勿宽）。
 func routeLevel(id string) api.Level {
 	for _, r := range daemon.RouteTable() {
@@ -236,6 +295,9 @@ func (a *app) codeOf(resp apiclient.Response) int {
 	case api.CodeUninstalled:
 		fmt.Fprintln(a.stderr, "Claude 出国已经一键卸载：要继续使用请重新安装。")
 		return ExitDenied
+	case api.CodeVMUnavailable, api.CodeMainPushFailed, api.CodeMainUnreachable, api.CodeNoMainSelected, api.CodeStateIncomplete:
+		fmt.Fprintln(a.stderr, msg) // 借用虚拟机时的明确原因（原文：做什么失败了、原因、下一步）
+		return ExitFail
 	}
 	fmt.Fprintln(a.stderr, msg)
 	return ExitFail

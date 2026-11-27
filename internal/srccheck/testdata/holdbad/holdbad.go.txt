@@ -1,0 +1,12 @@
+package holdbad
+
+type machine struct{}
+
+func (machine) ExclusiveHold(fn func() error) error { return fn() }
+
+// 反例：借用虚拟机以外的地方拿借用的互斥入口（两处调用）。
+func misuse(m machine) {
+	_ = m.ExclusiveHold(func() error { return nil })
+	f := func() error { return m.ExclusiveHold(func() error { return nil }) }
+	_ = f
+}

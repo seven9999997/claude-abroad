@@ -85,7 +85,7 @@ struct SetupView: View {
         case .mainProxy:
             VStack(alignment: .leading, spacing: 0) {
                 stepHeader(L10n.setupMainProxyText).padding(.horizontal, 24).padding(.top, 28)
-                MainProxyPage(model: main, onApplied: { Task { await setup.recheck() } })
+                MainProxyPage(model: main, progress: L10n.borrowStep(status.borrowStep), onApplied: { Task { await setup.recheck() } })
             }
         default:
             ScrollView {

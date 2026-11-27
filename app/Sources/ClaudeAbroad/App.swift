@@ -133,7 +133,7 @@ struct MainWindow: View {
         Group {
             switch item {
             case .overview: HomeView(model: status)
-            case .mainProxy: MainProxyPage(model: main)
+            case .mainProxy: MainProxyPage(model: main, progress: L10n.borrowStep(status.borrowStep))
             case .exits: ExitsPage(model: exits)
             case .apps: AppsPage(model: apps)
             case .env: EnvPage(model: env)

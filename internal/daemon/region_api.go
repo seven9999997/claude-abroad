@@ -299,9 +299,17 @@ func (d *Daemon) handleEnable(w http.ResponseWriter, r *http.Request) {
 }
 
 // enableWithMain 是启用：abroadd 持有主代理配置时先下发（M5-4：未启用时保存的选择在启用时下发一次）。
+//
+// 借用虚拟机进行中直接回“忙”（不碰虚拟机）。虚拟机此刻就绪（外部启动、常驻）才在启用前下发（失败时什么都没改）；
+// 没就绪（由管理器管理、回国状态）时由第 ④ 步虚拟机就绪之后下发（mainPushVM，docs/vm-borrow-plan.md v2）。
 func (d *Daemon) enableWithMain(ctx context.Context) error {
-	if err := d.ensureMainPushed(ctx); err != nil {
-		return err
+	if d.borrowing.Load() {
+		return usererror.New("启用", "正在临时启动虚拟机做出口检查", "请等它完成后再试。", state.ErrBusy)
+	}
+	if d.vmReadyNow(ctx) == nil {
+		if err := d.ensureMainPushed(ctx); err != nil {
+			return err
+		}
 	}
 	return d.m.Enable(ctx)
 }
@@ -318,6 +326,18 @@ type MainProxyResult struct {
 	Region   *region.Target  `json:"region,omitempty"`
 	Synced   bool            `json:"synced"` // 已在启用状态，地区已同步
 	Note     string          `json:"note,omitempty"`
+	// Borrowed：未启用时临时启动了虚拟机做这次检查，检查完已经关闭（docs/vm-borrow-plan.md v2）。
+	Borrowed bool `json:"borrowed,omitempty"`
+}
+
+// BorrowedNote 是借用虚拟机时应答里的说明。
+const BorrowedNote = "虚拟机是临时启动的，检查完已经关闭"
+
+func joinNote(a, b string) string {
+	if a == "" {
+		return b
+	}
+	return a + "；" + b
 }
 
 // handleApplyMainProxy 是“应用主代理”（m4-plan v2.4 决定 4）：经主代理跑一轮带位置查询的检查 → 保存基准 →
@@ -336,25 +356,67 @@ func (d *Daemon) handleApplyMainProxy(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotImplemented, errBody{"这个模式没有出口基准（开发用的最小检查）"})
 		return
 	}
-	base, err := bs.Probe(r.Context(), req.Rule)
-	if err != nil {
-		d.events.Add("baseline", "baseline_failed", usererror.Reason(err))
-		writeJSON(w, http.StatusUnprocessableEntity, errBody{err.Error()})
+	if d.fileState() == state.Enabled {
+		// 已启用：虚拟机常驻，顺序不变（地区会变时两步确认、SyncRegion 要拿忙标记，所以这里不加锁）。
+		var base exitcheck.Baseline
+		err := d.withVM(r.Context(), "main_apply", func(ctx context.Context, _ vmUse) (string, error) {
+			d.borrowStep("main_apply", BorrowChecking, "")
+			var err error
+			base, err = bs.Probe(ctx, req.Rule)
+			return exitDone(base.Country, base.Timezone), err
+		}, nil)
+		if err != nil {
+			d.events.Add("baseline", "baseline_failed", vmErrText(err))
+			writeVMErr(w, "建立出口基准", err, http.StatusUnprocessableEntity)
+			return
+		}
+		d.finishMainProxy(w, r, req, base)
 		return
 	}
-	d.finishMainProxy(w, r, req, base)
+	// 未启用：在状态机的忙标记里借用虚拟机（docs/vm-borrow-plan.md v2）：下发保存的选择 → 检查 → 停掉虚拟机 →
+	// 保存基准、锁定目标（不确认、不同步地区）。应答等虚拟机停掉、放锁之后才发出。
+	rec := &bufferedResponse{header: http.Header{}}
+	var base exitcheck.Baseline
+	borrowed := false
+	err := d.withVM(r.Context(), "main_apply", func(ctx context.Context, u vmUse) (string, error) {
+		borrowed = u.borrowed
+		if err := d.pushForProbe(ctx, "main_apply", u); err != nil {
+			return "", err
+		}
+		d.borrowStep("main_apply", BorrowChecking, "")
+		var err error
+		base, err = bs.Probe(ctx, req.Rule)
+		return exitDone(base.Country, base.Timezone), err
+	}, func() error {
+		d.finishMainProxyNote(rec, r, req, base, borrowed)
+		return nil
+	})
+	if err != nil {
+		d.events.Add("baseline", "baseline_failed", vmErrText(err))
+		writeVMErr(w, "建立出口基准", err, http.StatusUnprocessableEntity)
+		return
+	}
+	rec.flushTo(w)
 }
 
 // finishMainProxy 是“应用主代理”在出口检查之后的部分（M5-4 抽出来，PUT /v1/main-proxy 共用）：按基准确定目标地区
 // （会变且已启用时两步确认）→ 保存基准 → 同步地区。写应答；返回是否成功（失败或要确认时调用方负责回滚）。
 func (d *Daemon) finishMainProxy(w http.ResponseWriter, r *http.Request, req MainProxyRequest, base exitcheck.Baseline) bool {
+	return d.finishMainProxyNote(w, r, req, base, false)
+}
+
+// finishMainProxyNote 同 finishMainProxy；borrowed 为真时应答标明虚拟机是临时启动的。
+func (d *Daemon) finishMainProxyNote(w http.ResponseWriter, r *http.Request, req MainProxyRequest, base exitcheck.Baseline, borrowed bool) bool {
 	bs := d.opts.Sys.Baseline
-	res := MainProxyResult{}
+	res := MainProxyResult{Borrowed: borrowed}
+	if borrowed {
+		res.Note = BorrowedNote
+	}
 	var target *region.Target
 	if d.regionOn() {
 		t, err := d.mainProxyTarget(base)
 		if err != nil {
-			res.Note = "没能按出口确定目标地区（" + usererror.Reason(err) + "），目标保持不变"
+			res.Note = joinNote(res.Note, "没能按出口确定目标地区（"+usererror.Reason(err)+"），目标保持不变")
 		} else {
 			target = &t
 		}

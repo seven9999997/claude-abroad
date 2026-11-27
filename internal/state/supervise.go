@@ -118,6 +118,9 @@ func (s *Supervisor) Rounds() int64 { return s.rounds.Load() }
 func (s *Supervisor) Tick(ctx context.Context) error {
 	m := s.M
 	if !m.busy.CompareAndSwap(false, true) {
+		if m.held.Load() {
+			return s.heldTick(ctx)
+		}
 		return nil
 	}
 	defer m.unlock()
@@ -274,4 +277,18 @@ func (s *Supervisor) repair(ctx context.Context, f File, bad []string) {
 			s.emit(EvDNSRepaired, "")
 		}
 	}
+}
+
+// heldTick 是忙标记被借用虚拟机（ExclusiveHold）占着时的一轮：状态是 RESTORED 且处在回国拦截模式就照常巡检
+// （锚点被清掉时重新加载，G9.2 在借用期间不退化）；其他情况什么都不做。不碰只在持有忙标记时访问的字段。
+// 安全：借用期间状态文件不会变（改状态的操作都要忙标记），借用不碰 pf；Patrol.Step 自带互斥。
+func (s *Supervisor) heldTick(ctx context.Context) error {
+	f, err := s.M.Store.Load()
+	if err != nil || f.State != Restored {
+		return nil
+	}
+	if rp, ok := s.Patrol.(interface{ RestoredMode() bool }); ok && rp.RestoredMode() {
+		return s.Patrol.Step(ctx)
+	}
+	return nil
 }

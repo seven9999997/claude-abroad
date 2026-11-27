@@ -160,6 +160,10 @@ func (d *Daemon) handleRestore(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if d.borrowing.Load() { // 借用虚拟机进行中（docs/vm-borrow-plan.md v2）：和启用、卸载一样回“忙”
+		writeErr(w, http.StatusConflict, api.ErrorBody{Code: api.CodeBusy, Error: usererror.New("恢复本机网络", "正在临时启动虚拟机做出口检查", "请等它完成后再试。", state.ErrBusy).Error()})
+		return
+	}
 	if f, err := d.store.Load(); err == nil && f.State == state.Restored {
 		writeJSON(w, http.StatusOK, d.Status()) // 已经是回国状态：不需要确认，什么都不做
 		return

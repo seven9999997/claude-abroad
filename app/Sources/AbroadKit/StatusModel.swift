@@ -108,6 +108,8 @@ public struct ExitInfo: Sendable, Equatable {
 public final class StatusModel: ObservableObject {
     @Published public private(set) var phase: Phase = .checking
     @Published public private(set) var status: DaemonStatus?
+    /// 借用虚拟机的进度（v0.70）：事件推送触发刷新状态，状态里的 borrow.step 就是进度；没在借用时为 nil。
+    public var borrowStep: String? { status?.borrow?.step }
     @Published public private(set) var reachable = false
     @Published public private(set) var connection: ConnectionError?
     @Published public private(set) var busy = false

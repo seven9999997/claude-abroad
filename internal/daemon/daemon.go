@@ -93,6 +93,9 @@ type Daemon struct {
 	vmm    *vmmgr.Manager
 	vmStop func()
 	vmDone chan struct{}
+	// 借用虚拟机（docs/vm-borrow-plan.md v2）：借用进行中、当前的进度（只在内存里）。
+	borrowing atomic.Bool
+	borrow    atomic.Pointer[BorrowView]
 	// M6-3b：第四层的本机代理端口（Options.ClaudeProxyAddr 非空、第四道打开时；cpMu 保护）。
 	cproxy *claudeProxy
 	cpMu   sync.Mutex
@@ -259,7 +262,7 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	d.re.OnEvent = func(kind, detail string) { d.events.Add("recheck", kind, detail) }
 	d.m = &state.Machine{Store: d.store, D: state.Deps{
 		PF: d.ppf, Tun: d.tun, Routes: s.Routes, DNS: s.DNS, IPv6: s.IPv6,
-		VM: s.VM, Check: s.Exit, Gate: d.gate, Recheck: d.re, Teardown: s.Teardown, Killer: s.Killer, Preflight: s.Preflight,
+		VM: mainPushVM{inner: s.VM, d: d}, Check: s.Exit, Gate: d.gate, Recheck: d.re, Teardown: s.Teardown, Killer: s.Killer, Preflight: s.Preflight,
 		ReturnBlock: d.returnBlockOn,
 	}, OnEvent: d.stateEvent("state")}
 	if o.Clock != nil {
@@ -483,6 +486,8 @@ type Status struct {
 	Gate gatesm.Status `json:"gate"`
 	// M6-2a：由 abroadd 管理虚拟机时的管理器状态（阶段、重启次数、最近一次失败的原因）；虚拟机由外部启动时没有。
 	VMManager *vmmgr.Status `json:"vm_manager,omitempty"`
+	// 借用虚拟机的进度（未启用时应用主代理、检查主代理临时拉起虚拟机；没有在借用时没有这一项）。
+	Borrow *BorrowView `json:"borrow,omitempty"`
 	// M6-3：Claude 域名解析锁（第一层）的状态：是否写入、锁的域名、写法、自检结果、冲突（没有接上时没有这一项）。
 	ResolverLock *resolverlock.Status `json:"resolver_lock,omitempty"`
 	// M6-3b：第四层（Claude Code 的托管设置和本机代理端口）的状态（都没接时没有这一项）。
@@ -524,6 +529,10 @@ func (d *Daemon) Status() Status {
 	if d.vmm != nil {
 		vs := d.vmm.Status()
 		st.VMManager = &vs
+	}
+	if b := d.borrow.Load(); b != nil {
+		bv := *b
+		st.Borrow = &bv
 	}
 	if lk := d.opts.Sys.ResolverLock; lk != nil {
 		ls := lk.Check()
@@ -595,6 +604,8 @@ func opErrCode(err error, status int) api.ErrorCode {
 		return api.CodeNoBaseline
 	case errors.Is(err, ErrUninstalledOp):
 		return api.CodeUninstalled
+	case isMainPushErr(err):
+		return api.CodeMainPushFailed
 	}
 	return api.DefaultCode(status)
 }
