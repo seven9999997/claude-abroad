@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- 应用图标：照 ui/design/index.html 原型里的 APPICON（奶油色圆角底 + 吉祥物）。按 macOS 图标网格留边：内容 824×824，居中。 -->
+  <defs>
+    <linearGradient id="bg" x1="0.33" y1="0" x2="0.67" y2="1">
+      <stop offset="0" stop-color="#FFF6EC"/>
+      <stop offset="1" stop-color="#F3DDC6"/>
+    </linearGradient>
+    <clipPath id="tile"><rect x="100" y="100" width="824" height="824" rx="185" ry="185"/></clipPath>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="url(#bg)"/>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="185" ry="185" fill="none" stroke="#000" stroke-opacity="0.12" stroke-width="1"/>
+  <g clip-path="url(#tile)">
+    <g transform="translate(133 166) scale(11.84)">
+      <ellipse cx="32" cy="40" rx="20" ry="21" fill="#D97757"/>
+      <path d="M18 24 Q19 12 32 12 Q45 12 46 24 Z" fill="#F2C14E"/>
+      <rect x="18" y="19" width="28" height="4" fill="#3E7C8C"/>
+      <ellipse cx="32" cy="24.5" rx="19" ry="3.5" fill="#E8B33E"/>
+      <ellipse cx="26" cy="37" rx="2.4" ry="3.2" fill="#2B2B2B"/>
+      <ellipse cx="38" cy="37" rx="2.4" ry="3.2" fill="#2B2B2B"/>
+      <path d="M28.5 43 Q32 46.5 35.5 43" fill="none" stroke="#2B2B2B" stroke-width="1.8" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

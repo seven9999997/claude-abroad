@@ -23,6 +23,8 @@ rm -rf "${APP}"
 mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 cp "${BIN}" "${APP}/Contents/MacOS/${NAME}"
 VERSION="$(git describe --tags --always 2>/dev/null || echo dev)"
+# 应用图标（照原型的 APPICON；源文件 app/Resources/AppIcon.svg，改了用 scripts/dev/make-icon.sh 重新生成）
+cp app/Resources/AppIcon.icns "${APP}/Contents/Resources/AppIcon.icns"
 cat >"${APP}/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -32,6 +34,7 @@ cat >"${APP}/Contents/Info.plist" <<EOF
   <key>CFBundleName</key><string>Claude 出国</string>
   <key>CFBundleDisplayName</key><string>Claude 出国</string>
   <key>CFBundleExecutable</key><string>${NAME}</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.5</string>
   <key>CFBundleVersion</key><string>${VERSION}</string>
