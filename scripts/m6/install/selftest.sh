@@ -414,6 +414,14 @@ N2=$(mkcase); setup_old "$N2"; old_install "$N2"
 echo '{"version":2,"state":"RESTORED","step":0}' >"$N2$I/state/abroadd/state.json"
 upg "$N2" "$P2" "$ST_R" --accept-unknown-version; rc=$?
 [ $rc = 13 ] && grep -q '状态文件的版本也读不出或不是 1' "$N2/up.err" && [ ! -e "$N2$I/build.json" ] && ok "m. 老安装、状态文件版本是 2：退出码 13，什么都没改" || bad "m. 老安装的状态格式：rc=$rc $(tail -2 "$N2/up.err")"
+# 2026-11-27 真机：老安装装好后从没启用过，没有 state.json → 按格式 1，可以升级；state.json 损坏照旧拒绝
+N3=$(mkcase); setup_old "$N3"; old_install "$N3"; rm -f "$N3$I/state/abroadd/state.json"
+upg "$N3" "$P2" "$ST_R" --accept-unknown-version; rc=$?
+[ $rc = 0 ] && cmp -s "$P2/build.json" "$N3$I/build.json" && [ ! -e "$N3$I/state/abroadd/state.json" ] &&
+  ok "m. 老安装、没有 state.json（从没启用过）：升级成功，不会凭空写出状态文件" || bad "m. 老安装没有 state.json：rc=$rc $(tail -2 "$N3/up.err")"
+N4=$(mkcase); setup_old "$N4"; old_install "$N4"; echo 'not json' >"$N4$I/state/abroadd/state.json"
+upg "$N4" "$P2" "$ST_R" --accept-unknown-version; rc=$?
+[ $rc = 13 ] && [ ! -e "$N4$I/build.json" ] && ok "m. 老安装、state.json 损坏：退出码 13，什么都没改" || bad "m. 老安装 state.json 损坏：rc=$rc $(tail -2 "$N4/up.err")"
 
 # ---- o. 注入失败后退回旧版本 ----
 rollback_case() { # rollback_case <说明> <老安装 0|1> <环境变量赋值…>

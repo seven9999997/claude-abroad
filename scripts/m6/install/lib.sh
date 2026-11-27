@@ -298,8 +298,12 @@ if d.get("busy"):
     out(15, "正在进行别的操作，等它完成再升级。")
 sf = d.get("state_format")
 if sf is None:
+    # 老安装（后台不报告状态格式）：读状态文件的 version。状态文件不存在 = 装好后从没启用过（一直是全新的“已回国”，
+    # 2026-11-27 真机），没有要迁移的状态，按格式 1 处理；读得到但不是 1、或读不出（损坏）照旧拒绝。
     try:
         sf = json.load(open(statep, encoding="utf-8")).get("version")
+    except FileNotFoundError:
+        sf = 1
     except Exception:
         sf = None
     if sf != 1:
