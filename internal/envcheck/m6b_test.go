@@ -260,6 +260,8 @@ func TestStunItem(t *testing.T) {
 	unknownReal := &RealIP{}
 	unknownReal.Measure(bg)
 	want(t, "测不到真实 IP", run("203.0.113.9:1", false, unknownReal), exitcheck.Unknown)
+	want(t, "测不到真实 IP、回报的就是出口 IP", run("203.0.113.7:1", false, unknownReal), exitcheck.Pass)
+	want(t, "回报出口 IP、真实 IP 已测到", run("203.0.113.7:1", false, real), exitcheck.Pass)
 	o := run("198.51.100.77:9", false, real)
 	if strings.Contains(o.Detail+o.Fix, "198.51.100.77") {
 		t.Fatal("说明里不应有地址")

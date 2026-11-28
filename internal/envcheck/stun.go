@@ -283,10 +283,21 @@ func STUN(d STUNDeps) Item {
 		}
 		realUnknown, countryUnknown := false, false
 		exitCountry := ""
+		var exitIP netip.Addr
 		if d.Exit != nil {
-			exitCountry = d.Exit.Report(ctx).Country
+			r := d.Exit.Report(ctx)
+			exitCountry, exitIP = r.Country, r.IP.Unmap()
 		}
 		for _, a := range got {
+			// 回报的就是主代理的出口 IP：WebRTC 拿到的是出口，不是本机真实 IP（真实 IP 测不到时也能判；2026-11-28 真机）。
+			if exitIP.IsValid() && a == exitIP {
+				if d.Real != nil {
+					if eq, _ := d.Real.Equal(a); eq {
+						return fail("WebRTC 暴露了本机真实公网 IP", "检查有没有别的软件或浏览器设置让 UDP 绕过了 Claude 出国；关闭浏览器的 WebRTC 或换支持 UDP 的节点。")
+					}
+				}
+				continue
+			}
 			if d.Real != nil {
 				eq, known := d.Real.Equal(a)
 				if eq {
