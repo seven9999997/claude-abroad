@@ -399,3 +399,14 @@ let envJSON = "{\"at\":\"2026-11-22T00:00:00Z\",\"hard\":\"fail\",\"items\":[{\"
     let put = try #require(t.requests.last(where: { $0.method == "PUT" })?.body)
     #expect(String(decoding: put, as: UTF8.self) == "{\"disabled\":[\"15\",\"16\",\"17\"]}")
 }
+
+// 2026-11-28：首页环境检测要点里两项警告不能把 07 DNS、08 WebRTC 挤掉。
+@Test func homeEnvItemsKeepKeyItems() throws {
+    func it(_ id: String, _ r: String) -> EnvcheckItemResult {
+        try! JSONDecoder().decode(EnvcheckItemResult.self, from: Data(#"{"id":"\#(id)","name":"项","level":"hard","result":"\#(r)"}"#.utf8))
+    }
+    let raw = ["01", "02", "03", "04", "05", "06", "07", "08", "09"].map { it($0, "pass") } + [it("16", "unknown"), it("14", "unknown"), it("10", "fail")]
+    let got = EnvModel.homeItems(raw).map(\.id)
+    #expect(got == ["10", "14", "16", "01", "02", "03", "07", "08", "04"])
+    #expect(EnvModel.homeItems([it("07", "fail"), it("01", "pass")]).map(\.id) == ["07", "01"])
+}

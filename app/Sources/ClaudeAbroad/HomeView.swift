@@ -192,7 +192,7 @@ struct HomeView: View {
 
     /// 首页两栏只读摘要卡片：左侧环境检测要点，右侧地区/虚拟机与分流出口状态。
     @ViewBuilder private func summaryGrid(_ st: DaemonStatus) -> some View {
-        let items = prioritizedEnvItems(st.envcheck?.items ?? [])
+        let items = EnvModel.homeItems(st.envcheck?.items ?? [])
         let exits = st.exits ?? []
         if !items.isEmpty || st.region != nil || st.vmManager != nil || !exits.isEmpty {
             HStack(alignment: .top, spacing: 18) {
@@ -274,16 +274,6 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, alignment: .top)
             }
         }
-    }
-
-    private func prioritizedEnvItems(_ raw: [EnvcheckItemResult]) -> [EnvcheckItemResult] {
-        let sorted = raw.sorted { a, b in
-            let pa = a.result == "fail" ? 0 : (a.result == "unknown" ? 1 : 2)
-            let pb = b.result == "fail" ? 0 : (b.result == "unknown" ? 1 : 2)
-            if pa != pb { return pa < pb }
-            return a.id < b.id
-        }
-        return Array(sorted.prefix(6))
     }
 
     private func vmTone(_ phase: String) -> StatusTone {

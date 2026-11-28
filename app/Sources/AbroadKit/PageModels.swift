@@ -546,6 +546,19 @@ public final class EnvModel: PageModel {
         return ([L10n.deviceCheckFound(fs.count)] + fs.map { L10n.deviceCheckLine($0.location, $0.font, $0.file) } + [d.note]).joined(separator: "\n")
     }
 
+    /// 首页环境检测要点的 id：没通过的项之后固定列这几项（接管、出口 IP、出口地区、DNS、WebRTC、时区），完整列表在“环境检测”页。
+    public nonisolated static let homeKeyIDs = ["01", "02", "03", "07", "08", "04"]
+
+    /// 首页环境检测要点：没通过的项（失败在前、无法判断在后）全部列出，之后按 homeKeyIDs 列通过的关键项。
+    /// 之前只取前 6 项，有两项警告时 07 DNS、08 WebRTC 被挤掉（2026-11-28 用户反馈）。
+    public nonisolated static func homeItems(_ raw: [EnvcheckItemResult]) -> [EnvcheckItemResult] {
+        let rank: (String) -> Int = { $0 == "fail" ? 0 : ($0 == "pass" || $0 == "skipped" ? 2 : 1) }
+        let problems = raw.filter { rank($0.result) < 2 }
+            .sorted { rank($0.result) != rank($1.result) ? rank($0.result) < rank($1.result) : $0.id < $1.id }
+        let keys = homeKeyIDs.compactMap { id in raw.first { $0.id == id && $0.result == "pass" } }
+        return problems + keys
+    }
+
     public static func resultTitle(_ r: String) -> String {
         switch r {
         case "pass": return L10n.resultPass
