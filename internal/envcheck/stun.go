@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"strconv"
 	"sync"
 	"time"
 
@@ -130,7 +131,12 @@ func stunQuery(ctx context.Context, c net.Conn, timeout time.Duration) (netip.Ad
 // 外面只能拿去做“相等”的比较；String、GoString、MarshalJSON 都不输出地址。
 type RealIP struct {
 	// Dial 经直连拨号模块按域名取一个连到 STUN 服务器的 UDP 连接（envcheck 里用到直连的只有这一处）。
+	// DialServer 非 nil 时不用它。
 	Dial func(ctx context.Context) (net.Conn, error)
+	// DialServer 经直连拨号模块取一个连到 host:port 的 UDP 连接；Measure 按 Servers（nil 用 RealStunServers）
+	// 依次试，测到为止。2026-11-28 真机：只问 stun.l.google.com 时国内直连没有应答，真实 IP 一直测不到，08 无法判断。
+	DialServer func(ctx context.Context, host string, port uint16) (net.Conn, error)
+	Servers    []string
 
 	mu sync.Mutex
 	ip netip.Addr
@@ -139,7 +145,35 @@ type RealIP struct {
 // Measure 测一次（启用时、网络变化时）。测不到时清掉旧值。
 func (r *RealIP) Measure(ctx context.Context) {
 	var ip netip.Addr
-	if r.Dial != nil {
+	switch {
+	case r.DialServer != nil:
+		servers := r.Servers
+		if servers == nil {
+			servers = RealStunServers
+		}
+		for _, s := range servers {
+			if ctx.Err() != nil {
+				break
+			}
+			host, ps, err := net.SplitHostPort(s)
+			if err != nil {
+				continue
+			}
+			port, err := strconv.ParseUint(ps, 10, 16)
+			if err != nil {
+				continue
+			}
+			c, err := r.DialServer(ctx, host, uint16(port))
+			if err != nil {
+				continue
+			}
+			ap, err := stunQuery(ctx, c, 3*time.Second)
+			if err == nil {
+				ip = ap.Addr().Unmap()
+				break
+			}
+		}
+	case r.Dial != nil:
 		if c, err := r.Dial(ctx); err == nil {
 			if ap, err := stunQuery(ctx, c, 3*time.Second); err == nil {
 				ip = ap.Addr().Unmap()
@@ -165,6 +199,9 @@ func (r *RealIP) Equal(a netip.Addr) (eq, known bool) {
 	}
 	return r.ip == a.Unmap(), true
 }
+
+// RealStunServers 是测本机真实公网 IP（直连）用的 STUN 服务器：国内的在前（直连能通），国外的兜底。
+var RealStunServers = []string{"stun.miwifi.com:3478", "stun.chat.bilibili.com:3478", "stun.cloudflare.com:3478", "stun.l.google.com:19302"}
 
 // DefaultStunServers 是第 08 项的 STUN 服务器（全球两个、国内两个；可配置）。
 var DefaultStunServers = []string{"stun.l.google.com:19302", "stun.cloudflare.com:3478", "stun.miwifi.com:3478", "stun.chat.bilibili.com:3478"}

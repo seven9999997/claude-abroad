@@ -630,3 +630,30 @@ func TestSTUNSilentButProxied(t *testing.T) {
 	o = STUN(STUNDeps{Servers: []string{"s:1"}, Dial: silent, Exit: exit, ProxiedUDP: none.Load, Timeout: 200 * time.Millisecond}).Run(bg)
 	want(t, "没有经主代理发出", o, exitcheck.Unknown)
 }
+
+// 2026-11-28 真机：测真实 IP 时第一个服务器没有应答（国内直连问谷歌），要接着试下一个，测到为止。
+func TestRealIPTriesServersInOrder(t *testing.T) {
+	silent := fakeStun(t, "")
+	good := fakeStun(t, "198.51.100.77:5000")
+	addrs := map[string]string{"a.example": silent, "b.example": good}
+	var asked []string
+	real := &RealIP{Servers: []string{"a.example:3478", "bad", "b.example:3478", "c.example:3478"},
+		DialServer: func(ctx context.Context, host string, port uint16) (net.Conn, error) {
+			asked = append(asked, host)
+			if port != 3478 {
+				t.Errorf("端口 %d", port)
+			}
+			var d net.Dialer
+			return d.DialContext(ctx, "udp", addrs[host])
+		}}
+	real.Measure(bg)
+	if eq, known := real.Equal(netip.MustParseAddr("198.51.100.77")); !eq || !known {
+		t.Fatalf("应测到真实 IP：%v %v", eq, known)
+	}
+	if strings.Join(asked, ",") != "a.example,b.example" {
+		t.Fatalf("试过的服务器：%v", asked)
+	}
+	if RealStunServers[0] != "stun.miwifi.com:3478" {
+		t.Fatal("国内的服务器应排在前面")
+	}
+}

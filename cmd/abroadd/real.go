@@ -392,9 +392,10 @@ func realEnvDeps(claude *claudeproc.Service, direct *directdial.Client, dp *daem
 	// 08：STUN 服务器先经主代理的 DoH 解析成真实地址再拨（目标是域名的 UDP 在链式主代理上没有应答，2026-11-27 真机）。
 	e.StunResolve = dp.ProbeA
 	// 08 的本机真实公网 IP：经直连拨号模块按域名取一个连到 STUN 服务器的 UDP 连接（只在内存里）。
+	// 按国内优先的列表依次试（2026-11-28 真机：只问 stun.l.google.com 时国内直连没有应答，真实 IP 测不到）。
 	if direct != nil {
-		e.RealDial = func(ctx context.Context) (net.Conn, error) {
-			return direct.Dial(ctx, "udp", "stun.l.google.com", netip.Addr{}, 19302)
+		e.RealDialServer = func(ctx context.Context, host string, port uint16) (net.Conn, error) {
+			return direct.Dial(ctx, "udp", host, netip.Addr{}, port)
 		}
 	}
 	return e

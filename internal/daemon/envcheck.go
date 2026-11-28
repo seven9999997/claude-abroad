@@ -53,6 +53,8 @@ type EnvDeps struct {
 	// StunServers 覆盖 08 的服务器（nil 用默认）；RealDial 经直连拨号模块取一个连到 STUN 服务器的 UDP 连接（本机真实 IP）。
 	StunServers []string
 	RealDial    func(ctx context.Context) (net.Conn, error)
+	// RealDialServer 经直连拨号模块取一个连到 host:port 的 UDP 连接；非 nil 时测真实 IP 按国内优先的列表依次试。
+	RealDialServer func(ctx context.Context, host string, port uint16) (net.Conn, error)
 	// StunResolve 把 08 的 STUN 服务器域名解析成真实地址（经主代理的 DoH；nil 时按域名拨）。
 	StunResolve func(ctx context.Context, host string) ([]netip.Addr, error)
 	// ProcEnvs 列出 Claude 根进程的环境（12、17）。
@@ -67,6 +69,9 @@ type EnvDeps struct {
 
 // envDNSTestTimeout 是单项探测的时限。
 const envProbeTimeout = 10 * time.Second
+
+// realIPTimeout 是测本机真实 IP 的总时限：直连解析可能先在不通的 DNS 上等满一次（3 秒），再加 STUN 的 3 秒，要能试到第二个服务器。
+const realIPTimeout = 15 * time.Second
 
 // takeoverView 是 01 接管就绪：复用监护的核对（pf 保护、utun、路由经我们的 utun、DNS 在）。不含地址。
 func (d *Daemon) takeoverView(ctx context.Context) ([]string, error) {
@@ -137,7 +142,7 @@ func (d *Daemon) envItems(e *EnvDeps) []envcheck.Item {
 		}
 		return &b
 	}}
-	d.realIP = &envcheck.RealIP{Dial: e.RealDial}
+	d.realIP = &envcheck.RealIP{Dial: e.RealDial, DialServer: e.RealDialServer}
 	udpOff := func() bool { return s.Data != nil && s.Data.UDPUnsupported(rules.ExitMain) }
 	fixer := &envcheck.RegionFixer{D: envcheck.RegionDeps{Target: target,
 		Read: func(ctx context.Context) (sysnet.MacLocale, error) {
@@ -273,7 +278,7 @@ func (d *Daemon) measureRealIP(ctx context.Context) {
 	if d.realIP == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(ctx, envProbeTimeout)
+	ctx, cancel := context.WithTimeout(ctx, realIPTimeout)
 	defer cancel()
 	d.realIP.Measure(ctx)
 }
