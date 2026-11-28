@@ -21,6 +21,8 @@ type ExitProbe struct {
 	// Run、LocateFn 是测试注入（nil 时用 Checker）。
 	Run      func(ctx context.Context, base *exitcheck.Baseline) exitcheck.Report
 	LocateFn func(ctx context.Context, ip netipAddr) (string, error)
+	// OrgFn 是测试注入：按 IP 查运营商（nil 时用 Checker.Locate，带按 IP 的缓存）。
+	OrgFn func(ctx context.Context, ip netipAddr) (string, error)
 
 	mu  sync.Mutex
 	rep *exitcheck.Report
@@ -69,6 +71,44 @@ func (e *ExitProbe) Locate(ctx context.Context, ip netipAddr) (string, error) {
 		return "", err
 	}
 	return g.Country, nil
+}
+
+// Org 返回出口的运营商：这一轮的结果里有位置就用它；没有（位置查询这一次失败，例如查询源限流）时按出口 IP 再查一次。
+// 2026-11-28 真机：14 一直“查不到出口的运营商”。返回的 why 是查不到时的原因（给 14 的说明用）。
+func (e *ExitProbe) Org(ctx context.Context, rep exitcheck.Report) (org, why string) {
+	if rep.Geo != nil && strings.TrimSpace(rep.Geo.Org) != "" {
+		return strings.TrimSpace(rep.Geo.Org), ""
+	}
+	if !rep.IP.IsValid() {
+		return "", "取不到出口 IP"
+	}
+	var err error
+	if e.OrgFn != nil {
+		org, err = e.OrgFn(ctx, rep.IP)
+	} else if e.Checker != nil {
+		var g exitpolicy.Geo
+		g, err = e.Checker.Locate(ctx, "main", rep.IP)
+		org = g.Org
+	} else {
+		return "", "没有位置查询"
+	}
+	if err != nil {
+		// 只写原因，不写错误原文（原文里有带出口 IP 的查询地址）。
+		switch exitcheck.CauseOf(err) {
+		case exitcheck.CauseRateLimited:
+			return "", "位置查询源限流"
+		case exitcheck.CauseTimeout:
+			return "", "位置查询超时"
+		case exitcheck.CauseConnect, exitcheck.CauseChannelDown:
+			return "", "连不上位置查询源"
+		default:
+			return "", "位置查询源的应答不对"
+		}
+	}
+	if org = strings.TrimSpace(org); org == "" {
+		return "", "位置查询源没有给出运营商"
+	}
+	return org, ""
 }
 
 func itemOf(rep exitcheck.Report, name string) exitcheck.Item {
@@ -148,11 +188,11 @@ var datacenterWords = []string{"hosting", "host", "datacenter", "data center", "
 // NetworkType 是 14 网络类型（警告，要发网络探测）：按出口的运营商和组织名判断是否疑似机房。
 func NetworkType(p *ExitProbe) Item {
 	return Item{ID: "14", Name: "网络类型", Level: Warn, Network: true, Run: func(ctx context.Context) Outcome {
-		rep := p.Report(ctx)
-		if rep.Geo == nil || strings.TrimSpace(rep.Geo.Org) == "" {
-			return unk("无法判断：查不到出口的运营商")
+		org, why := p.Org(ctx, p.Report(ctx))
+		if org == "" {
+			return unk("无法判断：查不到出口的运营商：" + why)
 		}
-		org := strings.ToLower(rep.Geo.Org)
+		org = strings.ToLower(org)
 		for _, w := range datacenterWords {
 			if strings.Contains(org, w) {
 				return fail("出口疑似机房网络（按运营商名判断，只是参考）", "可以换住宅宽带的节点；这一项只是提示，不影响使用。")

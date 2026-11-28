@@ -659,3 +659,40 @@ func TestRealIPTriesServersInOrder(t *testing.T) {
 		t.Fatal("国内的服务器应排在前面")
 	}
 }
+
+// 2026-11-28 真机：这一轮的出口结果没有位置时，14 按出口 IP 再查一次运营商；查不到时写清原因，不带地址。
+func TestNetworkTypeOrgFallback(t *testing.T) {
+	noGeo := exitcheck.Report{IP: netip.MustParseAddr("203.0.113.7"), Country: "US"}
+	p := probeOf(noGeo, nil)
+	p.OrgFn = func(context.Context, netip.Addr) (string, error) { return "Example Residential Broadband", nil }
+	want(t, "补查到住宅运营商", NetworkType(p).Run(bg), exitcheck.Pass)
+	p = probeOf(noGeo, nil)
+	p.OrgFn = func(context.Context, netip.Addr) (string, error) { return "Example Cloud Hosting", nil }
+	want(t, "补查到机房", NetworkType(p).Run(bg), exitcheck.Fail)
+	p = probeOf(noGeo, nil)
+	p.OrgFn = func(context.Context, netip.Addr) (string, error) {
+		return "", errors.New(`Get "https://ipwho.is/203.0.113.7": context deadline exceeded`)
+	}
+	o := NetworkType(p).Run(bg)
+	if o.Result != exitcheck.Unknown || strings.Contains(o.Detail, "203.0.113") || !strings.Contains(o.Detail, "：") {
+		t.Fatalf("查不到：%+v", o)
+	}
+}
+
+// 2026-11-28 真机：macOS 不让读 Chrome 的配置（Operation not permitted）时 16 是“已跳过”并说明，不是“无法判断”。
+func TestBrowserLangProtected(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root 读得到 000 权限的文件")
+	}
+	chrome := browserPrefs[0].path
+	home := writeHome(t, map[string]string{chrome: `{"intl":{"accept_languages":"ja-JP"}}`})
+	f := filepath.Join(home, chrome)
+	if err := os.Chmod(f, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(f, 0o600) })
+	o := BrowserLang(homeDeps(home, true)).Run(bg)
+	if o.Result != Skipped || !strings.Contains(o.Detail, "不允许读取 Chrome") || o.Fix == "" {
+		t.Fatalf("%+v", o)
+	}
+}

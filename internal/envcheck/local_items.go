@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 
 	"claude-abroad/internal/exitpolicy"
 	"claude-abroad/internal/procinfo"
@@ -192,7 +193,7 @@ func BrowserLang(d HomeDeps) Item {
 			return unk("无法判断：找不到当前登录用户的主目录")
 		}
 		found := 0
-		var bad []string
+		var bad, protected []string
 		for _, b := range browserPrefs {
 			var p struct {
 				Intl struct {
@@ -201,6 +202,12 @@ func BrowserLang(d HomeDeps) Item {
 			}
 			err := readJSON(filepath.Join(home, b.path), 32<<20, &p)
 			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			// macOS 保护别的应用的数据：后台（root）读 Chrome 的配置也是 Operation not permitted（2026-11-28 真机）。
+			// 这不是检查失败，是系统不让看：记下来，最后按“已跳过”说明，不再一直挂着“无法判断”。
+			if errors.Is(err, os.ErrPermission) || errors.Is(err, syscall.EPERM) {
+				protected = append(protected, b.name)
 				continue
 			}
 			if err != nil {
@@ -213,6 +220,10 @@ func BrowserLang(d HomeDeps) Item {
 			}
 		}
 		switch {
+		case found == 0 && len(protected) > 0:
+			o := skipped("已跳过：macOS 不允许读取 " + strings.Join(protected, "、") + " 的配置（系统保护别的应用的数据）")
+			o.Fix = "自己在浏览器的“设置 → 语言”里确认目标语言排在第一位（Safari 跟随系统，不用改）。"
+			return o
 		case found == 0:
 			return skipped("已跳过：没有找到 Chrome、Edge 的配置")
 		case len(bad) > 0:

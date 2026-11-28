@@ -112,3 +112,6 @@ func causeOf(err error) Cause {
 
 // errChannel 标记“数据通道本身打不开”（开流时不是出口的回应错误）。
 var errChannel = errors.New("数据通道不可用")
+
+// CauseOf 是 causeOf 的导出版（环境检测给“查不到运营商”写原因用；只给原因，不带可能含地址的错误原文）。
+func CauseOf(err error) Cause { return causeOf(err) }
