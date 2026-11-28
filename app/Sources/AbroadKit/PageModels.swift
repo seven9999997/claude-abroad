@@ -721,7 +721,9 @@ public final class SettingsModel: PageModel {
 
     /// 签名校验未启用的说明（后台给的）。
     public var signatureText: String? {
-        guard let s = security, s.callerVerification == "disabled" else { return nil }
+        guard let s = security else { return nil }
+        if s.caller == "unsigned" { return L10n.securityUnsignedTitle + "：" + s.note }
+        guard s.callerVerification == "disabled" else { return nil }
         return L10n.signatureDisabled + "：" + s.note
     }
     public var cliPath: String { L10n.cliPath }

@@ -47,7 +47,8 @@
           "main_push_failed",
           "main_unreachable",
           "no_main_selected",
-          "state_incomplete"
+          "state_incomplete",
+          "caller_unsigned"
         ],
         "type": "string"
       },
@@ -949,6 +950,10 @@
             "type": "integer"
           },
           "udp": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "udp_tried": {
             "format": "int64",
             "type": "integer"
           }

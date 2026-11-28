@@ -167,7 +167,11 @@ func (d *Daemon) handler() http.Handler {
 // guard 是级别检查：调用方不够格时 403（只读和普通对控制台用户开放；敏感只有完全信任的调用方）。
 func (d *Daemon) guard(rt api.Route, fn http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !api.Allowed(callerOf(r), rt.Level) {
+		if c := callerOf(r); !api.Allowed(c, rt.Level) {
+			if c == api.Unsigned {
+				writeErr(w, http.StatusForbidden, api.ErrorBody{Code: api.CodeCallerUnsigned, Error: api.UnsignedText})
+				return
+			}
 			writeJSON(w, http.StatusForbidden, errBody{api.NeedAuthText})
 			return
 		}
@@ -288,11 +292,26 @@ func (d *Daemon) handleStatus(w http.ResponseWriter, r *http.Request) {
 	st.Security = &api.Security{CallerVerification: d.verifier().Name(), Note: api.SecurityNote, Caller: callerOf(r).String()}
 	if d.verifier().Enabled() {
 		st.Security.Note = ""
+		if callerOf(r) == api.Unsigned { // 校验启用、这个调用方没签名：告诉它为什么只能看不能改
+			st.Security.Note = api.UnsignedText
+		}
 	}
 	writeJSON(w, http.StatusOK, st)
 }
 
-func (d *Daemon) verifier() api.CallerVerifier { return api.Disabled{} }
+// verifier 是调用方签名校验（v0.73：构建时写入了本机证书指纹就用它；否则“未启用”）。
+func (d *Daemon) verifier() api.CallerVerifier {
+	if d.opts.Verifier != nil && d.opts.Verifier.Enabled() {
+		return d.opts.Verifier
+	}
+	return api.Disabled{}
+}
+
+// PeerVerifier 是调用方签名校验启用时按对端进程号校验签名的那一半（callersig.Verifier 实现）。
+type PeerVerifier interface {
+	api.CallerVerifier
+	Verify(ctx context.Context, pid int) bool
+}
 
 func (d *Daemon) handleGetRegion(w http.ResponseWriter, r *http.Request) {
 	rs := d.regionStatus()
@@ -356,6 +375,9 @@ type peerListener struct {
 	uid      int // 状态目录的属主（开发模式是当前用户，真实模式是 root）
 	peer     func(*net.UnixConn) (int, error)
 	console  func() (int, error)
+	// verify、peerPID：调用方签名校验启用时，控制台用户的连接按对端进程校验签名，不通过的降为只读（v0.73）。
+	verify  PeerVerifier
+	peerPID func(*net.UnixConn) (int, error)
 	onReject func()
 	max      int64
 	n        atomic.Int64
@@ -377,6 +399,14 @@ func (l *peerListener) Accept() (net.Conn, error) {
 					}
 				}
 				caller = api.Classify(id, l.uid, cons)
+				if caller == api.Console && l.verify != nil && l.verify.Enabled() {
+					caller = api.Unsigned
+					if l.peerPID != nil {
+						if pid, err := l.peerPID(uc); err == nil && l.verify.Verify(context.Background(), pid) {
+							caller = api.Console
+						}
+					}
+				}
 			}
 		}
 		if caller != api.Other && l.n.Load() < l.max {

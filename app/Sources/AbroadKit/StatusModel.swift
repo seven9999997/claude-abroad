@@ -200,9 +200,15 @@ public final class StatusModel: ObservableObject {
     public var stalledNote: String? { stalledState == nil ? nil : L10n.interrupted }
 
     /// 签名校验未启用的说明（status 的 security）；启用了校验时为空。
+    /// v0.73：校验启用、但这个应用自己没有本项目的签名（caller 是 unsigned）时也给说明。
     public var securityNote: String? {
-        guard let s = status?.security, s.callerVerification == "disabled" else { return nil }
+        guard let s = status?.security, s.callerVerification == "disabled" || s.caller == "unsigned" else { return nil }
         return s.note
+    }
+
+    /// securityNote 的标题。
+    public var securityTitle: String {
+        status?.security?.caller == "unsigned" ? L10n.securityUnsignedTitle : L10n.securityNoteTitle
     }
 
     /// 保护失效时的固定说明，加上后台巡检事件里最近一条的说明（处理办法以后台的为准，界面不改写）。

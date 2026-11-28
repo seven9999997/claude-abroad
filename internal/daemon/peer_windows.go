@@ -12,3 +12,7 @@ import (
 func peerUID(c *net.UnixConn) (int, error) {
 	return 0, platform.Unsupported("取控制接口对端的 uid")
 }
+
+func peerPID(c *net.UnixConn) (int, error) {
+	return 0, platform.Unsupported("取控制接口对端的进程号")
+}

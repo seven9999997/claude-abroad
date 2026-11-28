@@ -410,3 +410,23 @@ let envJSON = "{\"at\":\"2026-11-22T00:00:00Z\",\"hard\":\"fail\",\"items\":[{\"
     #expect(got == ["10", "14", "16", "01", "02", "03", "07", "08", "04"])
     #expect(EnvModel.homeItems([it("07", "fail"), it("01", "pass")]).map(\.id) == ["07", "01"])
 }
+
+// v0.73：调用方签名校验启用时，没签名的应用看到“只能查看”的说明；签过名的不显示；未启用时照旧。
+@MainActor
+@Test func securityNoteUnsigned() async {
+    let sec = Box("")
+    let t = FakeTransport { req in
+        let base = statusJSON(state: "RESTORED", gate: false, security: false, reasons: ["state"])
+        return json(200, String(base.dropLast()) + ",\"security\":\(sec.v)}")
+    }
+    let m = StatusModel(client: APIClient(transport: t), sleeper: NoSleep(), flow: ConfirmFlow(client: APIClient(transport: t)))
+    sec.v = #"{"caller_verification":"local_certificate","note":"没签名","caller":"unsigned"}"#
+    _ = await m.refresh()
+    #expect(m.securityNote == "没签名" && m.securityTitle == L10n.securityUnsignedTitle)
+    sec.v = #"{"caller_verification":"local_certificate","note":"","caller":"console"}"#
+    _ = await m.refresh()
+    #expect(m.securityNote == nil)
+    sec.v = #"{"caller_verification":"disabled","note":"未启用","caller":"console"}"#
+    _ = await m.refresh()
+    #expect(m.securityNote == "未启用" && m.securityTitle == L10n.securityNoteTitle)
+}

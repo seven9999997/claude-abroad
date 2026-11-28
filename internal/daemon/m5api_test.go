@@ -584,3 +584,84 @@ func TestShutdownEndsEventStream(t *testing.T) {
 		t.Logf("读到的结束：%v", err)
 	}
 }
+
+// fakePeerVerifier：进程号在 ok 里才算本项目签名的程序。
+type fakePeerVerifier struct {
+	ok    map[int]bool
+	calls atomic.Int32
+}
+
+func (f *fakePeerVerifier) Name() string  { return "local_certificate" }
+func (f *fakePeerVerifier) Enabled() bool { return true }
+func (f *fakePeerVerifier) Verify(_ context.Context, pid int) bool {
+	f.calls.Add(1)
+	return f.ok[pid]
+}
+
+// v0.73：调用方签名校验启用时，控制台用户的程序要有本项目的签名才能做“普通”一级；没签名的只读，403 带 caller_unsigned；
+// 完全信任的调用方（root / sudo）不校验；status 写明校验已启用，没签名的调用方看到说明。
+func TestCallerSignatureVerification(t *testing.T) {
+	var c callers
+	var pid atomic.Int64
+	e := newEnv(t)
+	o := e.opts()
+	c.opts(&o)
+	o.PeerPID = func(*net.UnixConn) (int, error) { return int(pid.Load()), nil }
+	fv := &fakePeerVerifier{ok: map[int]bool{4242: true}}
+	o.Verifier = fv
+	d := e.start(o)
+
+	statusAs := func() api.Security {
+		code, b, err := callRaw(d, "GET", "/v1/status", nil)
+		if err != nil || code != 200 {
+			t.Fatalf("status：%d %v", code, err)
+		}
+		var st struct{ Security api.Security }
+		_ = json.Unmarshal(b, &st)
+		return st.Security
+	}
+
+	c.as(consoleTestUID)
+	pid.Store(999) // 没签名
+	if s := statusAs(); s.CallerVerification != "local_certificate" || s.Caller != "unsigned" || s.Note != api.UnsignedText {
+		t.Fatalf("没签名的调用方看到的 security：%+v", s)
+	}
+	code, b, err := callRaw(d, "POST", "/v1/envcheck/run", nil)
+	if err != nil || code != http.StatusForbidden || !strings.Contains(string(b), string(api.CodeCallerUnsigned)) {
+		t.Fatalf("没签名做普通操作应 403 caller_unsigned：%d %s %v", code, b, err)
+	}
+
+	pid.Store(4242) // 签名对
+	if s := statusAs(); s.Caller != "console" || s.Note != "" {
+		t.Fatalf("签名的调用方：%+v", s)
+	}
+	if code, b, _ := callRaw(d, "POST", "/v1/envcheck/run", nil); code == http.StatusForbidden {
+		t.Fatalf("签名的控制台调用方做普通操作不应 403：%s", b)
+	}
+
+	n := fv.calls.Load()
+	c.as(os.Getuid()) // 完全信任
+	pid.Store(999)
+	if s := statusAs(); s.Caller != "trusted" || fv.calls.Load() != n {
+		t.Fatalf("完全信任的调用方不校验签名：%+v，校验 %d 次", s, fv.calls.Load()-n)
+	}
+	if code, b, _ := callRaw(d, "POST", "/v1/envcheck/run", nil); code == http.StatusForbidden {
+		t.Fatalf("完全信任：%s", b)
+	}
+}
+
+// 没配校验器时照旧：status 写“未启用”，控制台用户能做普通操作。
+func TestCallerSignatureDisabledDefault(t *testing.T) {
+	var c callers
+	e := newEnv(t)
+	o := e.opts()
+	c.opts(&o)
+	d := e.start(o)
+	c.as(consoleTestUID)
+	_, b, _ := callRaw(d, "GET", "/v1/status", nil)
+	var st struct{ Security api.Security }
+	_ = json.Unmarshal(b, &st)
+	if st.Security.CallerVerification != "disabled" || st.Security.Caller != "console" || st.Security.Note != api.SecurityNote {
+		t.Fatalf("%+v", st.Security)
+	}
+}

@@ -43,6 +43,8 @@ const (
 	Console
 	// Trusted 是完全信任：对端是 root；开发模式下对端是状态目录的属主。三级都能做（命令行经 sudo 就是这种）。
 	Trusted
+	// Unsigned 是控制台用户、但调用方签名校验启用时对端进程没有本项目的签名（v0.73）：只能做只读。
+	Unsigned
 )
 
 func (c Caller) String() string {
@@ -51,6 +53,8 @@ func (c Caller) String() string {
 		return "trusted"
 	case Console:
 		return "console"
+	case Unsigned:
+		return "unsigned"
 	}
 	return "other"
 }
@@ -76,9 +80,14 @@ func Allowed(c Caller, l Level) bool {
 		return true
 	case Console:
 		return l == Read || l == Normal || l == PerCall
+	case Unsigned:
+		return l == Read
 	}
 	return false
 }
+
+// UnsignedText 是没有本项目签名的程序做“普通”一级操作时 403 的说明（v0.73）。
+const UnsignedText = "调用方没有 Claude 出国的签名：启用、停用这类操作只接受本项目签名的应用和命令行（abroad）。请在 Claude 出国应用里操作，或用已安装的 abroad 命令；应用是自己构建的，就用 scripts/dev/build-app.sh 重新构建（会用本机证书签名）"
 
 // AllowedSensitive 是“按本次调用决定”的接口在算出级别之后再判一次：敏感时只有完全信任的调用方能做
 // （M5-3 起，控制台用户带了核验过的本人授权凭证也能做）。
@@ -140,8 +149,8 @@ func CheckRoutes(rs []Route) error {
 	return nil
 }
 
-// CallerVerifier 校验调用方的代码签名（设计 11.1：Team ID 一致才算本项目的应用或命令行）。
-// 付费开发者账号推迟期间接 Disabled。
+// CallerVerifier 校验调用方的代码签名（设计 11.1）。没有付费开发者账号：v0.73 起用本机自签名证书的指纹
+// （internal/callersig），构建时没有签名的接 Disabled。
 type CallerVerifier interface {
 	// Name 是实现的名字，写进 status 的 security 字段。
 	Name() string

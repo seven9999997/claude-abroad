@@ -48,7 +48,7 @@ struct HomeView: View {
             Banner(title: L10n.phaseError, detail: p, symbol: "exclamationmark.shield")
         }
         if let n = model.securityNote {
-            Banner(title: L10n.securityNoteTitle, detail: n, symbol: "lock.open")
+            Banner(title: model.securityTitle, detail: n, symbol: "lock.open")
         }
     }
 

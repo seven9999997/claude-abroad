@@ -46,6 +46,7 @@ public enum L10n {
     public static let interrupted = "上一次操作没有做完：可以再点一次继续，或一键回国"
     public static let protectionLost = "断网保护没有生效，可能有别的软件改了系统的防火墙规则"
     public static let securityNoteTitle = "调用方签名校验未启用"
+    public static let securityUnsignedTitle = "这个应用没有 Claude 出国的签名，只能查看"
 
     // 安装引导
     public static let setupTitle = "安装引导"

@@ -25,3 +25,23 @@ func peerUID(c *net.UnixConn) (int, error) {
 	}
 	return uid, cerr
 }
+
+// peerPID 取 unix socket 对端进程的进程号（SO_PEERCRED）。
+func peerPID(c *net.UnixConn) (int, error) {
+	raw, err := c.SyscallConn()
+	if err != nil {
+		return -1, err
+	}
+	pid, cerr := -1, error(nil)
+	if err := raw.Control(func(fd uintptr) {
+		u, e := unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
+		if e != nil {
+			cerr = e
+			return
+		}
+		pid = int(u.Pid)
+	}); err != nil {
+		return -1, err
+	}
+	return pid, cerr
+}

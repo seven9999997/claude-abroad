@@ -60,6 +60,9 @@ type Options struct {
 	ShutdownWait      time.Duration                    // 退出时等正在进行的操作（0 用默认 60 秒）
 	Log               *log.Logger                      // 可为 nil
 	PeerUID           func(*net.UnixConn) (int, error) // 取对端 uid（nil 用系统调用；测试注入）
+	PeerPID           func(*net.UnixConn) (int, error) // 取对端进程号（nil 用系统调用；测试注入）
+	// Verifier 是调用方签名校验（v0.73，callersig；nil 或未启用时“普通”一级对控制台用户开放）。
+	Verifier PeerVerifier
 	OnReject          func()                           // 对端 uid 不对、连接被断开时调用（测试用）
 	ConsoleUID        func() (int, error)              // 取当前控制台用户（nil 用 console.UID；测试注入）
 	MaxConns          int                              // 同时连接数上限（0 用 DefaultMaxConns）
@@ -399,7 +402,12 @@ func Start(ctx context.Context, o Options) (*Daemon, error) {
 	if rht <= 0 {
 		rht = 10 * time.Second
 	}
-	d.ln = &peerListener{Listener: ln, uid: d.store.UID, peer: peer, console: cons, onReject: o.OnReject, max: int64(maxc)}
+	ppid := o.PeerPID
+	if ppid == nil {
+		ppid = peerPID
+	}
+	d.ln = &peerListener{Listener: ln, uid: d.store.UID, peer: peer, console: cons, onReject: o.OnReject, max: int64(maxc),
+		verify: o.Verifier, peerPID: ppid}
 	d.srv = &http.Server{Handler: d.handler(), ReadHeaderTimeout: rht, ConnContext: connContext}
 	d.quitting = make(chan struct{})
 	d.srv.RegisterOnShutdown(func() { close(d.quitting) })

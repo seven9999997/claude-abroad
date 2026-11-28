@@ -50,6 +50,7 @@ public enum ApiErrorCode: String, Codable, Sendable, CaseIterable {
     case mainUnreachable = "main_unreachable"
     case noMainSelected = "no_main_selected"
     case stateIncomplete = "state_incomplete"
+    case callerUnsigned = "caller_unsigned"
 }
 
 public struct ApiErrorBody: Codable, Sendable {
@@ -562,10 +563,12 @@ public struct DaemonExitCounts: Codable, Sendable {
     public var tcp: Int64
     public var udp: Int64
     public var failed: Int64
+    public var udpTried: Int64?
     enum CodingKeys: String, CodingKey {
         case tcp = "tcp"
         case udp = "udp"
         case failed = "failed"
+        case udpTried = "udp_tried"
     }
 }
 

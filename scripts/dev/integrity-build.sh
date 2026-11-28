@@ -31,6 +31,13 @@ DIRTY=false
 BI="-X claude-abroad/internal/buildinfo.Commit=${COMMIT} -X claude-abroad/internal/buildinfo.BuildTime=${BUILD_TIME} -X claude-abroad/internal/buildinfo.Dirty=${DIRTY}"
 
 go build ${TAGS[@]+"${TAGS[@]}"} -trimpath -ldflags "${BI}" -o "${OUT}/bin/abroad" ./cmd/abroad
+# 本机签名证书（v0.73）：命令行用它签名（要在生成清单之前），指纹写进 abroadd，调用方签名校验只认这张证书。
+# ABROAD_LOCAL_SIGN=0 时不签、不写指纹（校验不启用，和以前一样）。
+LEAF=""
+if [[ "${ABROAD_LOCAL_SIGN:-1}" != 0 ]]; then
+  LEAF="$(scripts/dev/local-sign.sh ensure)"
+  scripts/dev/local-sign.sh sign "${OUT}/bin/abroad" --identifier com.claude-abroad.cli
+fi
 go build -trimpath -ldflags "${BI}" -o "${OUT}/bin/abroad-rescue" ./cmd/abroad-rescue # 应急程序没有开发构建（M6-5b）
 # abroad-vm 要用 cgo 调 Virtualization.framework：强制打开 cgo、用系统自带的编译器（2026-11-27 真机：用户终端里的 conda
 # 环境让 Go 找不到 C 编译器，悄悄以 CGO_ENABLED=0 编出了一个起不了虚拟机的 abroad-vm），编完核对，没带上 cgo 就失败。
@@ -53,6 +60,7 @@ done
 
 DIGEST="$("${OUT}/abroad-dev" integrity-manifest -base "${OUT}" -out "${OUT}/integrity.json" "${FILES[@]}")"
 LDF="-X claude-abroad/internal/integrity.ManifestDigest=${DIGEST} ${BI}"
+[[ -z "${LEAF}" ]] || LDF="${LDF} -X claude-abroad/internal/callersig.LeafSHA1=${LEAF}"
 go build ${TAGS[@]+"${TAGS[@]}"} -trimpath -ldflags "${LDF}" -o "${OUT}/bin/abroadd" ./cmd/abroadd
 go build ${TAGS[@]+"${TAGS[@]}"} -trimpath -ldflags "${LDF}" -o "${OUT}/bin/abroad-guard" ./cmd/abroad-guard
 # 自检（M6-7 补审返工）：用和 abroadd 同一份校验逻辑检查产物；签名和生成清单的顺序弄反、或清单之后又改了文件，这里就失败。
@@ -65,3 +73,8 @@ rm -f "${OUT}/abroad-dev"
 
 echo "完整性清单：${OUT}/integrity.json（${#FILES[@]} 个文件）"
 echo "清单摘要已写进 abroadd、abroad-guard：${DIGEST}"
+if [[ -n "${LEAF}" ]]; then
+  echo "调用方签名校验：已启用（命令行已用本机证书签名，指纹已写进 abroadd）"
+else
+  echo "调用方签名校验：未启用（ABROAD_LOCAL_SIGN=0）"
+fi

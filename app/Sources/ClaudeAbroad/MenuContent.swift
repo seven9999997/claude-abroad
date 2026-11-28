@@ -29,7 +29,7 @@ struct MenuContent: View {
             Text(p)
         }
         if model.securityNote != nil {
-            Text(L10n.securityNoteTitle)
+            Text(model.securityTitle)
         }
         if model.udpNotice != nil { // 补齐二
             Text(L10n.udpUnavailableTitle)

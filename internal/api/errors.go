@@ -32,6 +32,7 @@ const (
 	CodeMainUnreachable ErrorCode = "main_unreachable" // 422、502：主代理不通（检查的各项都是超时、连不上一类）
 	CodeNoMainSelected  ErrorCode = "no_main_selected" // 422：还没有选主代理节点
 	CodeStateIncomplete ErrorCode = "state_incomplete" // 409：上一次启用或回国没有完成（崩溃后留下的半截状态）
+	CodeCallerUnsigned  ErrorCode = "caller_unsigned"  // 403：调用方签名校验启用时，调用方没有本项目的签名（v0.73）
 )
 
 // ErrorCodes 是全部代码（生成 Swift 的枚举、测试核对用）。
@@ -39,7 +40,7 @@ var ErrorCodes = []ErrorCode{
 	CodeNeedsAuthorization, CodeNeedsConfirm, CodeConfirmInvalid, CodeBusy, CodeInUse, CodeViaHostRequired, CodeLANUnconfirmed,
 	CodeSwitchRolledBack, CodeSwitchRollbackIncomplete, CodeNoBaseline, CodeUnsupported, CodeInvalid, CodeNotFound, CodeTooLarge,
 	CodeNotEnabled, CodeUnavailable, CodeInternal, CodeUninstalled, CodeRulesChanged,
-	CodeVMUnavailable, CodeMainPushFailed, CodeMainUnreachable, CodeNoMainSelected, CodeStateIncomplete,
+	CodeVMUnavailable, CodeMainPushFailed, CodeMainUnreachable, CodeNoMainSelected, CodeStateIncomplete, CodeCallerUnsigned,
 }
 
 // ErrorBody 是所有出错应答的形式。error 是给人看的文字（“做什么失败了：原因。下一步”），code 是稳定的代码；

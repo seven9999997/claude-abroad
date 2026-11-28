@@ -66,11 +66,18 @@ ${PLIST_PAYLOAD}
 </dict>
 </plist>
 EOF
-# 临时签名（没有付费开发者账号：签名、公证推迟到 M6）。
-codesign --force --sign - --identifier "${BUNDLE_ID}" "${APP}"
+# 签名（v0.73）：用本机签名证书（scripts/dev/local-sign.sh；没有就自动生成），abroadd 只认这张证书签的应用。
+# ABROAD_LOCAL_SIGN=0 时退回临时签名（ad-hoc；调用方签名校验启用的后台会把它当成没签名、只能查看）。
+SIGN_KIND="临时签名"
+if [[ "${ABROAD_LOCAL_SIGN:-1}" != 0 ]]; then
+  "$(dirname "$0")/local-sign.sh" sign "${APP}" --identifier "${BUNDLE_ID}"
+  SIGN_KIND="本机证书签名"
+else
+  codesign --force --sign - --identifier "${BUNDLE_ID}" "${APP}"
+fi
 codesign --verify --strict "${APP}"
 if [[ -n "${PAYLOAD}" ]]; then
   # 签名不能改动 payload 里的文件（abroad-vm 自带的虚拟化授权签名尤其不能动）
   (cd "${APP}/Contents/Resources/payload" && shasum -a 256 -s -c payload.sha256) || { echo "✗ 签名之后 payload 的内容变了" >&2; exit 1; }
 fi
-echo "应用包：${APP}（Bundle ID ${BUNDLE_ID}，临时签名，codesign --verify --strict 通过${PAYLOAD:+，带 payload}）"
+echo "应用包：${APP}（Bundle ID ${BUNDLE_ID}，${SIGN_KIND}，codesign --verify --strict 通过${PAYLOAD:+，带 payload}）"

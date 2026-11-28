@@ -201,7 +201,7 @@ type ExitCounts struct {
 	Failed int64 `json:"failed"`
 	// UDPTried 是经这个出口发起的 UDP 开流次数，在开流之前就计（UDP 只在开成后计）。08 用它判断 STUN 请求确实经主代理
 	// 发出：2026-11-28 真机，链式主代理对 STUN 这类 UDP 迟迟不回开流结果，08 的 3 秒等完时 UDP 还没涨，误判无法判断。
-	UDPTried int64 `json:"udp_tried"`
+	UDPTried int64 `json:"udp_tried,omitempty"`
 }
 
 // exitCounts 取出口 exit 的计数（没有就建）；调用方持有 p.mu。

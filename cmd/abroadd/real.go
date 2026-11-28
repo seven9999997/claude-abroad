@@ -1,6 +1,7 @@
 package main
 
 import (
+	"claude-abroad/internal/callersig"
 	"claude-abroad/internal/claudeproc"
 	"claude-abroad/internal/console"
 	"claude-abroad/internal/directdial"
@@ -298,7 +299,17 @@ func runReal(f realFlags, stderr io.Writer, ready func(string, func())) int {
 		fmt.Fprintf(stderr, "abroadd：%v\n", err)
 		return 1
 	}
+	// v0.73：调用方签名校验（构建时写入了本机签名证书的指纹才启用；只认指纹，不看系统信任）。
+	var verifier daemon.PeerVerifier
+	if v := callersig.New(callersig.LeafSHA1); v != nil {
+		v.Start = callersig.ProcStart
+		verifier = v
+		logger.Printf("调用方签名校验：已启用（本机证书）")
+	} else {
+		logger.Printf("调用方签名校验：未启用（这次构建没有签名证书）")
+	}
 	d, err := daemon.Start(context.Background(), daemon.Options{StateDir: f.stateDir, Sys: sys, Log: logger, SocketDir: f.socketDir,
+		Verifier:        verifier,
 		ClaudeProxyAddr: ctl.proxyAddr, // 第四层的本机代理端口（M6-3b；只有带 --launch-control；第四道打开时才监听）
 		// M6-2b：运行时目录沿用 socket 目录（/var/run/claude-abroad，重启后清空）：给开机时的 guard 写标记、收养它的启用引用。
 		RunDir: f.socketDir,
