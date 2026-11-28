@@ -185,7 +185,7 @@ func (d *Daemon) envItems(e *EnvDeps) []envcheck.Item {
 				if s.Data == nil {
 					return 0
 				}
-				return s.Data.OpenCounts()[rules.ExitMain].UDP
+				return s.Data.OpenCounts()[rules.ExitMain].UDPTried
 			}}),
 		envcheck.ClaudeReach(envcheck.ReachDeps{Open: open, RootCAs: e.RootCAs, Timeout: e.ReachTimeout,
 			Exits: func() []string { return envcheck.ClaudeExits(d.currentRules(), exitUp) }}),
@@ -277,6 +277,11 @@ func (d *Daemon) envNow() time.Time {
 func (d *Daemon) measureRealIP(ctx context.Context) {
 	if d.realIP == nil {
 		return
+	}
+	// 直连拨号模块的“本机原 DNS”平时到第 ⑧ 步（SetEnabled）才按状态文件刷新；这里是第 ⑦ 步，先刷新一次，
+	// 否则它还是启用前的空列表，域名一律解析失败（2026-11-28 真机：resolve_failed=4，真实 IP 测不到，08 无法判断）。
+	if d.opts.Sys.Data != nil {
+		d.opts.Sys.Data.refreshDirect(nil, false)
 	}
 	ctx, cancel := context.WithTimeout(ctx, realIPTimeout)
 	defer cancel()

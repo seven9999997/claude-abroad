@@ -165,6 +165,9 @@ func (o countingOpener) Open(ctx context.Context, h wire.Header) (net.Conn, erro
 	o.p.mu.Lock()
 	o.p.openLog = append(o.p.openLog, o.kind+"/"+h.Exit+"/"+h.Net)
 	o.p.mu.Unlock()
+	if o.kind == "proxy" && h.Net == wire.UDP {
+		o.p.countUDPTried(h.Exit)
+	}
 	c, err := o.p.Opener.Open(ctx, h)
 	if o.kind == "proxy" {
 		o.p.countOpen(h.Exit, h.Net, err == nil)
@@ -196,11 +199,13 @@ type ExitCounts struct {
 	TCP    int64 `json:"tcp"`
 	UDP    int64 `json:"udp"`
 	Failed int64 `json:"failed"`
+	// UDPTried 是经这个出口发起的 UDP 开流次数，在开流之前就计（UDP 只在开成后计）。08 用它判断 STUN 请求确实经主代理
+	// 发出：2026-11-28 真机，链式主代理对 STUN 这类 UDP 迟迟不回开流结果，08 的 3 秒等完时 UDP 还没涨，误判无法判断。
+	UDPTried int64 `json:"udp_tried"`
 }
 
-func (p *DataPlane) countOpen(exit, network string, ok bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+// exitCounts 取出口 exit 的计数（没有就建）；调用方持有 p.mu。
+func (p *DataPlane) exitCounts(exit string) *ExitCounts {
 	if p.counts == nil {
 		p.counts = map[string]*ExitCounts{}
 	}
@@ -209,6 +214,19 @@ func (p *DataPlane) countOpen(exit, network string, ok bool) {
 		c = &ExitCounts{}
 		p.counts[exit] = c
 	}
+	return c
+}
+
+func (p *DataPlane) countUDPTried(exit string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.exitCounts(exit).UDPTried++
+}
+
+func (p *DataPlane) countOpen(exit, network string, ok bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	c := p.exitCounts(exit)
 	switch {
 	case !ok:
 		c.Failed++

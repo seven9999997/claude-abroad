@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -118,6 +120,7 @@ func newEnvEnv(t *testing.T, withClock bool, extra ...func(*Options)) *envEnv {
 	pr := &fakeProber{rep: geoReport("US", "America/Los_Angeles")}
 	ee.m3Env = newM3DaemonCore(t, m3Rules, fake, func(e *m3Env, o *Options) {
 		holder.Store(e)
+		e.sys.Net.SetSysDNSForTest("192.0.2.53", "192.0.2.54") // 启用前的本机 DNS（第 ① 步记进状态文件）
 		o.Sys.Env = deps
 		// 02 要按出口基准比对：启动前先建好（经假的检查器；出口 IP、国家与假服务一致）。
 		bs := NewBaselineService(pr, o.StateDir)
@@ -491,5 +494,28 @@ func TestEnvHistoryAPI(t *testing.T) {
 	}
 	if !hasEvent(e.d, "envcheck", "history_failed") {
 		t.Fatal("写不下应记事件")
+	}
+}
+
+// 2026-11-28 真机：第 ⑦ 步测真实 IP 时，直连拨号模块的本机 DNS 应已是状态文件里启用前记下的那份（不是空的）。
+func TestEnvRealIPDirectDNSRefreshed(t *testing.T) {
+	var seen atomic.Value
+	e := newEnvEnv(t, false, func(o *Options) {
+		dp, inner := o.Sys.Data, o.Sys.Env.RealDial
+		o.Sys.Env.RealDial = func(ctx context.Context) (net.Conn, error) {
+			if seen.Load() == nil {
+				seen.Store(dp.directConfig().DNS)
+			}
+			return inner(ctx)
+		}
+	})
+	waitGateOpen(t, e.d)
+	f, err := e.d.store.Load()
+	if err != nil || len(f.OrigDNS) == 0 {
+		t.Fatalf("状态文件里应有启用前的 DNS：%v %v", f.OrigDNS, err)
+	}
+	got, _ := seen.Load().([]netip.Addr)
+	if !slices.Equal(got, f.OrigDNS) {
+		t.Fatalf("测真实 IP 时直连的 DNS：%v，应为 %v", got, f.OrigDNS)
 	}
 }

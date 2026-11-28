@@ -50,3 +50,47 @@ func TestProbeLookupFollowsProbeWindow(t *testing.T) {
 		t.Fatalf("普通的 DoH 上游应照旧按闸门：%v", err)
 	}
 }
+
+// blockOpener 的 Open 一直等到 release 关闭（复现真机：链式主代理对 STUN 的 UDP 迟迟不回开流结果）。
+type blockOpener struct{ release chan struct{} }
+
+func (o blockOpener) Open(ctx context.Context, _ wire.Header) (net.Conn, error) {
+	select {
+	case <-o.release:
+	case <-ctx.Done():
+	}
+	return nil, errors.New("测试：开流失败")
+}
+
+func (blockOpener) Close() error { return nil }
+
+// 2026-11-28 真机：08 判“请求确实经主代理发出”看的是 UDP 开流的发起次数，开流还没返回时就要计上。
+func TestUDPTriedCountedBeforeOpenReturns(t *testing.T) {
+	op := blockOpener{release: make(chan struct{})}
+	dp := NewDataPlane(op, nil)
+	co := countingOpener{dp, "proxy"}
+	done := make(chan struct{})
+	go func() {
+		_, _ = co.Open(context.Background(), wire.Header{Exit: "main", Net: wire.UDP})
+		close(done)
+	}()
+	deadline := time.Now().Add(2 * time.Second)
+	for dp.OpenCounts()["main"].UDPTried != 1 {
+		if time.Now().After(deadline) {
+			t.Fatalf("开流没返回时 UDPTried 应已是 1：%+v", dp.OpenCounts()["main"])
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if c := dp.OpenCounts()["main"]; c.UDP != 0 || c.Failed != 0 {
+		t.Fatalf("开流还没返回：%+v", c)
+	}
+	close(op.release)
+	<-done
+	if c := dp.OpenCounts()["main"]; c.UDPTried != 1 || c.Failed != 1 {
+		t.Fatalf("返回之后：%+v", c)
+	}
+	_, _ = co.Open(context.Background(), wire.Header{Exit: "main", Net: wire.TCP})
+	if c := dp.OpenCounts()["main"]; c.UDPTried != 1 {
+		t.Fatalf("TCP 不计进 UDPTried：%+v", c)
+	}
+}
